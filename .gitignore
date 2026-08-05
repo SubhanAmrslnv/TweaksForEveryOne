@@ -1,0 +1,24 @@
+# Runtime files written next to the program - per machine, never committed
+settings.ini
+window-positions.ini
+snap.log
+snap.log.old
+taskbar-height.ini
+
+# Per-machine backup of registry values, written by Apply-Windows-Tuning.ps1.
+# Committing this would push one PC's original settings onto another.
+scripts/tuning-backup.json
+animations-backup.json
+
+# Build output
+build/out/
+*.exe
+!Install.bat
+
+# Windows / editor noise
+Thumbs.db
+desktop.ini
+*.lnk
+.vscode/
+.idea/
+build/obj/

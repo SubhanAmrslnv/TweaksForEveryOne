@@ -1,0 +1,16 @@
+{
+    "Created": "2026-08-05T00:00:00",
+    "Computer": "EXAMPLE-PC",
+    "UserPreferencesMask": "90 12 03 80 10 00 00 00",
+    "DragFullWindows": "0",
+    "MinAnimate": "0",
+    "EnableTransparency": 0,
+    "TaskbarAnimations": 0,
+    "ListviewAlphaSelect": 1,
+    "ListviewShadow": 0,
+    "LaunchTo": 1,
+    "SeparateProcess": 0,
+    "ShowRecent": null,
+    "ShowFrequent": null,
+    "EnableAeroPeek": 0
+}
