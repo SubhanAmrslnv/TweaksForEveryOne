@@ -40,6 +40,7 @@ global MC_IDLE_SWEEP_MS  := 3000     ; ... and once nothing has played for a whi
 global MC_IDLE_AFTER_MS  := 30000    ; how long "a while" is
 global MC_ENDPOINT_TTL   := 30000    ; rebuild the cached endpoint list this often
 global MC_HOLD_MS        := 8000     ; see MC_HoldMs()
+global MC_MAX_POSTPONE   := 8        ; sweeps skippable while animating (~2s at 250ms)
 
 ; Only honour the fallback executable list while that program actually owns an
 ; audio session.  A closed-and-idle VLC is then dimmable like anything else,
@@ -174,11 +175,39 @@ MC_MonitorIndexForRect(x, y, w, h, monRects) {
 ;      producing audio is protected.  That over-protects a browser with one
 ;      noisy tab, which is invisible; under-protecting is the reported bug.
 ;   3. The fallback list, for playback no API reports (a muted browser tab).
+; Is anything at all capable of matching right now?  O(1), four Map.Count reads.
+;
+; Consumers call MC_IsMediaHwnd once per window per animation frame, and it was
+; measured at 1.70 us - about 2 ms/s with 20 tracked windows at 60 fps, the
+; largest steady-state cost in the whole fade path.  Almost all of that was paid
+; while nothing was playing, because the old early-out tested MC_FallbackExe,
+; which is never empty (it holds the user's exe list).  What actually matters is
+; whether any of those exes owns a session, which is MC_LiveSessionExe.
+;
+; Hoist this out of a per-window loop and skip the loop's calls entirely when it
+; is false; the result is identical because every branch below needs one of these
+; Maps to be non-empty.
+MC_AnyMedia() {
+    global MC_LivePid, MC_LiveExe, MC_LiveSessionExe, MC_FallbackExe
+    global MC_FALLBACK_NEEDS_SESSION
+    if (MC_LivePid.Count || MC_LiveExe.Count)
+        return true
+    if !MC_FallbackExe.Count
+        return false
+    ; The fallback list only counts while that program owns an audio session -
+    ; unless the caller has turned that requirement off.
+    return MC_FALLBACK_NEEDS_SESSION ? (MC_LiveSessionExe.Count > 0) : true
+}
+
 MC_IsMediaHwnd(hwnd) {
     global MC_LivePid, MC_LiveExe, MC_LiveSessionExe, MC_FallbackExe
     global MC_FALLBACK_NEEDS_SESSION
 
-    if (!MC_LivePid.Count && !MC_LiveExe.Count && !MC_FallbackExe.Count)
+    ; Same condition as MC_AnyMedia(), deliberately inline: measured A/B, calling
+    ; it here instead cost 33% of this function's time in the common early-out
+    ; case. Keep the two in step if either changes.
+    if !(MC_LivePid.Count || MC_LiveExe.Count
+        || (MC_FallbackExe.Count && (MC_LiveSessionExe.Count || !MC_FALLBACK_NEEDS_SESSION)))
         return false
     info := MC_InfoFor(hwnd)
     if !info
@@ -237,9 +266,19 @@ MC_SetHoldMs(breathingIdleMs) {
 ; scheduler: a sweep this slow does not belong on the 16 ms frame loop, where it
 ; would keep the scheduler (and timeBeginPeriod(1)) alive forever.  Self-throttles
 ; on top of the timer cadence; MC_SetWanted() plus SyncMediaCore() own start/stop.
-MC_SweepStep(now) {
+; `busy` lets the caller say "something is animating right now". A sweep costs a
+; measured 230 us, and the 30-second endpoint rebuild costs 6.5 ms of blocking
+; COM - dropped into a 16 ms animation frame that is a visible hitch. Playback
+; observations are held for 8 seconds, so postponing a sweep by a few hundred
+; milliseconds cannot change any consumer's answer.
+;
+; Bounded: after MC_MAX_POSTPONE consecutive deferrals the sweep runs anyway, so
+; a continuously-animating desktop cannot starve it.
+MC_SweepStep(now, busy := false) {
     global MC_Wanted, MC_SWEEP_MS, MC_IDLE_SWEEP_MS, MC_IDLE_AFTER_MS, MC_LastHitAt
+    global MC_MAX_POSTPONE
     static lastCheck := 0
+    static postponed := 0
 
     if !MC_Wanted
         return
@@ -249,6 +288,12 @@ MC_SweepStep(now) {
     interval := ((now - MC_LastHitAt) > MC_IDLE_AFTER_MS) ? MC_IDLE_SWEEP_MS : MC_SWEEP_MS
     if (now - lastCheck < interval)
         return
+
+    if (busy && postponed < MC_MAX_POSTPONE) {
+        postponed++
+        return
+    }
+    postponed := 0
     lastCheck := now
 
     MC_Sweep(now)

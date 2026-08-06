@@ -81,7 +81,7 @@ if (-not $epInstalled) {
 if ($epInstalled) {
     Say "ExplorerPatcher is already installed." 'Green'
 } else {
-    Say "ExplorerPatcher is required for the taskbar resizing feature." 'Yellow'
+    Say "ExplorerPatcher provides the taskbar style and small-icon options." 'Yellow'
     Say "Installing it automatically..." 'Yellow'
     $doEP = $true
     

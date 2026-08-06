@@ -1,16 +1,27 @@
-# Window Tweaks
+# Snapping design, and the taskbar research
 
-One program, four tweaks. Runs in the tray as a single ~18 MB process.
+> **Read the taskbar half of this document as history.** The taskbar-height
+> engine it describes (`TaskbarCore.ahk`, the `Win + Alt + ↑ / ↓ / 0` hotkeys, the
+> height dropdown) **has been removed from the program.** It is kept here because
+> the measurements and the four dead ends are the reason it was removed, and
+> because they are expensive to rediscover. Nothing in the taskbar sections
+> describes code that exists today.
+>
+> The **magnetic snapping** sections below are current and accurate.
+>
+> What the program does to the taskbar now: Smart Auto-Hide (via
+> `SHAppBarMessage`) and volume on the wheel while the pointer is over it. Taskbar
+> style and small icons are handed to ExplorerPatcher.
 
-**Win + Ctrl + W** opens the tools window. All hotkeys are in `HOTKEYS.md`,
+**Win + Ctrl + W** opens the settings window. All hotkeys are in `HOTKEYS.md`,
 setup is in the repository `README.md`.
 
 | Tweak | What it does |
 |---|---|
 | Magnetic snapping | Windows stick to screen edges, corners and to each other |
+| Ice glide | A released window keeps sliding, then snaps to what it drifts near |
 | Always on top | Pin any window above the rest |
 | Position memory | Apps reopen where you last put them |
-| Taskbar height | Shrinks the taskbar as far as the shell allows — see the honest limits below |
 
 ---
 
@@ -116,22 +127,21 @@ Combining the two original scripts into one program halved the memory.
 
 | File | Purpose |
 |---|---|
-| `WindowTweaks.ahk` | The program — hotkeys, tools window, snapping, position memory |
+| `WindowTweaks.ahk` | The program — hotkeys, settings window, snapping, position memory, every feature |
 | `SnapCore.ahk` | Snap geometry and window inspection |
-| `test-snap.ahk` | 21 geometry tests, fully automated; doesn't touch your windows |
-| `test-live-manual.ahk` | Guided live test — run it, drag windows, watch each drag get judged |
-| `diagnostics\` | The probe scripts used to work out what the shell does and doesn't allow |
+| `RenderCore.ahk` | The only place that applies a visual change to a window |
+| `AnimationScheduler.ahk` | One 16 ms timer driving every animation |
+| `MediaCore.ahk` | WASAPI playback detection, so a playing window is never faded |
 
-`test-live-manual.ahk` is deliberately manual. A caption drag can't be simulated:
-injected clicks don't engage the window's move loop the way a physical press
-does, so "automated" drag tests either did nothing and passed vacuously, or moved
-the window by other means and tested a path real drags never take.
+The test scripts and `diagnostics\` probes that used to be listed here are **not
+in this repository** — they were used to produce the measurements above and were
+not kept. There is no test suite; see `README.md` for the parse check and the
+by-hand procedure that replace it.
+
+A caption drag cannot be simulated in any case: injected clicks don't engage the
+window's move loop the way a physical press does, so "automated" drag tests either
+did nothing and passed vacuously, or moved the window by other means and tested a
+path real drags never take.
 
 Created at runtime: `settings.ini`, `window-positions.ini`, `snap.log`
 (auto-rotates at 256 KB). Nothing is written outside this folder.
-
-Re-run the tests after a Windows update:
-
-```powershell
-& "$env:LOCALAPPDATA\Programs\AutoHotkey\v2\AutoHotkey64.exe" test-snap.ahk
-```

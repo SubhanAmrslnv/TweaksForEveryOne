@@ -90,13 +90,19 @@ would fling popups to your main window's size and place.
 Turn it off with **`Win + Ctrl + M`**, or clear what it has learned with
 *Forget saved positions* in settings.
 
-### Also: taskbar height
+### Also: the taskbar
 
-There's a taskbar page in settings, and it's honest about a hard limit: on
-Windows 11 build 26200 the taskbar **cannot** be meaningfully shrunk by a normal
-program. The buttons need the full height, and the primary taskbar refuses to
-resize at all. The settings page shows you exactly what each bar can and can't
-do. `README.md` explains why in detail.
+There is no taskbar-height control any more. On Windows 11 build 26200 the
+taskbar **cannot** be meaningfully shrunk by a normal program — the buttons need
+the full height and the primary bar refuses to resize at all — so that engine was
+removed rather than kept as a feature that mostly doesn't work.
+[TASKBAR-AND-INTERNALS.md](TASKBAR-AND-INTERNALS.md) records what was measured and
+why, so nobody has to rediscover it.
+
+What remains is the part that does work: **Smart Auto-Hide** (General page) hides
+the taskbar only when a window is maximized or reaches the bottom edge, and
+**Taskbar Volume Scroll** (System & Media) puts volume on the wheel while your
+mouse is over it.
 
 ### The Full Feature Suite (25+ Tweaks & Animations)
 
@@ -110,7 +116,7 @@ do. `README.md` explains why in detail.
 - **Custom Text Caret**: A thicker, smoother blinking text cursor (caret) to reduce eye strain and look modern.
 - **Bouncy Snapping**: Windows slightly squish and bounce back with realistic physics when hitting screen edges or other windows.
 - **Gravity Drop Close**: When closing a window, it collapses into a bitmap and falls with gravity (or gets sucked into a black hole).
-- **Breathing Backgrounds**: Inactive background windows slowly fade to 70% opacity after 5 seconds of inactivity, waking up instantly when hovered.
+- **Breathing Backgrounds**: Inactive background windows slowly fade to 70% opacity after 6 seconds of inactivity, waking up instantly when hovered.
 - **Focus Pulse**: Switching to a window via Alt+Tab makes it pulse (expand by 2-3% and bounce back) to immediately draw your attention.
 - **Ghost Slide-In**: New apps slide up from 30px below while fading in, similar to modern smartphone app launches.
 - **Parallax Dragging**: Windows become transparent based on how fast you drag them, fading back to solid when you stop.
@@ -138,28 +144,35 @@ do. `README.md` explains why in detail.
 | Key | Does |
 |---|---|
 | `Win + Ctrl + W` | Open settings |
-| `Win + Ctrl + T` | Always on top, on/off |
 | `Win + Ctrl + S` | Magnetic snapping, on/off |
 | `Win + Ctrl + M` | Position memory, on/off |
-| `Win + Alt + ↑` | Taskbar taller |
-| `Win + Alt + ↓` | Taskbar shorter |
-| `Win + Alt + 0` | Restore taskbar |
+| `Win + Ctrl + E` | Breathing windows, on/off |
+| `Win + Ctrl + F` | Focus mode, on/off |
+| `Win + Ctrl + T` | Always on top, on/off |
+| `Win + Ctrl + R` | Roll up / unroll |
+| `Win + Ctrl + H` | Minimize to tray |
+| `Win + Ctrl + Esc` | Boss key |
+| `Win + Ctrl + Wheel` | Transparency |
+| `Alt + F4` | Close, with the gravity animation |
 
-`HOTKEYS.md` covers conflicts with Windows' own shortcuts and how to change these.
+Several more appear only when their feature is switched on.
+`HOTKEYS.md` has the full list, the conflicts with Windows' own shortcuts, and
+how to change them.
 
 ---
 
 ## The settings window
 
-Five pages down the left:
+Six pages down the left:
 
 | Page | What's on it |
 |---|---|
-| **Snapping** | On/off, snap distance, corner boost, neighbour reach |
-| **Ice Glide** | On/off, throw strength, slide time |
-| **Windows** | Position memory, forget saved positions |
-| **Taskbar** | Height, what each bar can actually do, restore, restart Explorer |
-| **General** | Start with Windows, open log, open folder, hotkeys, this guide |
+| **Window Management** | Snapping (distance, corner boost, neighbour reach, seam flash), ice glide (throw, slide time), parallax drag, alt-drag, fly-to-mouse minimize, grab & pan, roll-up, position memory |
+| **Power Features** | Spotlight, live PiP, ghost window, always on bottom, middle-click close, minimize to tray, quick folder jump, Quick Look |
+| **System & Media** | Taskbar volume scroll, volume OSD, mic kill-switch, boss key, text expander, smart CapsLock, plain-text paste |
+| **Multi-Monitor** | Cursor wrap, focus dimmer, active border, breathing, focus pulse, new-window animation |
+| **Hot Corners** | Enable, plus an action per corner |
+| **General** | Start with Windows, smart auto-hide taskbar, taskbar style / icon size, restart Explorer, open log, open folder, hotkeys, this guide |
 
 Changes apply as you make them — there's no OK button. Typed values apply about
 half a second after you stop typing. It follows your Windows light/dark theme.
@@ -187,9 +200,11 @@ Run **`scripts\Apply-Windows-Tuning.ps1`** for the optional polish, and
 |---|---|
 | Nothing happens when I drag | Open settings → General → **Open log**. It records every drag and why it did or didn't snap. |
 | Hotkeys dead in one app | That app is running as administrator. Run Window Tweaks as admin too, or click a normal window first. |
-| A window keeps jumping somewhere | Position memory learned a bad spot. Settings → Windows → **Forget saved positions**. |
-| Taskbar looks short or odd | Settings → Taskbar → **Restart Explorer**. That's a guaranteed reset. |
-| Taskbar stayed small after closing | It was killed rather than exited. Start it again and press `Win + Alt + 0`. |
+| A window keeps jumping somewhere | Position memory learned a bad spot. Settings → Window Management → **Forget saved positions**. |
+| Taskbar looks odd, or auto-hide is stuck | Settings → General → **Restart Explorer**. That's a guaranteed reset — and the program notices Explorer coming back and re-attaches itself. |
+| A window is stuck transparent or click-through | Ghost mode. Press `Win + Ctrl + G` on it again. Exiting the program also restores every window it changed. |
+| A window won't come back from the desktop | Always-on-bottom. Press `Win + Ctrl + B` on it, or exit the program. |
+| Position memory / new-window animations stopped working | Explorer restarted and the program lost its connection to it. This now repairs itself; if it doesn't, restart from the tray. |
 | Won't start at all | AutoHotkey **v2** must be installed. v1 can't run it. |
 
 ---
@@ -200,12 +215,12 @@ Run **`scripts\Apply-Windows-Tuning.ps1`** for the optional polish, and
 |---|---|
 | `WindowTweaks.ahk` | The program |
 | `SnapCore.ahk` | Snapping maths — required |
-| `TaskbarCore.ahk` | Taskbar engine — required |
-| `settings.ini` | Your settings |
+| `RenderCore.ahk` | Applies every visual change — required |
+| `AnimationScheduler.ahk` | Drives every animation — required |
+| `MediaCore.ahk` | Detects windows that are playing audio or video, so they never get faded — required |
+| `settings.ini` | Your settings, and your text-expander snippets |
 | `window-positions.ini` | Remembered window positions |
-| `snap.log` | Every drag, and every taskbar decision (auto-trimmed at 256 KB) |
-| `test-snap.ahk` | 21 automated checks of the snapping maths |
-| `test-live-manual.ahk` | Run it, drag windows, watch each drag get judged |
+| `snap.log` | Every drag and what it decided (auto-trimmed at 256 KB) |
 
 Everything is written next to the program. No registry keys, no services, no
 system files, no drivers.

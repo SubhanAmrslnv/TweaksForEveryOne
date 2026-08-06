@@ -62,11 +62,17 @@ Each app reopens at the size and position you last left it. Dialogs, popups,
 tool windows, and Picture-in-Picture (PiP) windows are deliberately excluded.
 
 ### Taskbar management
-The Windows 11 taskbar cannot be meaningfully shrunk by an ordinary program (see
-[docs/TASKBAR-AND-INTERNALS.md](docs/TASKBAR-AND-INTERNALS.md)). To solve this, 
-we integrate directly with **ExplorerPatcher**. The installer automatically fetches 
-and installs ExplorerPatcher for you, and Window Tweaks provides a clean UI to toggle 
-between Windows 10 and Windows 11 styles, and switch to small icons.
+The Windows 11 taskbar cannot be meaningfully shrunk by an ordinary program, so
+Window Tweaks doesn't pretend to — the height engine that tried was removed, and
+[docs/TASKBAR-AND-INTERNALS.md](docs/TASKBAR-AND-INTERNALS.md) records exactly what
+was measured and why. Instead it integrates with **ExplorerPatcher**, which can do
+it properly: the installer fetches and installs ExplorerPatcher for you, and
+Window Tweaks gives you a clean UI to switch between Windows 10 and Windows 11
+taskbar styles and to turn on small icons.
+
+What Window Tweaks does to the taskbar itself is **Smart Auto-Hide** — hiding it
+only when a window is maximized or reaches the bottom edge — and putting volume on
+the mouse wheel while the pointer is over it.
 
 ### The Full Feature Suite (40+ Tweaks & Animations)
 
@@ -97,7 +103,7 @@ between Windows 10 and Windows 11 styles, and switch to small icons.
 - **Custom Text Caret**: A thicker, smoother blinking text cursor (caret) to reduce eye strain and look modern.
 - **Bouncy Snapping**: Windows slightly squish and bounce back with realistic physics when hitting screen edges or other windows.
 - **Gravity Drop Close**: When closing a window, it collapses into a bitmap and falls with gravity (or gets sucked into a black hole).
-- **Breathing Backgrounds**: Inactive background windows slowly fade to 70% opacity after 5 seconds of inactivity, waking up instantly when hovered.
+- **Breathing Backgrounds**: Inactive background windows slowly fade to 70% opacity after 6 seconds of inactivity, waking up instantly when hovered.
 - **Focus Pulse**: Switching to a window via Alt+Tab makes it pulse (expand by 2-3% and bounce back) to immediately draw your attention.
 - **Ghost Slide-In**: New apps slide up from 30px below while fading in, similar to modern smartphone app launches.
 - **Parallax Dragging**: Windows become transparent based on how fast you drag them, fading back to solid when you stop.
@@ -172,20 +178,20 @@ Requires **AutoHotkey v2** (v1 cannot run this).
 ```powershell
 # run from source
 & "$env:LOCALAPPDATA\Programs\AutoHotkey\v2\AutoHotkey64.exe" src\WindowTweaks.ahk
-
-# 21 automated geometry tests - doesn't touch your windows
-cd tests
-& "$env:LOCALAPPDATA\Programs\AutoHotkey\v2\AutoHotkey64.exe" test-snap.ahk
-
-# guided live test - run it, then drag windows and watch each drag get judged
-& "$env:LOCALAPPDATA\Programs\AutoHotkey\v2\AutoHotkey64.exe" test-live-manual.ahk
 ```
 
-`tests\test-live-manual.ahk` is deliberately manual. A title-bar drag can't be
-simulated reliably: injected clicks don't engage the window's move loop the way
-a physical press does, so an "automated" drag test either does nothing and
-passes vacuously, or moves the window by other means and tests a code path real
-drags never take.
+There is **no test suite in this repository.** AutoHotkey 2.0 also has no offline
+syntax check (`/validate` arrived in 2.1), so the closest thing to one is a parse
+check: copy `src\*.ahk` to a scratch folder, prepend `ExitApp` to the copy of
+`WindowTweaks.ahk`, and run that with `/ErrorStdOut`. AutoHotkey parses the whole
+script before executing anything, so a load-time error is printed while `ExitApp`
+stops it before a single hook, timer or tray icon is installed.
+
+Testing is otherwise by hand, and deliberately so for the drag path: a title-bar
+drag can't be simulated reliably — injected clicks don't engage the window's move
+loop the way a physical press does, so an "automated" drag test either does
+nothing and passes vacuously, or moves the window by other means and tests a code
+path real drags never take.
 
 Two naming traps worth knowing before editing the AutoHotkey source, both of
 which cost real debugging time:
