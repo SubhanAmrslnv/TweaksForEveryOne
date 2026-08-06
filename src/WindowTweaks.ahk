@@ -1,6 +1,8 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
 #Include SnapCore.ahk
+#Include RenderCore.ahk
+#Include AnimationScheduler.ahk
 Persistent
 DetectHiddenWindows false
 SetWinDelay -1
@@ -908,9 +910,9 @@ GetActiveExplorerPath() {
         oldText := ControlGetText("Edit1", hwnd)
         ControlFocus("Edit1", hwnd)
         ControlSetText(path, "Edit1", hwnd)
-        Sleep 50
+        PreciseSleep(50)
         ControlSend("{Enter}", "Edit1", hwnd)
-        Sleep 150
+        PreciseSleep(150)
         if (oldText != "")
             ControlSetText(oldText, "Edit1", hwnd)
     }
@@ -923,9 +925,9 @@ GetActiveExplorerPath() {
         return
     ClipSaved := ClipboardAll()
     A_Clipboard := A_Clipboard
-    Sleep 50
+    PreciseSleep(50)
     Send("^v")
-    Sleep 100
+    PreciseSleep(100)
     A_Clipboard := ClipSaved
     ClipSaved := ""
 }
@@ -1016,7 +1018,7 @@ GetActiveExplorerPath() {
                 StartX := StartX + (dx < 0 ? -count * step : count * step)
             }
         }
-        Sleep(10)
+        PreciseSleep(10)
     }
     
     if (!dragged) {
@@ -1058,11 +1060,11 @@ ChangeTransparency(dir) {
     }
     
     if (current == 255) {
-        try WinSetTransparent("Off", hwnd)
+        RS_SetAlpha(hwnd, "Off", RS_PRI_USER)
         CustomTrans.Delete(hwnd)
         Notify("Transparency: OFF")
     } else {
-        try WinSetTransparent(current, hwnd)
+        RS_SetAlpha(hwnd, current, RS_PRI_USER)
         pct := Round((current / 255) * 100)
         Notify("Opacity: " pct "%")
     }
@@ -1075,6 +1077,11 @@ ToggleRollUp(hwnd := 0) {
         hwnd := WinExist("A")
     if !hwnd || !IsRestorable(hwnd)
         return
+        
+    animKey := "RollUp_" hwnd
+    CancelAnimation(animKey)
+    start := QPC()
+    ms := 12 * 16
         
     if RolledUpWindows.Has(hwnd) {
         origH := RolledUpWindows[hwnd]
@@ -1091,17 +1098,20 @@ ToggleRollUp(hwnd := 0) {
         if (caption < 30)
             caption := 35
             
-        steps := 12
-        Loop steps {
+        RollDownStep(dt, now) {
             if !DllCall("IsWindow", "ptr", hwnd)
-                return
-            t := A_Index / steps
+                return false
+            t := (now - start) / ms
+            if (t >= 1) {
+                RS_SetRegion(hwnd, "", RS_PRI_ANIM)
+                return false
+            }
             ease := 1 - (1 - t) * (1 - t)
             curH := caption + Round((origH - caption) * ease)
-            try WinSetRegion("0-0 W" w " H" curH, hwnd)
-            Sleep 16
+            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
+            return true
         }
-        try WinSetRegion("", hwnd)
+        RegisterAnimation(animKey, RollDownStep)
     } else {
         WinGetPos(&x, &y, &w, &h, hwnd)
         RolledUpWindows[hwnd] := h
@@ -1115,17 +1125,20 @@ ToggleRollUp(hwnd := 0) {
         if (caption < 30)
             caption := 35
             
-        steps := 12
-        Loop steps {
+        RollUpStep(dt, now) {
             if !DllCall("IsWindow", "ptr", hwnd)
-                return
-            t := A_Index / steps
+                return false
+            t := (now - start) / ms
+            if (t >= 1) {
+                RS_SetRegion(hwnd, "0-0 W" w " H" caption, RS_PRI_ANIM)
+                return false
+            }
             ease := 1 - (1 - t) * (1 - t)
             curH := h - Round((h - caption) * ease)
-            try WinSetRegion("0-0 W" w " H" curH, hwnd)
-            Sleep 16
+            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
+            return true
         }
-        try WinSetRegion("0-0 W" w " H" caption, hwnd)
+        RegisterAnimation(animKey, RollUpStep)
     }
 }
 
@@ -1158,7 +1171,7 @@ AltDragMove() {
                 alpha := 255 - Round(vel * 3)
                 if (alpha < 100)
                     alpha := 100
-                try WinSetTransparent(alpha, hwnd)
+                RS_SetAlpha(hwnd, alpha, RS_PRI_DRAG)
             }
             
             WinGetPos(&wX, &wY,,, hwnd)
@@ -1166,17 +1179,18 @@ AltDragMove() {
             wY += vY
             mX := nX
             mY := nY
-            try WinMove(wX, wY,,, hwnd)
+            RS_SetPos(hwnd, wX, wY, -1, -1, RS_PRI_DRAG)
+            RS_Flush()
         } else {
             vX := 0, vY := 0
             if ParallaxEnabled
-                try WinSetTransparent(255, hwnd)
+                RS_SetAlpha(hwnd, 255, RS_PRI_DRAG)
         }
-        Sleep 10
+        PreciseSleep(10)
     }
     
     if ParallaxEnabled
-        try WinSetTransparent("Off", hwnd)
+        RS_SetAlpha(hwnd, "Off", RS_PRI_DRAG)
 
     ; Hand off to the same release pipeline a title-bar drag uses. SnapWindow
     ; reads VelX/VelY to carry the throw forward and calls Glide itself, so
@@ -1259,9 +1273,10 @@ AltDragResize() {
             }
             wX := newX, wY := newY, wW := newW, wH := newH
             mX := nX, mY := nY
-            try WinMove(wX, wY, wW, wH, hwnd)
+            RS_SetPos(hwnd, wX, wY, wW, wH, RS_PRI_DRAG)
+            RS_Flush()
         }
-        Sleep 10
+        PreciseSleep(10)
     }
 }
 
@@ -1395,74 +1410,71 @@ global WinLastActive := Map()
 ; five times a second. That is exactly the polling the drag pipeline was
 ; designed to avoid, and it ran even for users who never turn breathing on.
 SyncBreathingTimers() {
-    global BreathingEnabled, WinTargetAlpha, WinCurrentAlpha, WinLastActive
+    global BreathingEnabled, WinTargetAlpha, WinCurrentAlpha, WinLastActive, CustomTrans
     if (BreathingEnabled) {
-        SetTimer(BreathingMonitor, 200)
-        SetTimer(BreathingAnimator, 32)
+        now := QPC()
+        hwnds := WinGetList()
+        for hwnd in hwnds {
+            if IsRestorable(hwnd) {
+                baseAlpha := CustomTrans.Has(hwnd) ? CustomTrans[hwnd] : 255
+                WinLastActive[hwnd] := now
+                WinCurrentAlpha[hwnd] := baseAlpha
+                WinTargetAlpha[hwnd] := baseAlpha
+            }
+        }
+        RegisterAnimation("BreathingMonitor", BreathingMonitorStep)
+        RegisterAnimation("BreathingAnimator", BreathingAnimatorStep)
         return
     }
-    SetTimer(BreathingMonitor, 0)
-    SetTimer(BreathingAnimator, 0)
+    CancelAnimation("BreathingMonitor")
+    CancelAnimation("BreathingAnimator")
     ; Hand every window its opacity back before we stop animating it, or a
     ; window dimmed at the moment of the toggle stays dim for good.
     for hwnd, alpha in WinCurrentAlpha {
         if DllCall("IsWindow", "ptr", hwnd)
-            try WinSetTransparent(CustomTrans.Has(hwnd) ? CustomTrans[hwnd] : "Off", hwnd)
+            try RS_SetAlpha(hwnd, CustomTrans.Has(hwnd) ? CustomTrans[hwnd] : "Off", RS_PRI_AMBIENT)
     }
     WinTargetAlpha.Clear(), WinCurrentAlpha.Clear(), WinLastActive.Clear()
 }
 SyncBreathingTimers()
 
-; Breathing does the pruning for its own three Maps, but CustomTrans and
-; RolledUpWindows outlive it, so with breathing off they grew for the whole
-; session. Cheap enough to run always: one IsWindow per tracked window.
-PruneWindowMaps() {
-    global CustomTrans, RolledUpWindows
-    for hwnd in CustomTrans.Clone()
-        if !DllCall("IsWindow", "ptr", hwnd)
-            CustomTrans.Delete(hwnd)
-    for hwnd in RolledUpWindows.Clone()
-        if !DllCall("IsWindow", "ptr", hwnd)
-            RolledUpWindows.Delete(hwnd)
-}
-SetTimer(PruneWindowMaps, 5000)
 
-BreathingMonitor() {
-    global BreathingEnabled, WinLastActive, WinCurrentAlpha, WinTargetAlpha
+
+BreathingMonitorStep(dt, now) {
+    global BreathingEnabled, WinLastActive, WinCurrentAlpha, WinTargetAlpha, CustomTrans
+    static lastCheck := 0
     if !BreathingEnabled
-        return
+        return false
+        
+    if (now - lastCheck < 200)
+        return true
+    lastCheck := now
         
     MouseGetPos(,, &mHwnd)
     aHwnd := WinExist("A")
-    hwnds := WinGetList()
-    now := A_TickCount
+    now := QPC()
     
-    For hwnd in hwnds {
-        if !IsRestorable(hwnd)
+    for hwnd, lastActive in WinLastActive {
+        if !DllCall("IsWindow", "ptr", hwnd)
             continue
             
         baseAlpha := CustomTrans.Has(hwnd) ? CustomTrans[hwnd] : 255
-            
-        if !WinLastActive.Has(hwnd) {
-            WinLastActive[hwnd] := now
-            WinCurrentAlpha[hwnd] := baseAlpha
-            WinTargetAlpha[hwnd] := baseAlpha
-        }
         
         if (hwnd == aHwnd || hwnd == mHwnd) {
             WinLastActive[hwnd] := now
             WinTargetAlpha[hwnd] := baseAlpha
         } else {
-            if (now - WinLastActive[hwnd] > 6000) ; 6 seconds
+            if (now - lastActive > 6000) ; 6 seconds
                 WinTargetAlpha[hwnd] := Min(baseAlpha, 180)
         }
     }
+    return true
 }
 
-BreathingAnimator() {
-    global BreathingEnabled, WinTargetAlpha, WinCurrentAlpha, WinLastActive
+BreathingAnimatorStep(dt, now) {
+    global BreathingEnabled, WinTargetAlpha, WinCurrentAlpha, WinLastActive, CustomTrans
     if !BreathingEnabled
-        return
+        return false
         
     For hwnd, target in WinTargetAlpha {
         if !DllCall("IsWindow", "ptr", hwnd) {
@@ -1492,11 +1504,12 @@ BreathingAnimator() {
         
         try {
             if (current == 255)
-                WinSetTransparent("Off", hwnd)
+                RS_SetAlpha(hwnd, "Off", RS_PRI_AMBIENT)
             else
-                WinSetTransparent(current, hwnd)
+                RS_SetAlpha(hwnd, current, RS_PRI_AMBIENT)
         }
     }
+    return true
 }
 $!F4::GravityClose()
 
@@ -1535,24 +1548,36 @@ GravityClose() {
         return
     }
     
-    ; Make real window invisible temporarily
-    try WinSetTransparent(0, hwnd)
+    try RS_SetAlpha(hwnd, 0, RS_PRI_ANIM)
+    RS_Flush()
     
     ; Create animation GUI
     animGui := Gui("-Caption +ToolWindow +AlwaysOnTop -DPIScale +E0x20", "GravityCloseAnim")
     animGui.MarginX := 0, animGui.MarginY := 0
-    ; No '*': that would hand the handle to AHK to free, and we free it
-    ; ourselves after Destroy() below. One owner, not two.
     pic := animGui.Add("Picture", "x0 y0 w" w " h" h, "HBITMAP:" hbm)
     animGui.Show("x" x " y" y " w" w " h" h " NoActivate")
     
-    ; Black Hole / Gravity Drop animation
-    steps := 20
     startW := w, startH := h
     startX := x, startY := y
     
-    Loop steps {
-        t := A_Index / steps
+    animKey := "Gravity_" animGui.Hwnd
+    start := QPC()
+    ms := 320
+    
+    GravityStep(dt, now) {
+        if !DllCall("IsWindow", "ptr", animGui.Hwnd)
+            return false
+            
+        t := (now - start) / ms
+        if (t >= 1) {
+            animGui.Destroy()
+            if hbm
+                DllCall("DeleteObject", "ptr", hbm)
+            try PostMessage(0x0010, 0, 0, , hwnd) ; WM_CLOSE
+            SetTimer(() => CheckGravityClose(hwnd), -400)
+            return false
+        }
+        
         ease := t * t * t ; cubic ease in
         
         curW := Round(startW * (1 - ease * 0.95))
@@ -1567,22 +1592,18 @@ GravityClose() {
             
             if (t > 0.4) {
                 alpha := Clamp(Round(255 * (1 - ((t - 0.4) / 0.6))), 0, 255)
-                WinSetTransparent(alpha, animGui.Hwnd)
+                RS_SetAlpha(animGui.Hwnd, alpha, RS_PRI_ANIM)
             }
         }
-        Sleep 16
+        return true
     }
     
-    animGui.Destroy()
-    if hbm
-        DllCall("DeleteObject", "ptr", hbm)
+    RegisterAnimation(animKey, GravityStep)
+}
 
-    ; Close the real window
-    try PostMessage(0x0010, 0, 0, , hwnd) ; WM_CLOSE
-    
-    ; If it doesn't close (e.g. unsaved changes prompt), make it visible again
-    if !WinWaitClose(hwnd, 0.4) {
-        try WinSetTransparent("Off", hwnd)
+CheckGravityClose(hwnd) {
+    if WinExist("ahk_id " hwnd) {
+        try RS_SetAlpha(hwnd, "Off", RS_PRI_ANIM)
     }
 }
 
@@ -1610,7 +1631,7 @@ ToggleFocusMode() {
             g.BackColor := "000000"
             g.MarginX := 0, g.MarginY := 0
             g.Show("x" vx " y" vy " w" vw " h" vh " NoActivate")
-            WinSetTransparent(0, g.Hwnd)
+            RS_SetAlpha(g.Hwnd, 0, RS_PRI_ANIM)
             FocusGuis.Push({gui: g, targetAlpha: alphas[A_Index], currentAlpha: 0})
         }
         
@@ -1625,10 +1646,10 @@ ToggleFocusMode() {
         }
         
         ZOrderSpotlight()
-        SetTimer(FocusAnimator, 16)
+        RegisterAnimation("FocusAnimator", FocusAnimatorStep)
         Notify("Focus Mode ON")
     } else {
-        SetTimer(FocusAnimator, 0)
+        CancelAnimation("FocusAnimator")
         ; 'layer', not 'fg' - case-insensitive identifiers make 'fg' the global
         ; foreground colour FG.
         for layer in FocusGuis {
@@ -1651,15 +1672,15 @@ ZOrderSpotlight() {
         
     prevHwnd := FocusTargetHwnd
     for layer in FocusGuis {
-        try DllCall("SetWindowPos", "ptr", layer.gui.Hwnd, "ptr", prevHwnd, "int", 0, "int", 0, "int", 0, "int", 0, "uint", 0x0013)
+        try RS_SetZOrder(layer.gui.Hwnd, prevHwnd, 0x0013, RS_PRI_ANIM)
         prevHwnd := layer.gui.Hwnd
     }
 }
 
-FocusAnimator() {
+FocusAnimatorStep(dt, now) {
     global FocusModeEnabled, FocusGuis, SpotlightTarget, SpotlightCurrent, FocusBounds, FocusTargetHwnd
     if !FocusModeEnabled || !FocusGuis.Length
-        return
+        return false
         
     hwnd := WinExist("A")
     if (hwnd != FocusTargetHwnd) {
@@ -1703,33 +1724,44 @@ FocusAnimator() {
             region .= " " px "-" py " W" pw " H" ph " R" (40 + pad) "-" (40 + pad)
         }
 
-        try WinSetRegion(region, layer.gui.Hwnd)
+        try RS_SetRegion(layer.gui.Hwnd, region, RS_PRI_ANIM)
 
-        ; Both directions. With only the fade-in branch, a lowered target left
-        ; the outer if permanently true and re-issued the same alpha every 16ms.
         if (layer.currentAlpha != layer.targetAlpha) {
             if (layer.currentAlpha < layer.targetAlpha)
-                layer.currentAlpha := Min(layer.currentAlpha + 12, layer.targetAlpha)
+                layer.currentAlpha := Min(layer.currentAlpha + 10, layer.targetAlpha)
             else
-                layer.currentAlpha := Max(layer.currentAlpha - 12, layer.targetAlpha)
-            try WinSetTransparent(layer.currentAlpha, layer.gui.Hwnd)
+                layer.currentAlpha := Max(layer.currentAlpha - 10, layer.targetAlpha)
+                
+            try RS_SetAlpha(layer.gui.Hwnd, layer.currentAlpha, RS_PRI_ANIM)
         }
     }
+    return true
 }
 
 FadeWindow(hwnd, startAlpha, endAlpha, durationMs) {
     if !DllCall("IsWindow", "ptr", hwnd)
         return
-    steps := 15
-    sleepTime := durationMs / steps
-    alphaStep := (endAlpha - startAlpha) / steps
+        
+    animKey := "FadeWindow_" hwnd
+    CancelAnimation(animKey)
+    start := QPC()
     
-    Loop steps {
-        currentAlpha := startAlpha + (A_Index * alphaStep)
-        try WinSetTransparent(Integer(currentAlpha), hwnd)
-        Sleep sleepTime
+    FadeStep(dt, now) {
+        if !DllCall("IsWindow", "ptr", hwnd)
+            return false
+            
+        t := (now - start) / durationMs
+        if (t >= 1) {
+            try RS_SetAlpha(hwnd, endAlpha, RS_PRI_ANIM)
+            return false
+        }
+        
+        currentAlpha := startAlpha + (endAlpha - startAlpha) * t
+        try RS_SetAlpha(hwnd, Integer(currentAlpha), RS_PRI_ANIM)
+        return true
     }
-    try WinSetTransparent(endAlpha, hwnd)
+    
+    RegisterAnimation(animKey, FadeStep)
 }
 
 ToggleSnap() {
@@ -1792,7 +1824,6 @@ WinEvent(hook, event, hwnd, idObject, idChild, thread, time) {
         return
     if (!SnapEnabled && !RestoreEnabled)
         return
-
     if (event = 0x000A) {                    ; MOVESIZESTART
         DragHwnd := 0
         if !IsSnappable(hwnd)
@@ -1802,26 +1833,24 @@ WinEvent(hook, event, hwnd, idObject, idChild, thread, time) {
         DragHwnd := hwnd, DragL := sL, DragT := sT, DragR := sR, DragB := sB
         VelX := 0, VelY := 0, PrevX := sL, PrevY := sT
         CurrentDragAlpha := 255
-        SetTimer(SampleVelocity, 16)
+        RegisterAnimation("SampleVelocity", SampleVelocityStep)
         return
     }
 
     if (hwnd != DragHwnd)                    ; MOVESIZEEND
         return
-    SetTimer(SampleVelocity, 0)
+    CancelAnimation("SampleVelocity")
     DragHwnd := 0
     SetTimer(() => FinishDrag(hwnd), -50)    ; defer: FinishDrag enumerates windows
 }
 
-; Release speed in px per frame, smoothed so one jittery frame can't dominate.
-SampleVelocity() {
+SampleVelocityStep(dt, now) {
     global DragHwnd, VelX, VelY, PrevX, PrevY, ParallaxEnabled, CurrentDragAlpha
     if !DragHwnd {
-        SetTimer(SampleVelocity, 0)
-        return
+        return false
     }
     if !GetRects(DragHwnd, &L, &T, &R, &B, &x, &y)
-        return
+        return true
     VelX := VelX * 0.6 + (L - PrevX) * 0.4
     VelY := VelY * 0.6 + (T - PrevY) * 0.4
     PrevX := L, PrevY := T
@@ -1832,14 +1861,13 @@ SampleVelocity() {
         
         CurrentDragAlpha := CurrentDragAlpha * 0.7 + targetAlpha * 0.3
         
-        ; Braces are load-bearing: AHK v2's Try has its own Else clause, so a
-        ; braceless one-line try swallows the else and fails to parse.
         if (CurrentDragAlpha < 250) {
-            try WinSetTransparent(Integer(CurrentDragAlpha), DragHwnd)
+            RS_SetAlpha(DragHwnd, Integer(CurrentDragAlpha), RS_PRI_DRAG)
         } else {
-            try WinSetTransparent("Off", DragHwnd)
+            RS_SetAlpha(DragHwnd, "Off", RS_PRI_DRAG)
         }
     }
+    return true
 }
 
 FinishDrag(hwnd) {
@@ -1857,33 +1885,37 @@ FinishDrag(hwnd) {
     }
     
     if (ParallaxEnabled)
-        SetTimer(FadeBackAlpha.Bind(hwnd, CurrentDragAlpha), -1)
+        StartFadeBackAlpha(hwnd, CurrentDragAlpha)
         
     WriteLog(Format("drag end hwnd={1} frame L={2} T={3} R={4} B={5}", hwnd, eL, eT, eR, eB))
     SnapWindow(hwnd, eL, eT, eR, eB, ex, ey)
     RememberPosition(hwnd)
 }
 
-FadeBackAlpha(hwnd, startA) {
+StartFadeBackAlpha(hwnd, startA) {
     if !DllCall("IsWindow", "ptr", hwnd)
         return
-        
     if (startA >= 250) {
-        try WinSetTransparent("Off", hwnd)
+        RS_SetAlpha(hwnd, "Off", RS_PRI_DRAG)
         return
     }
-        
-    steps := 12
-    stepSize := (255 - startA) / steps
-    
-    Loop steps {
+    animKey := "FadeBack_" hwnd
+    CancelAnimation(animKey)
+    start := QPC()
+    ms := 12 * 16  ; 192ms total
+    FadeBackStep(dt, now) {
         if !DllCall("IsWindow", "ptr", hwnd)
-            return
-        cur := startA + (A_Index * stepSize)
-        try WinSetTransparent(Integer(cur), hwnd)
-        Sleep 16
+            return false
+        t := (now - start) / ms
+        if (t >= 1) {
+            RS_SetAlpha(hwnd, "Off", RS_PRI_DRAG)
+            return false
+        }
+        cur := startA + (255 - startA) * t
+        RS_SetAlpha(hwnd, Integer(cur), RS_PRI_DRAG)
+        return true
     }
-    try WinSetTransparent("Off", hwnd)
+    RegisterAnimation(animKey, FadeBackStep)
 }
 
 SnapWindow(hwnd, L, T, R, B, winX, winY) {
@@ -1971,22 +2003,19 @@ SnapWindow(hwnd, L, T, R, B, winX, winY) {
         BounceSqueeze(hwnd, destX, destY, currentW, currentH, crashX, crashY)
     }
 
-    Sleep 40
+    PreciseSleep(40)
     if !GetRects(hwnd, &vL, &vT, &vR, &vB, &vx, &vy)
         return
     ; One retry: some apps reposition themselves once more after a drag.
     if (vL != newL || vT != newT) {
         MoveFast(hwnd, vx + (newL - vL), vy + (newT - vT))
-        Sleep 40
+        PreciseSleep(40)
         GetRects(hwnd, &vL, &vT, &vR, &vB, &vx, &vy)
     }
     WriteLog(Format("  settled at L={1} T={2}  (throw {3},{4}) (verified L={5} T={6})",
                newL, newT, tx, ty, vL, vT))
 }
 
-; Quintic ease-out: quick off the mark, then a long soft tail, which is what
-; reads as sliding on ice. Driven by elapsed time rather than fixed steps -
-; Sleep overshoots its requested delay and that unevenness reads as stutter.
 Glide(hwnd, fromX, fromY, toX, toY) {
     global GLIDE_MS
     dx := toX - fromX, dy := toY - fromY
@@ -1995,33 +2024,36 @@ Glide(hwnd, fromX, fromY, toX, toY) {
         MoveFast(hwnd, toX, toY)
         return
     }
-    ; Longer than it looks: the quintic tail means most of this time is spent
-    ; barely moving, which is the part that reads as ice.
+    
     ms := Min(GLIDE_MS, 200 + dist * 1.1)
-
-    DllCall("winmm\timeBeginPeriod", "uint", 1)      ; make the short sleeps honest
-    ; finally: anything throwing inside the loop would otherwise leak the 1ms
-    ; global timer resolution for the life of the process.
-    try {
-        start := A_TickCount
-        lastX := -99999, lastY := -99999
-        loop {
-            t := (A_TickCount - start) / ms
-            if (t >= 1)
-                break
-            e := 1 - (1 - t) ** 5
-            nx := Round(fromX + dx * e)
-            ny := Round(fromY + dy * e)
-            if (nx != lastX || ny != lastY) {        ; skip sub-pixel frames
-                MoveFast(hwnd, nx, ny)
-                lastX := nx, lastY := ny
-            }
-            Sleep 4
+    animKey := "Glide_" hwnd
+    CancelAnimation(animKey)
+    
+    start := QPC()
+    lastX := -99999, lastY := -99999
+    
+    GlideStep(dt, now) {
+        if !DllCall("IsWindow", "ptr", hwnd)
+            return false
+            
+        t := (now - start) / ms
+        if (t >= 1) {
+            RS_SetPos(hwnd, toX, toY, -1, -1, RS_PRI_ANIM)
+            return false
         }
-    } finally {
-        DllCall("winmm\timeEndPeriod", "uint", 1)
+        
+        e := 1 - (1 - t) ** 5
+        nx := Round(fromX + dx * e)
+        ny := Round(fromY + dy * e)
+        
+        if (nx != lastX || ny != lastY) {
+            RS_SetPos(hwnd, nx, ny, -1, -1, RS_PRI_ANIM)
+            lastX := nx, lastY := ny
+        }
+        return true
     }
-    MoveFast(hwnd, toX, toY)
+    
+    RegisterAnimation(animKey, GlideStep)
 }
 
 BounceSqueeze(hwnd, X, Y, W, H, crashX, crashY) {
@@ -2050,18 +2082,33 @@ BounceSqueeze(hwnd, X, Y, W, H, crashX, crashY) {
     if (squeezeX == 0 && squeezeY == 0)
         return
         
-    ; Animate the squeeze (bounce against the wall)
-    MoveAndSize(hwnd, X + moveX*0.5, Y + moveY*0.5, W - squeezeX*0.5, H - squeezeY*0.5)
-    Sleep 16
-    MoveAndSize(hwnd, X + moveX, Y + moveY, W - squeezeX, H - squeezeY)
-    Sleep 16
-    MoveAndSize(hwnd, X + moveX*0.4, Y + moveY*0.4, W - squeezeX*0.4, H - squeezeY*0.4)
-    Sleep 16
-    MoveAndSize(hwnd, X, Y, W, H)
+    animKey := "Bounce_" hwnd
+    CancelAnimation(animKey)
+    start := QPC()
+    
+    BounceStep(dt, now) {
+        if !DllCall("IsWindow", "ptr", hwnd)
+            return false
+            
+        elapsed := now - start
+        if (elapsed > 48) {
+            RS_SetPos(hwnd, X, Y, W, H, RS_PRI_ANIM)
+            return false
+        } else if (elapsed > 32) {
+            RS_SetPos(hwnd, Round(X + moveX*0.4), Round(Y + moveY*0.4), Round(W - squeezeX*0.4), Round(H - squeezeY*0.4), RS_PRI_ANIM)
+        } else if (elapsed > 16) {
+            RS_SetPos(hwnd, Round(X + moveX), Round(Y + moveY), Round(W - squeezeX), Round(H - squeezeY), RS_PRI_ANIM)
+        } else {
+            RS_SetPos(hwnd, Round(X + moveX*0.5), Round(Y + moveY*0.5), Round(W - squeezeX*0.5), Round(H - squeezeY*0.5), RS_PRI_ANIM)
+        }
+        return true
+    }
+    
+    RegisterAnimation(animKey, BounceStep)
 }
 
 MoveAndSize(hwnd, x, y, w, h) {
-    DllCall("SetWindowPos", "ptr", hwnd, "ptr", 0, "int", x, "int", y, "int", w, "int", h, "uint", 0x0004 | 0x0010)
+    RS_SetPos(hwnd, Round(x), Round(y), Round(w), Round(h), RS_PRI_ANIM)
 }
 
 ShowSeamFlash(x, y, w, h) {
@@ -2075,37 +2122,46 @@ ShowSeamFlash(x, y, w, h) {
     flash.MarginX := 0, flash.MarginY := 0
     flash.Show("x" x " y" y " w" w " h" h " NoActivate")
     
-    SetTimer(FadeSeam.Bind(flash.Hwnd, w, h), -10)
+    FadeSeam(flash.Hwnd, w, h)
 }
 
 FadeSeam(hwnd, w, h) {
-    steps := 12
     WinGetPos(&x, &y, &cw, &ch, hwnd)
+    animKey := "FadeSeam_" hwnd
+    CancelAnimation(animKey)
+    start := QPC()
+    ms := 12 * 16 ; roughly equivalent to 12 steps of 16ms
     
-    Loop steps {
+    SeamStep(dt, now) {
         if !DllCall("IsWindow", "ptr", hwnd)
-            return
-        t := A_Index / steps
+            return false
+            
+        t := (now - start) / ms
+        if (t >= 1) {
+            try WinClose("ahk_id " hwnd)
+            return false
+        }
+        
         alpha := Round(255 * (1 - t*t))
         
         if (w < h) {
             shrink := Round(h * t * 0.3)
-            try DllCall("SetWindowPos", "ptr", hwnd, "ptr", 0, "int", x, "int", y + shrink, "int", w, "int", h - shrink*2, "uint", 0x0004 | 0x0010)
+            RS_SetPos(hwnd, x, y + shrink, w, h - shrink*2, RS_PRI_ANIM)
         } else {
             shrink := Round(w * t * 0.3)
-            try DllCall("SetWindowPos", "ptr", hwnd, "ptr", 0, "int", x + shrink, "int", y, "int", w - shrink*2, "int", h, "uint", 0x0004 | 0x0010)
+            RS_SetPos(hwnd, x + shrink, y, w - shrink*2, h, RS_PRI_ANIM)
         }
         
-        try WinSetTransparent(alpha, hwnd)
-        Sleep 16
+        RS_SetAlpha(hwnd, alpha, RS_PRI_ANIM)
+        return true
     }
-    try WinClose("ahk_id " hwnd)
+    RegisterAnimation(animKey, SeamStep)
 }
 
 ; Cheaper than WinMove per frame, and leaves z-order and focus alone mid-slide.
+; Now delegates to the render pipeline for batched application.
 MoveFast(hwnd, x, y) {
-    DllCall("SetWindowPos", "ptr", hwnd, "ptr", 0, "int", x, "int", y,
-            "int", 0, "int", 0, "uint", 0x0001 | 0x0004 | 0x0010)
+    RS_SetPos(hwnd, x, y, -1, -1, RS_PRI_ANIM)
 }
 
 Clamp(v, lo, hi) => (v < lo) ? lo : (v > hi) ? hi : v
@@ -2224,17 +2280,53 @@ ShellEvent(wParam, lParam, *) {
         }
     }
     
+    if ((wParam & 0x7FFF) = 2) { ; HSHELL_WINDOWDESTROYED
+        if (lParam) {
+            global CustomTrans, RolledUpWindows, WinTargetAlpha, WinCurrentAlpha, WinLastActive
+            if CustomTrans.Has(lParam)
+                CustomTrans.Delete(lParam)
+            if RolledUpWindows.Has(lParam)
+                RolledUpWindows.Delete(lParam)
+            if WinTargetAlpha.Has(lParam)
+                WinTargetAlpha.Delete(lParam)
+            if WinCurrentAlpha.Has(lParam)
+                WinCurrentAlpha.Delete(lParam)
+            if WinLastActive.Has(lParam)
+                WinLastActive.Delete(lParam)
+            RS_RemoveHwnd(lParam)
+        }
+    }
+
     if ((wParam & 0x7FFF) = 4) { ; HSHELL_WINDOWACTIVATED
-        if (lParam)
-            SetTimer(PulseWindow.Bind(lParam), -10)
+        if (lParam) {
+            if !BottomWindows.Has(lParam) {
+                PulseWindow(lParam)
+            }
+            
+            global BreathingEnabled, WinLastActive, WinCurrentAlpha, WinTargetAlpha, CustomTrans
+            if (BreathingEnabled && IsRestorable(lParam) && !WinLastActive.Has(lParam)) {
+                baseAlpha := CustomTrans.Has(lParam) ? CustomTrans[lParam] : 255
+                WinLastActive[lParam] := QPC()
+                WinCurrentAlpha[lParam] := baseAlpha
+                WinTargetAlpha[lParam] := baseAlpha
+            }
+        }
     }
 
     if ((wParam & 0x7FFF) = HSHELL_WINDOWCREATED) {
-        global OpenAnim, GhostHiddenWindows
+        global OpenAnim, GhostHiddenWindows, BreathingEnabled, WinLastActive, WinCurrentAlpha, WinTargetAlpha, CustomTrans
         hwnd := lParam
+        if (BreathingEnabled && IsRestorable(hwnd)) {
+            baseAlpha := CustomTrans.Has(hwnd) ? CustomTrans[hwnd] : 255
+            WinLastActive[hwnd] := QPC()
+            WinCurrentAlpha[hwnd] := baseAlpha
+            WinTargetAlpha[hwnd] := baseAlpha
+        }
+        
         if (OpenAnim != "None" && !DllCall("GetWindow", "ptr", hwnd, "uint", 4, "ptr")) {
             try {
-                WinSetTransparent(0, hwnd)
+                RS_SetAlpha(hwnd, 0, RS_PRI_ANIM)
+                RS_Flush()
                 GhostHiddenWindows[hwnd] := true
             }
         }
@@ -2266,6 +2358,32 @@ RestorePosition(hwnd) {
     if (rw <= 0 || rh <= 0)          ; a zero-size WinMove would collapse the window
         return
 
+    try {
+        exe := WinGetProcessName(hwnd)
+        cls := WinGetClass(hwnd)
+        
+        loop 20 {
+            conflict := false
+            for other in WinGetList("ahk_class " cls " ahk_exe " exe) {
+                if (other = hwnd)
+                    continue
+                if !DllCall("IsWindowVisible", "ptr", other)
+                    continue
+                try {
+                    WinGetPos(&ox, &oy, &ow, &oh, other)
+                    if (Abs(ox - rx) < 5 && Abs(oy - ry) < 5) {
+                        conflict := true
+                        rx += 30
+                        ry += 30
+                        break
+                    }
+                }
+            }
+            if (!conflict)
+                break
+        }
+    } catch {
+    }
 
     ; Ensure it restores on-screen
     intersecting := false
@@ -2287,7 +2405,8 @@ RestorePosition(hwnd) {
     }
     
     try {
-        WinMove(rx, ry, rw, rh, hwnd)
+        RS_SetPos(hwnd, rx, ry, rw, rh, RS_PRI_USER)
+        RS_Flush()
         WriteLog("restored " key " -> " rx "," ry " " rw "x" rh)
     }
 }
@@ -2311,42 +2430,50 @@ HandleNewWindow(hwnd) {
         else if (OpenAnim == "Window Unrolling")
             UnrollWindow(hwnd)
     } else if (isHidden) {
-        try WinSetTransparent("Off", hwnd)
+        try RS_SetAlpha(hwnd, "Off", RS_PRI_ANIM)
     }
 }
 
 UnrollWindow(hwnd) {
     WinGetPos(&x, &y, &w, &h, hwnd)
     if (w = 0 || h = 0) {
-        try WinSetTransparent("Off", hwnd)
+        try RS_SetAlpha(hwnd, "Off", RS_PRI_ANIM)
         return
     }
     
-    try WinSetTransparent("Off", hwnd)
+    try RS_SetAlpha(hwnd, "Off", RS_PRI_ANIM)
     
-    steps := 12
-    Loop steps {
+    animKey := "Unroll_" hwnd
+    CancelAnimation(animKey)
+    start := QPC()
+    ms := 12 * 16
+    
+    UnrollStep(dt, now) {
         if !DllCall("IsWindow", "ptr", hwnd)
-            return
+            return false
             
-        t := A_Index / steps
-        ease := 1 - (1 - t) * (1 - t)
+        t := (now - start) / ms
+        if (t >= 1) {
+            try RS_SetRegion(hwnd, "", RS_PRI_ANIM)
+            return false
+        }
         
+        ease := 1 - (1 - t) * (1 - t)
         curH := Round(h * ease)
         if (curH < 1)
             curH := 1
             
-        try WinSetRegion("0-0 W" w " H" curH, hwnd)
-        Sleep 16
+        try RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
+        return true
     }
     
-    try WinSetRegion("", hwnd)
+    RegisterAnimation(animKey, UnrollStep)
 }
 
 GhostSlideIn(hwnd) {
     WinGetPos(&x, &y, &w, &h, hwnd)
     if (w = 0 || h = 0) {
-        try WinSetTransparent("Off", hwnd)
+        try RS_SetAlpha(hwnd, "Off", RS_PRI_ANIM)
         return
     }
     
@@ -2355,25 +2482,32 @@ GhostSlideIn(hwnd) {
     
     MoveFast(hwnd, x, startY)
     
-    steps := 15
-    Loop steps {
+    animKey := "GhostSlideIn_" hwnd
+    CancelAnimation(animKey)
+    start := QPC()
+    ms := 15 * 16
+    
+    GhostSlideStep(dt, now) {
         if !DllCall("IsWindow", "ptr", hwnd)
-            return
+            return false
             
-        t := A_Index / steps
-        ease := 1 - (1 - t) * (1 - t) ; ease-out
+        t := (now - start) / ms
+        if (t >= 1) {
+            MoveFast(hwnd, x, endY)
+            try RS_SetAlpha(hwnd, "Off", RS_PRI_ANIM)
+            return false
+        }
         
+        ease := 1 - (1 - t) * (1 - t) ; ease-out
         curY := Round(startY + (endY - startY) * ease)
         MoveFast(hwnd, x, curY)
         
         alpha := Round(255 * ease)
-        try WinSetTransparent(alpha, hwnd)
-        
-        Sleep 16
+        try RS_SetAlpha(hwnd, alpha, RS_PRI_ANIM)
+        return true
     }
     
-    try WinSetTransparent("Off", hwnd)
-    MoveFast(hwnd, x, endY)
+    RegisterAnimation(animKey, GhostSlideStep)
 }
 
 global PulsingWindows := Map()
@@ -2391,53 +2525,75 @@ PulseWindow(hwnd) {
         
     PulsingWindows[hwnd] := true
 
-    ; finally, not a plain trailing Delete: the Sleeps let other threads run, so
-    ; a window closing mid-pulse would throw out of WinGetPos and strand the
-    ; entry - after which that hwnd could never pulse again.
     try {
         WinGetPos(&x, &y, &w, &h, hwnd)
-
-        pw := Min(Round(w * 0.015), 12)
-        ph := Min(Round(h * 0.015), 12)
-
-        MoveAndSize(hwnd, x - Round(pw/2), y - Round(ph/2), w + pw, h + ph)
-        Sleep 16
-        MoveAndSize(hwnd, x - pw, y - ph, w + pw*2, h + ph*2)
-        Sleep 16
-        MoveAndSize(hwnd, x - Round(pw/2), y - Round(ph/2), w + pw, h + ph)
-        Sleep 16
-        MoveAndSize(hwnd, x, y, w, h)
-    } finally {
+    } catch {
         PulsingWindows.Delete(hwnd)
+        return
     }
+
+    pw := Min(Round(w * 0.015), 12)
+    ph := Min(Round(h * 0.015), 12)
+    
+    animKey := "Pulse_" hwnd
+    start := QPC()
+    
+    PulseStep(dt, now) {
+        if !DllCall("IsWindow", "ptr", hwnd) {
+            PulsingWindows.Delete(hwnd)
+            return false
+        }
+            
+        elapsed := now - start
+        if (elapsed > 48) {
+            RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
+            PulsingWindows.Delete(hwnd)
+            return false
+        } else if (elapsed > 32) {
+            RS_SetPos(hwnd, x - Round(pw/2), y - Round(ph/2), w + pw, h + ph, RS_PRI_ANIM)
+        } else if (elapsed > 16) {
+            RS_SetPos(hwnd, x - pw, y - ph, w + pw*2, h + ph*2, RS_PRI_ANIM)
+        } else {
+            RS_SetPos(hwnd, x - Round(pw/2), y - Round(ph/2), w + pw, h + ph, RS_PRI_ANIM)
+        }
+        return true
+    }
+    
+    RegisterAnimation(animKey, PulseStep)
 }
 
 ; ====== Multi-Monitor Focus Dimmer ======
 SyncDimmerTimer() {
     global MultiMonitorDimmerEnabled, DimmerGuis
     if (MultiMonitorDimmerEnabled) {
-        SetTimer(MonitorDimmerTick, 200)
+        RegisterAnimation("MonitorDimmerTick", MonitorDimmerTickStep)
     } else {
-        SetTimer(MonitorDimmerTick, 0)
+        CancelAnimation("MonitorDimmerTick")
         for k, g in DimmerGuis {
-            SetTimer(FadeOutAndDestroyDimmer.Bind(g), -1)
+            FadeOutAndDestroyDimmer(g)
         }
         DimmerGuis.Clear()
     }
 }
 SyncDimmerTimer()
 
-MonitorDimmerTick() {
+MonitorDimmerTickStep(dt, now) {
     global MultiMonitorDimmerEnabled, DimmerGuis
+    static lastCheck := 0
+    
     if (!MultiMonitorDimmerEnabled)
-        return
+        return false
+        
+    if (now - lastCheck < 200)
+        return true
+    lastCheck := now
         
     try count := MonitorGetCount()
     catch
-        return
+        return true
         
     if (count < 2)
-        return
+        return true
         
     try {
         MouseGetPos(&mx, &my)
@@ -2455,49 +2611,74 @@ MonitorDimmerTick() {
                 if DimmerGuis.Has(A_Index) {
                     g := DimmerGuis[A_Index]
                     DimmerGuis.Delete(A_Index)
-                    SetTimer(FadeOutAndDestroyDimmer.Bind(g), -1)
+                    FadeOutAndDestroyDimmer(g)
                 }
             } else {
                 if !DimmerGuis.Has(A_Index) {
                     MonitorGet(A_Index, &L, &T, &R, &B)
                     g := Gui("-Caption +ToolWindow +AlwaysOnTop -DPIScale +E0x20 +E0x8000000")
                     g.BackColor := "000000"
-                    WinSetTransparent(0, g.Hwnd)
+                    RS_SetAlpha(g.Hwnd, 0, RS_PRI_ANIM)
+                    RS_Flush()
                     g.Show("NoActivate x" L " y" T " w" (R-L) " h" (B-T))
                     DimmerGuis[A_Index] := g
-                    SetTimer(FadeInDimmer.Bind(g), -1)
+                    FadeInDimmer(g)
                 }
             }
         }
     }
+    return true
 }
 
 FadeInDimmer(g) {
     try {
         hwnd := g.Hwnd
-        alpha := 0
-        Loop 15 {
+        animKey := "Dimmer_" hwnd
+        CancelAnimation(animKey)
+        start := QPC()
+        ms := 150
+        
+        DimmerInStep(dt, now) {
             if !DllCall("IsWindow", "ptr", hwnd)
-                return
-            alpha += 8
-            try WinSetTransparent(alpha, hwnd)
-            Sleep 10
+                return false
+                
+            t := (now - start) / ms
+            if (t >= 1) {
+                try RS_SetAlpha(hwnd, 120, RS_PRI_ANIM)
+                return false
+            }
+            
+            alpha := Round(120 * t)
+            try RS_SetAlpha(hwnd, alpha, RS_PRI_ANIM)
+            return true
         }
+        RegisterAnimation(animKey, DimmerInStep)
     }
 }
 
 FadeOutAndDestroyDimmer(g) {
     try {
         hwnd := g.Hwnd
-        alpha := 120
-        Loop 15 {
+        animKey := "Dimmer_" hwnd
+        CancelAnimation(animKey)
+        start := QPC()
+        ms := 150
+        
+        DimmerOutStep(dt, now) {
             if !DllCall("IsWindow", "ptr", hwnd)
-                return
-            alpha -= 8
-            try WinSetTransparent(alpha, hwnd)
-            Sleep 10
+                return false
+                
+            t := (now - start) / ms
+            if (t >= 1) {
+                try g.Destroy()
+                return false
+            }
+            
+            alpha := Round(120 * (1 - t))
+            try RS_SetAlpha(hwnd, alpha, RS_PRI_ANIM)
+            return true
         }
-        try g.Destroy()
+        RegisterAnimation(animKey, DimmerOutStep)
     }
 }
 
@@ -2556,65 +2737,89 @@ ToggleQuickLook() {
         return false
     }
     
-    WinSetTransparent(0, QuickLookGui.Hwnd)
+    RS_SetAlpha(QuickLookGui.Hwnd, 0, RS_PRI_ANIM)
+    RS_Flush()
     QuickLookGui.Show("NoActivate AutoSize Center")
     QuickLookFade(QuickLookGui.Hwnd, 0, 255)
-    SetTimer(CheckQuickLookFocus, 200)
+    RegisterAnimation("CheckQuickLookFocus", CheckQuickLookFocusStep)
     return true
 }
 
-QuickLookFade(hwnd, startA, endA) {
+QuickLookFade(guiObjOrHwnd, startA, endA) {
+    hwnd := IsObject(guiObjOrHwnd) ? guiObjOrHwnd.Hwnd : guiObjOrHwnd
     if !DllCall("IsWindow", "ptr", hwnd)
         return
-    step := (endA > startA) ? 25 : -25
-    alpha := startA
-    Loop {
-        alpha += step
-        if (step > 0 && alpha >= endA) || (step < 0 && alpha <= endA) {
-            try WinSetTransparent(endA, hwnd)
-            break
+    animKey := "QLFade_" hwnd
+    CancelAnimation(animKey)
+    start := QPC()
+    ms := 100
+    
+    QLStep(dt, now) {
+        if !DllCall("IsWindow", "ptr", hwnd)
+            return false
+        
+        t := (now - start) / ms
+        if (t >= 1) {
+            try RS_SetAlpha(hwnd, endA, RS_PRI_ANIM)
+            if (endA == 0 && IsObject(guiObjOrHwnd))
+                try guiObjOrHwnd.Destroy()
+            return false
         }
-        try WinSetTransparent(alpha, hwnd)
-        Sleep 10
+        
+        alpha := Round(startA + (endA - startA) * t)
+        try RS_SetAlpha(hwnd, alpha, RS_PRI_ANIM)
+        return true
     }
+    RegisterAnimation(animKey, QLStep)
 }
 
 CloseQuickLook() {
     global QuickLookGui
     if (QuickLookGui) {
-        SetTimer(CheckQuickLookFocus, 0)
+        CancelAnimation("CheckQuickLookFocus")
         guiObj := QuickLookGui
         QuickLookGui := "" 
-        QuickLookFade(guiObj.Hwnd, 255, 0)
-        try guiObj.Destroy()
+        QuickLookFade(guiObj, 255, 0)
     }
 }
 
-CheckQuickLookFocus() {
+CheckQuickLookFocusStep(dt, now) {
     global QuickLookGui
+    static lastCheck := 0
     if !QuickLookGui
-        return
+        return false
+        
+    if (now - lastCheck < 200)
+        return true
+    lastCheck := now
+    
     ahwnd := WinExist("A")
     if (ahwnd != QuickLookGui.Hwnd && WinGetClass(ahwnd) != "CabinetWClass")
         CloseQuickLook()
+    return true
 }
 
 ; ====== Smart Auto-Hide Taskbar ======
 SyncSmartTaskbar() {
     global SmartTaskbarEnabled
     if (SmartTaskbarEnabled)
-        SetTimer(SmartTaskbarMonitor, 200)
+        RegisterAnimation("SmartTaskbarMonitor", SmartTaskbarMonitorStep)
     else
-        SetTimer(SmartTaskbarMonitor, 0)
+        CancelAnimation("SmartTaskbarMonitor")
 }
 SyncSmartTaskbar()
 
-SmartTaskbarMonitor() {
+SmartTaskbarMonitorStep(dt, now) {
     global SmartTaskbarEnabled
     static LastState := -1
+    static lastCheck := 0
     
     if !SmartTaskbarEnabled
-        return
+        return false
+        
+    if (now - lastCheck < 200)
+        return true
+    lastCheck := now
         
     try {
         tbHwnd := WinExist("ahk_class Shell_TrayWnd")
@@ -2663,6 +2868,7 @@ SmartTaskbarMonitor() {
             LastState := shouldHide
         }
     }
+    return true
 }
 
 GetTaskbarState() {
@@ -2697,25 +2903,25 @@ SetTaskbarAutoHide(hide) {
 SyncHotCornersTimer() {
     global HotCornersEnabled
     if (HotCornersEnabled)
-        SetTimer(HotCornersMonitor, 100)
+        RegisterAnimation("HotCornersMonitor", HotCornersMonitorStep)
     else
-        SetTimer(HotCornersMonitor, 0)
+        CancelAnimation("HotCornersMonitor")
 }
 SyncHotCornersTimer()
 
 SyncCursorWrapTimer() {
     global InfiniteWrapEnabled
     if (InfiniteWrapEnabled)
-        SetTimer(CursorWrapMonitor, 15)
+        RegisterAnimation("CursorWrapMonitor", CursorWrapMonitorStep)
     else
-        SetTimer(CursorWrapMonitor, 0)
+        CancelAnimation("CursorWrapMonitor")
 }
 SyncCursorWrapTimer()
 
-CursorWrapMonitor() {
+CursorWrapMonitorStep(dt, now) {
     global InfiniteWrapEnabled
     if (!InfiniteWrapEnabled)
-        return
+        return false
         
     CoordMode("Mouse", "Screen")
     MouseGetPos(&mx, &my)
@@ -2772,14 +2978,20 @@ CursorWrapMonitor() {
         }
         MouseMove(mx, my, 0)
     }
+    return true
 }
 
-HotCornersMonitor() {
+HotCornersMonitorStep(dt, now) {
     global HotCornersEnabled, HotCornerTL, HotCornerTR, HotCornerBL, HotCornerBR
     static LastCorner := "None"
+    static lastCheck := 0
     
     if (!HotCornersEnabled)
-        return
+        return false
+        
+    if (now - lastCheck < 100)
+        return true
+    lastCheck := now
         
     try {
         MouseGetPos(&mx, &my)
@@ -2826,6 +3038,7 @@ HotCornersMonitor() {
             LastCorner := currentCorner
         }
     }
+    return true
 }
 
 ExecuteHotCornerAction(action) {
@@ -2862,7 +3075,7 @@ ToggleMuteOSD() {
 }
 
 ShowVolumeOSD(vol, isMuted) {
-    global OsdGui, OsdTimer
+    global OsdGui
     
     if (OsdGui) {
         UpdateOSD(vol, isMuted)
@@ -2870,7 +3083,8 @@ ShowVolumeOSD(vol, isMuted) {
         try {
             OsdGui := Gui("-Caption +ToolWindow +AlwaysOnTop +LastFound -DPIScale +E0x20")
             OsdGui.BackColor := "181818"
-            WinSetTransparent(0, OsdGui.Hwnd)
+            RS_SetAlpha(OsdGui.Hwnd, 0, RS_PRI_ANIM)
+            RS_Flush()
             
             OsdGui.SetFont("s24 cWhite", "Segoe UI Emoji")
             OsdGui.AddText("vIcon x20 y12 w40 h40 BackgroundTrans Center", GetSpeakerIcon(vol, isMuted))
@@ -2880,21 +3094,30 @@ ShowVolumeOSD(vol, isMuted) {
             OsdGui.AddText("vBar x70 y29 w" w " h6 BackgroundFFFFFF")
             
             OsdGui.Show("NoActivate w240 h64")
-            WinSetRegion("w240 h64 r20-20", OsdGui.Hwnd)
+            RS_SetRegion(OsdGui.Hwnd, "0-0 w240 h64 r20-20", RS_PRI_ANIM)
             
             MonitorGet(1, &L, &T, &R, &B)
             x := L + (R - L - 240) // 2
             y := B - 150
             OsdGui.Move(x, y)
             
-            SetTimer(() => OsdFadeIn(OsdGui.Hwnd), -1)
+            OsdFadeIn(OsdGui.Hwnd)
         }
     }
     
-    if (OsdTimer)
-        SetTimer(OsdTimer, 0)
-    OsdTimer := () => HideVolumeOSD()
-    SetTimer(OsdTimer, -1500)
+    RegisterAnimation("OsdTimer", OsdTimerStep)
+}
+
+OsdTimerStep(dt, now) {
+    static start := 0
+    if (start == 0)
+        start := now
+    if (now - start > 1500) {
+        HideVolumeOSD()
+        start := 0
+        return false
+    }
+    return true
 }
 
 UpdateOSD(vol, isMuted) {
@@ -2902,7 +3125,7 @@ UpdateOSD(vol, isMuted) {
     try {
         OsdGui["Icon"].Text := GetSpeakerIcon(vol, isMuted)
         w := Max(1, Round(150 * (vol / 100)))
-        OsdGui["Bar"].Move(,,, w)
+        OsdGui["Bar"].Move(,, w)
         if (isMuted)
             OsdGui["Bar"].Opt("+Background555555")
         else
@@ -2925,35 +3148,57 @@ GetSpeakerIcon(vol, isMuted) {
 }
 
 OsdFadeIn(hwnd) {
-    alpha := 0
-    Loop 10 {
+    animKey := "OSDIn_" hwnd
+    CancelAnimation(animKey)
+    start := QPC()
+    ms := 100
+    
+    OSDInStep(dt, now) {
         if !DllCall("IsWindow", "ptr", hwnd)
-            return
-        alpha += 22
-        try WinSetTransparent(alpha, hwnd)
-        Sleep 10
+            return false
+        
+        t := (now - start) / ms
+        if (t >= 1) {
+            try RS_SetAlpha(hwnd, 220, RS_PRI_ANIM)
+            return false
+        }
+        
+        alpha := Round(220 * t)
+        try RS_SetAlpha(hwnd, alpha, RS_PRI_ANIM)
+        return true
     }
-    try WinSetTransparent(220, hwnd)
+    RegisterAnimation(animKey, OSDInStep)
 }
 
 HideVolumeOSD() {
-    global OsdGui, OsdTimer
-    OsdTimer := ""
+    global OsdGui
+    CancelAnimation("OsdTimer")
     if (!OsdGui)
         return
         
     hwnd := OsdGui.Hwnd
     OsdGui := ""
     
-    alpha := 220
-    Loop 10 {
+    animKey := "OSDOut_" hwnd
+    CancelAnimation(animKey)
+    start := QPC()
+    ms := 100
+    
+    OSDOutStep(dt, now) {
         if !DllCall("IsWindow", "ptr", hwnd)
-            return
-        alpha -= 22
-        try WinSetTransparent(alpha, hwnd)
-        Sleep 10
+            return false
+        
+        t := (now - start) / ms
+        if (t >= 1) {
+            try WinClose(hwnd)
+            return false
+        }
+        
+        alpha := Round(220 * (1 - t))
+        try RS_SetAlpha(hwnd, alpha, RS_PRI_ANIM)
+        return true
     }
-    try WinClose(hwnd)
+    RegisterAnimation(animKey, OSDOutStep)
 }
 
 ; ====== Live Window PiP ======
@@ -3032,7 +3277,7 @@ TogglePiP() {
     PipGui.OnEvent("Size", PipGuiResize)
     PipGui.OnEvent("ContextMenu", PipGuiContextMenu)
     PipGuiResize(PipGui, 0, pw, ph)
-    SetTimer(PiPMonitor, 1000)
+    RegisterAnimation("PiPMonitor", PiPMonitorStep)
 }
 
 PipGuiResize(guiObj, minMax, width, height) {
@@ -3056,11 +3301,10 @@ PipGuiContextMenu(guiObj, *) {
     PipGuis.Delete(guiObj.SourceHwnd)
 }
 
-PiPMonitor() {
+PiPMonitorStep(dt, now) {
     global PipGuis
     if !IsSet(PipGuis) || PipGuis.Count == 0 {
-        SetTimer(PiPMonitor, 0)
-        return
+        return false
     }
         
     for srcHwnd, pipGui in PipGuis.Clone() {
@@ -3070,6 +3314,7 @@ PiPMonitor() {
             PipGuis.Delete(srcHwnd)
         }
     }
+    return true
 }
 
 ; ====== Global Mic Kill-Switch ======
@@ -3103,7 +3348,7 @@ ToggleDefaultMic() {
 }
 
 ShowMicOSD(isMuted) {
-    global MicOsdGui, MicOsdTimer
+    global MicOsdGui
     
     if (MicOsdGui) {
         UpdateMicOSD(isMuted)
@@ -3119,27 +3364,37 @@ ShowMicOSD(isMuted) {
                 txt := "🎙️ Mic Active"
             }
             
-            WinSetTransparent(0, MicOsdGui.Hwnd)
+            RS_SetAlpha(MicOsdGui.Hwnd, 0, RS_PRI_ANIM)
+            RS_Flush()
             
             MicOsdGui.SetFont("s20 cWhite bold", "Segoe UI")
             MicOsdGui.AddText("vText x0 y15 w240 h40 BackgroundTrans Center", txt)
             
             MicOsdGui.Show("NoActivate w240 h70")
-            WinSetRegion("w240 h70 r20-20", MicOsdGui.Hwnd)
+            RS_SetRegion(MicOsdGui.Hwnd, "0-0 w240 h70 r20-20", RS_PRI_ANIM)
             
             MonitorGet(1, &L, &T, &R, &B)
             x := L + (R - L - 240) // 2
             y := T + 100 
             MicOsdGui.Move(x, y)
             
-            SetTimer(() => OsdFadeIn(MicOsdGui.Hwnd), -1)
+            OsdFadeIn(MicOsdGui.Hwnd)
         }
     }
     
-    if (MicOsdTimer)
-        SetTimer(MicOsdTimer, 0)
-    MicOsdTimer := () => HideMicOSD()
-    SetTimer(MicOsdTimer, -2000)
+    RegisterAnimation("MicOsdTimer", MicOsdTimerStep)
+}
+
+MicOsdTimerStep(dt, now) {
+    static start := 0
+    if (start == 0)
+        start := now
+    if (now - start > 2000) {
+        HideMicOSD()
+        start := 0
+        return false
+    }
+    return true
 }
 
 UpdateMicOSD(isMuted) {
@@ -3159,23 +3414,34 @@ UpdateMicOSD(isMuted) {
 }
 
 HideMicOSD() {
-    global MicOsdGui, MicOsdTimer
-    MicOsdTimer := ""
+    global MicOsdGui
+    CancelAnimation("MicOsdTimer")
     if (!MicOsdGui)
         return
         
     hwnd := MicOsdGui.Hwnd
     MicOsdGui := ""
     
-    alpha := 220
-    Loop 10 {
+    animKey := "OSDOut_" hwnd
+    CancelAnimation(animKey)
+    start := QPC()
+    ms := 100
+    
+    MicOutStep(dt, now) {
         if !DllCall("IsWindow", "ptr", hwnd)
-            return
-        alpha -= 22
-        try WinSetTransparent(alpha, hwnd)
-        Sleep 10
+            return false
+        
+        t := (now - start) / ms
+        if (t >= 1) {
+            try WinClose(hwnd)
+            return false
+        }
+        
+        alpha := Round(220 * (1 - t))
+        try RS_SetAlpha(hwnd, alpha, RS_PRI_ANIM)
+        return true
     }
-    try WinClose(hwnd)
+    RegisterAnimation(animKey, MicOutStep)
 }
 
 ; ====== Quick Spotlight Launcher ======
@@ -3199,15 +3465,16 @@ ToggleSpotlight() {
     
     SpotlightInput.OnEvent("Change", SpotlightOnChange)
     
-    MonitorGetPrimary(&activeMon)
+    activeMon := MonitorGetPrimary()
     MonitorGet(activeMon, &L, &T, &R, &B)
     w := 640, h := 140
     x := L + (R - L - w) // 2
     y := T + (B - T - h) // 3 
     
     SpotlightGui.Show("x" x " y" y " w" w " h" h)
-    WinSetRegion("w640 h140 r20-20", SpotlightGui.Hwnd)
-    WinSetTransparent(240, SpotlightGui.Hwnd)
+    RS_SetRegion(SpotlightGui.Hwnd, "0-0 w640 h140 r20-20", RS_PRI_ANIM)
+    RS_SetAlpha(SpotlightGui.Hwnd, 240, RS_PRI_ANIM)
+    RS_Flush()
 }
 
 SpotlightOnChange(ctrl, *) {
@@ -3274,35 +3541,35 @@ GetAccentColor() {
 SyncActiveBorderTimer() {
     global ActiveBorderEnabled
     if (ActiveBorderEnabled)
-        SetTimer(ActiveBorderMonitor, 15)
+        RegisterAnimation("ActiveBorderMonitor", ActiveBorderMonitorStep)
     else {
-        SetTimer(ActiveBorderMonitor, 0)
+        CancelAnimation("ActiveBorderMonitor")
         HideActiveBorder()
     }
 }
 SyncActiveBorderTimer()
 
-ActiveBorderMonitor() {
+ActiveBorderMonitorStep(dt, now) {
     global ActiveBorderEnabled, LastBorderHwnd, LastBorderX, LastBorderY, LastBorderW, LastBorderH
     if (!ActiveBorderEnabled)
-        return
+        return false
         
     hwnd := WinExist("A")
     if (!hwnd) {
         HideActiveBorder()
-        return
+        return true
     }
     
     cls := WinGetClass(hwnd)
     if (cls = "WorkerW" || cls = "Progman" || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd" || cls = "AutoHotkeyGUI") {
         HideActiveBorder()
-        return
+        return true
     }
     
     style := WinGetStyle(hwnd)
     if (!(style & 0x10000000) || (style & 0x01000000) || (style & 0x20000000)) { ; Not visible OR Maximized OR Minimized
         HideActiveBorder()
-        return
+        return true
     }
     
     rect := Buffer(16, 0)
@@ -3318,22 +3585,23 @@ ActiveBorderMonitor() {
         try WinGetPos(&X, &Y, &W, &H, hwnd)
         catch {
             HideActiveBorder()
-            return
+            return true
         }
     }
     
     if (W < 50 || H < 50) {
         HideActiveBorder()
-        return
+        return true
     }
     
     if (hwnd == LastBorderHwnd && X == LastBorderX && Y == LastBorderY && W == LastBorderW && H == LastBorderH)
-        return
+        return true
         
     LastBorderHwnd := hwnd
     LastBorderX := X, LastBorderY := Y, LastBorderW := W, LastBorderH := H
     
     DrawActiveBorder(X, Y, W, H)
+    return true
 }
 
 DrawActiveBorder(X, Y, W, H) {
@@ -3353,7 +3621,8 @@ DrawActiveBorder(X, Y, W, H) {
         rect3 := "0-" t " w" t " h" (H-2*t)
         rect4 := (W-t) "-" t " w" t " h" (H-2*t)
         
-        WinSetRegion(rect1 "  " rect2 "  " rect3 "  " rect4, ActiveBorderGui.Hwnd)
+        RS_SetRegion(ActiveBorderGui.Hwnd, rect1 "  " rect2 "  " rect3 "  " rect4, RS_PRI_ANIM)
+        RS_Flush()
     }
 }
 
@@ -3397,10 +3666,12 @@ ToggleAlwaysOnBottom() {
         DllCall("SetParent", "ptr", hwnd, "ptr", oldParent)
         BottomWindows.Delete(hwnd)
         
-        if IsSet(X)
-            try WinMove(X, Y, W, H, hwnd)
+        if IsSet(X) {
+            try RS_SetPos(hwnd, X, Y, W, H, RS_PRI_USER)
+        }
             
-        WinSetTop(hwnd)
+        try RS_SetZOrder(hwnd, 0, 0x0013, RS_PRI_USER)
+        RS_Flush()
     } else {
         oldParent := DllCall("GetParent", "ptr", hwnd)
         if !oldParent
@@ -3421,7 +3692,8 @@ ToggleAlwaysOnBottom() {
             nX := NumGet(pt, 0, "Int")
             nY := NumGet(pt, 4, "Int")
             
-            DllCall("SetWindowPos", "ptr", hwnd, "ptr", 0, "int", nX, "int", nY, "int", W, "int", H, "uint", 0x0014) 
+            RS_SetPos(hwnd, nX, nY, W, H, RS_PRI_USER)
+            RS_Flush()
         }
     }
 }
@@ -3481,7 +3753,7 @@ ToggleGhostMode() {
         GhostWindows.Delete(hwnd)
         
         try {
-            WinSetTransparent("Off", hwnd)
+            RS_SetAlpha(hwnd, "Off", RS_PRI_AMBIENT)
             if !(orig.exStyle & 0x20)
                 WinSetExStyle("-0x20", hwnd)
             if !(orig.exStyle & 0x8)
@@ -3489,18 +3761,23 @@ ToggleGhostMode() {
         }
             
         if (GhostWindows.Count == 0)
-            SetTimer(GhostMonitor, 0)
+            CancelAnimation("GhostMonitor")
     } else {
         exStyle := WinGetExStyle(hwnd)
         GhostWindows[hwnd] := {exStyle: exStyle}
         
         WinSetAlwaysOnTop(1, hwnd)
-        SetTimer(GhostMonitor, 25) 
+        RegisterAnimation("GhostMonitor", GhostMonitorStep)
     }
 }
 
-GhostMonitor() {
+GhostMonitorStep(dt, now) {
     global GhostWindows
+    static lastCheck := 0
+    if (now - lastCheck < 25)
+        return true
+    lastCheck := now
+    
     CoordMode("Mouse", "Screen")
     MouseGetPos(&mx, &my)
     
@@ -3528,7 +3805,7 @@ GhostMonitor() {
             }
             
             if (!info.HasProp("lastAlpha") || info.lastAlpha != targetAlpha) {
-                WinSetTransparent(targetAlpha, hwnd)
+                RS_SetAlpha(hwnd, targetAlpha, RS_PRI_AMBIENT)
                 info.lastAlpha := targetAlpha
             }
             
@@ -3602,16 +3879,14 @@ Bye(*) {
     ; one keeps its alpha.
     for hwnd in RolledUpWindows {
         if DllCall("IsWindow", "ptr", hwnd)
-            try WinSetRegion(, hwnd)
+            try RS_SetRegion(hwnd, "", RS_PRI_USER)
     }
     for hwnd, alpha in CustomTrans {
         if DllCall("IsWindow", "ptr", hwnd)
-            try WinSetTransparent("Off", hwnd)
+            try RS_SetAlpha(hwnd, "Off", RS_PRI_USER)
     }
-
-    SetTimer(BreathingMonitor, 0)
-    SetTimer(BreathingAnimator, 0)
-    SetTimer(PruneWindowMaps, 0)
+    RS_Flush()
+    RS_Shutdown()
 
     ; Unhook before the callback goes away - the OS must not be left holding a
     ; pointer into a freed thunk.
@@ -3623,4 +3898,22 @@ Bye(*) {
 
     SaveSettings()
     Return 0
+}
+
+
+; Added for smoother animations
+PreciseSleep(ms) {
+    target := QPC() + ms
+    while (QPC() < target - 2)
+        DllCall("Sleep", "UInt", 1)
+    while (QPC() < target)
+        continue
+}
+
+QPC() {
+    static freq := 0
+    if !freq
+        DllCall("QueryPerformanceFrequency", "Int64*", &freq)
+    DllCall("QueryPerformanceCounter", "Int64*", &count:=0)
+    return count * 1000 / freq
 }

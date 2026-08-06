@@ -144,7 +144,7 @@ New-Item -ItemType Directory -Path $dest -Force | Out-Null
 # The program is installed flat: WindowTweaks.ahk includes SnapCore.ahk
 # from its own folder, and its Guide button opens GUIDE.md from there too.
 $copied = 0
-foreach ($f in 'WindowTweaks.ahk', 'SnapCore.ahk') {
+foreach ($f in 'WindowTweaks.ahk', 'SnapCore.ahk', 'AnimationScheduler.ahk', 'RenderCore.ahk') {
     $p = Join-Path $repo "src\$f"
     if (-not (Test-Path $p)) { Say "MISSING: src\$f" 'Red'; return }
     Copy-Item $p (Join-Path $dest $f) -Force

@@ -223,7 +223,7 @@ public class WtSpi {
         # Explorer marquee. It must stay enabled.
         Set-Tuning $PATH_ADVANCED 'ListviewAlphaSelect' 1 'DWord'
         Set-Tuning $PATH_ADVANCED 'ListviewShadow'      1 'DWord'
-        Set-Tuning $PATH_PERSONAL 'EnableTransparency'  1 'DWord'
+        Set-Tuning $PATH_PERSONAL 'EnableTransparency'  0 'DWord'
         Set-Tuning $PATH_DWM      'EnableAeroPeek'      1 'DWord'
         Say "Translucent selection rectangle, icon label shadows, transparency, Aero Peek"
 
