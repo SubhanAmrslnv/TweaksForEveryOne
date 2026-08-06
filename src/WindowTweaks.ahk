@@ -973,9 +973,26 @@ ForgetPositions() {
 #^p::TogglePiP()
 #HotIf
 
+; Helper function for modifier key double presses (ignores auto-repeat)
+IsDoublePress(Timeout := 400) {
+    static lastTriggers := Map()
+    
+    if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < Timeout) {
+        last := lastTriggers.Has(A_ThisHotkey) ? lastTriggers[A_ThisHotkey] : 0
+        if (A_TickCount - last < Timeout) {
+            ; Prevent triple-press from triggering twice
+            lastTriggers.Delete(A_ThisHotkey)
+            return false
+        }
+        lastTriggers[A_ThisHotkey] := A_TickCount
+        return true
+    }
+    return false
+}
+
 #HotIf MicKillSwitchEnabled
-~LAlt:: {
-    if (A_PriorHotkey == "~LAlt" && A_TimeSincePriorHotkey < 400) {
+~LAlt up:: {
+    if IsDoublePress() {
         state := ToggleDefaultMic()
         if (state != -1)
             ShowMicOSD(state)
@@ -984,12 +1001,12 @@ ForgetPositions() {
 #HotIf
 
 #HotIf SpotlightEnabled
-~LCtrl:: {
-    if (A_PriorHotkey == "~LCtrl" && A_TimeSincePriorHotkey < 400)
+~LCtrl up:: {
+    if IsDoublePress()
         ToggleSpotlight()
 }
-~RCtrl:: {
-    if (A_PriorHotkey == "~RCtrl" && A_TimeSincePriorHotkey < 400)
+~RCtrl up:: {
+    if IsDoublePress()
         ToggleSpotlight()
 }
 #HotIf
