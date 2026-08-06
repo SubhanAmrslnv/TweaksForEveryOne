@@ -80,8 +80,6 @@ if ($b.UserPreferencesMask) {
 Restore-One $PATH_DESKTOP  'DragFullWindows'     $b.DragFullWindows     'String'
 Restore-One $PATH_DESKTOP  'MenuShowDelay'       $b.MenuShowDelay       'String'
 Restore-One $PATH_MOUSE    'MouseHoverTime'      $b.MouseHoverTime      'String'
-Restore-One $PATH_DESKTOP  'CaretWidth'          $b.CaretWidth          'DWord'
-Restore-One $PATH_DESKTOP  'CursorBlinkRate'     $b.CursorBlinkRate     'String'
 Restore-One $PATH_METRICS  'MinAnimate'          $b.MinAnimate          'String'
 Restore-One $PATH_PERSONAL 'EnableTransparency'  $b.EnableTransparency  'DWord'
 Restore-One $PATH_ADVANCED 'TaskbarAnimations'   $b.TaskbarAnimations   'DWord'
@@ -114,12 +112,6 @@ if ($null -ne $b.DragFullWindows) {
         Write-Host ("  {0,-22} -> could not re-apply: {1}" -f 'DragFullWindows', $_.Exception.Message) -ForegroundColor Yellow
     }
 }
-
-# SPI_SETCARETWIDTH takes uiParam = 0 and the width in pvParam. Passing it as
-# uiParam sets the caret to 0 wide and writes that over the restored value.
-$caret = 1
-if ($null -ne $b.CaretWidth) { try { $caret = [int]$b.CaretWidth } catch { $caret = 1 } }
-[WtSpi]::SystemParametersInfo(0x2007, 0, [IntPtr]$caret, $SPIF) | Out-Null
 
 # Replay each effect from the mask we just restored, rather than forcing them.
 #

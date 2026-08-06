@@ -50,7 +50,9 @@ New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 $payload = @(
     @{ From = 'src\WindowTweaks.ahk';                Res = 'WindowTweaks.ahk' }
     @{ From = 'src\SnapCore.ahk';                    Res = 'SnapCore.ahk' }
-    @{ From = 'src\TaskbarCore.ahk';                 Res = 'TaskbarCore.ahk' }
+    @{ From = 'src\RenderCore.ahk';                  Res = 'RenderCore.ahk' }
+    @{ From = 'src\AnimationScheduler.ahk';          Res = 'AnimationScheduler.ahk' }
+    @{ From = 'src\MediaCore.ahk';                   Res = 'MediaCore.ahk' }
     @{ From = 'docs\GUIDE.md';                       Res = 'GUIDE.md' }
     @{ From = 'docs\HOTKEYS.md';                     Res = 'HOTKEYS.md' }
     @{ From = 'docs\ANIMATIONS.md';                  Res = 'ANIMATIONS.md' }

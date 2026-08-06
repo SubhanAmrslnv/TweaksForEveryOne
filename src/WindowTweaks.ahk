@@ -3,6 +3,7 @@
 #Include SnapCore.ahk
 #Include RenderCore.ahk
 #Include AnimationScheduler.ahk
+#Include MediaCore.ahk
 Persistent
 DetectHiddenWindows false
 SetWinDelay -1
@@ -85,6 +86,7 @@ global TextExpanderEnabled := true
 global MiddleClickCloseEnabled := true
 global ProximityGhostEnabled := true
 global GhostWindows := Map()
+global MediaFallbackList := "youtube.exe; spotify.exe; vlc.exe; potplayermini64.exe; mpc-hc64.exe; netflix.exe"
 
 global Win := "", Pages := Map(), NavItems := Map(), CurPage := ""
 global C := Map()
@@ -151,6 +153,7 @@ LoadSettings() {
     MiddleClickCloseEnabled := IniStr("memory", "midclose", "1") = "1"
     ProximityGhostEnabled := IniStr("memory", "ghost", "1") = "1"
     SmartTaskbarEnabled := IniStr("taskbar", "smart", "0") = "1"
+    MediaFallbackList := IniStr("memory", "media_fallback", "youtube.exe; spotify.exe; vlc.exe; potplayermini64.exe; mpc-hc64.exe; netflix.exe")
     
     OriginalTaskbarState := GetTaskbarState()
     
@@ -220,6 +223,7 @@ SaveSettings() {
     try IniWrite(MiddleClickCloseEnabled ? 1 : 0, INI, "memory", "midclose")
     try IniWrite(ProximityGhostEnabled ? 1 : 0, INI, "memory", "ghost")
     try IniWrite(SmartTaskbarEnabled ? 1 : 0, INI, "taskbar", "smart")
+    try IniWrite(MediaFallbackList, INI, "memory", "media_fallback")
     ; ExplorerPatcher treats any non-zero OldTaskbar as "Win10 taskbar", and the
     ; shipped .reg uses 2. Only write when the on/off state actually changes, so
     ; selecting Win10 does not quietly rewrite a working 2 down to a 1.
@@ -696,6 +700,7 @@ ApplyUi() {
         SyncSmartTaskbar()
         SyncDimmerTimer()
         SyncHotCornersTimer()
+        SyncMediaCore()
         SaveSettings()
 
     }
@@ -1422,11 +1427,10 @@ SyncBreathingTimers() {
                 WinTargetAlpha[hwnd] := baseAlpha
             }
         }
-        RegisterAnimation("BreathingMonitor", BreathingMonitorStep)
-        RegisterAnimation("BreathingAnimator", BreathingAnimatorStep)
+        SetTimer(BreathingMonitorStep, 200)
         return
     }
-    CancelAnimation("BreathingMonitor")
+    SetTimer(BreathingMonitorStep, 0)
     CancelAnimation("BreathingAnimator")
     ; Hand every window its opacity back before we stop animating it, or a
     ; window dimmed at the moment of the toggle stays dim for good.
@@ -1440,19 +1444,16 @@ SyncBreathingTimers()
 
 
 
-BreathingMonitorStep(dt, now) {
+BreathingMonitorStep() {
     global BreathingEnabled, WinLastActive, WinCurrentAlpha, WinTargetAlpha, CustomTrans
-    static lastCheck := 0
     if !BreathingEnabled
-        return false
-        
-    if (now - lastCheck < 200)
-        return true
-    lastCheck := now
+        return
         
     MouseGetPos(,, &mHwnd)
     aHwnd := WinExist("A")
     now := QPC()
+    
+    needsAnimation := false
     
     for hwnd, lastActive in WinLastActive {
         if !DllCall("IsWindow", "ptr", hwnd)
@@ -1460,22 +1461,28 @@ BreathingMonitorStep(dt, now) {
             
         baseAlpha := CustomTrans.Has(hwnd) ? CustomTrans[hwnd] : 255
         
-        if (hwnd == aHwnd || hwnd == mHwnd) {
+        if (hwnd == aHwnd || hwnd == mHwnd || MC_IsMediaHwnd(hwnd)) {
             WinLastActive[hwnd] := now
             WinTargetAlpha[hwnd] := baseAlpha
         } else {
             if (now - lastActive > 6000) ; 6 seconds
                 WinTargetAlpha[hwnd] := Min(baseAlpha, 180)
         }
+        
+        if (WinTargetAlpha[hwnd] != WinCurrentAlpha[hwnd])
+            needsAnimation := true
     }
-    return true
+    
+    if (needsAnimation)
+        RegisterAnimation("BreathingAnimator", BreathingAnimatorStep)
 }
 
-BreathingAnimatorStep(dt, now) {
+BreathingAnimatorStep(dt:=0, now:=0) {
     global BreathingEnabled, WinTargetAlpha, WinCurrentAlpha, WinLastActive, CustomTrans
     if !BreathingEnabled
         return false
         
+    activeFades := false
     For hwnd, target in WinTargetAlpha {
         if !DllCall("IsWindow", "ptr", hwnd) {
             WinTargetAlpha.Delete(hwnd)
@@ -1486,9 +1493,16 @@ BreathingAnimatorStep(dt, now) {
             continue
         }
         
+        if (MC_IsMediaHwnd(hwnd)) {
+            RS_SetAlpha(hwnd, "Off", RS_PRI_AMBIENT)
+            continue
+        }
+        
         current := WinCurrentAlpha[hwnd]
         if (current == target)
             continue
+            
+        activeFades := true
             
         if (target == 255)
             step := 25 ; Wake up fast
@@ -1509,7 +1523,7 @@ BreathingAnimatorStep(dt, now) {
                 RS_SetAlpha(hwnd, current, RS_PRI_AMBIENT)
         }
     }
-    return true
+    return activeFades
 }
 $!F4::GravityClose()
 
@@ -1647,9 +1661,11 @@ ToggleFocusMode() {
         
         ZOrderSpotlight()
         RegisterAnimation("FocusAnimator", FocusAnimatorStep)
+        SetTimer(FocusMonitorStep, 50)
         Notify("Focus Mode ON")
     } else {
         CancelAnimation("FocusAnimator")
+        SetTimer(FocusMonitorStep, 0)
         ; 'layer', not 'fg' - case-insensitive identifiers make 'fg' the global
         ; foreground colour FG.
         for layer in FocusGuis {
@@ -1677,10 +1693,10 @@ ZOrderSpotlight() {
     }
 }
 
-FocusAnimatorStep(dt, now) {
-    global FocusModeEnabled, FocusGuis, SpotlightTarget, SpotlightCurrent, FocusBounds, FocusTargetHwnd
-    if !FocusModeEnabled || !FocusGuis.Length
-        return false
+FocusMonitorStep() {
+    global FocusModeEnabled, FocusTargetHwnd, SpotlightTarget
+    if !FocusModeEnabled
+        return
         
     hwnd := WinExist("A")
     if (hwnd != FocusTargetHwnd) {
@@ -1690,13 +1706,23 @@ FocusAnimatorStep(dt, now) {
     
     if (hwnd && IsRestorable(hwnd) && WinGetMinMax(hwnd) == 0) {
         WinGetPos(&tx, &ty, &tw, &th, hwnd)
-        SpotlightTarget := {x: tx, y: ty, w: tw, h: th}
+        newTarget := {x: tx, y: ty, w: tw, h: th}
     } else {
         MouseGetPos(&mx, &my)
-        SpotlightTarget := {x: mx, y: my, w: 0, h: 0}
+        newTarget := {x: mx, y: my, w: 0, h: 0}
     }
     
-    ; 'spot', not 'c' - 'c' is the global control Map C.
+    if (SpotlightTarget.x != newTarget.x || SpotlightTarget.y != newTarget.y || SpotlightTarget.w != newTarget.w || SpotlightTarget.h != newTarget.h) {
+        SpotlightTarget := newTarget
+        RegisterAnimation("FocusAnimator", FocusAnimatorStep)
+    }
+}
+
+FocusAnimatorStep(dt:=0, now:=0) {
+    global FocusModeEnabled, FocusGuis, SpotlightTarget, SpotlightCurrent, FocusBounds
+    if !FocusModeEnabled || !FocusGuis.Length
+        return false
+        
     spot := SpotlightCurrent
     t    := SpotlightTarget
 
@@ -1704,6 +1730,16 @@ FocusAnimatorStep(dt, now) {
     spot.y := spot.y * 0.85 + t.y * 0.15
     spot.w := spot.w * 0.85 + t.w * 0.15
     spot.h := spot.h * 0.85 + t.h * 0.15
+
+    finished := true
+    if (Abs(spot.x - t.x) < 0.5 && Abs(spot.y - t.y) < 0.5 && Abs(spot.w - t.w) < 0.5 && Abs(spot.h - t.h) < 0.5) {
+        spot.x := t.x
+        spot.y := t.y
+        spot.w := t.w
+        spot.h := t.h
+    } else {
+        finished := false
+    }
 
     hx := Round(spot.x - FocusBounds.x)
     hy := Round(spot.y - FocusBounds.y)
@@ -1727,6 +1763,7 @@ FocusAnimatorStep(dt, now) {
         try RS_SetRegion(layer.gui.Hwnd, region, RS_PRI_ANIM)
 
         if (layer.currentAlpha != layer.targetAlpha) {
+            finished := false
             if (layer.currentAlpha < layer.targetAlpha)
                 layer.currentAlpha := Min(layer.currentAlpha + 10, layer.targetAlpha)
             else
@@ -1735,7 +1772,7 @@ FocusAnimatorStep(dt, now) {
             try RS_SetAlpha(layer.gui.Hwnd, layer.currentAlpha, RS_PRI_ANIM)
         }
     }
-    return true
+    return !finished
 }
 
 FadeWindow(hwnd, startAlpha, endAlpha, durationMs) {
@@ -1820,7 +1857,7 @@ global WinEventHook := DllCall("SetWinEventHook", "uint", 0x000A, "uint", 0x000B
 WinEvent(hook, event, hwnd, idObject, idChild, thread, time) {
     global SnapEnabled, RestoreEnabled, DragHwnd, DragL, DragT, DragR, DragB, VelX, VelY, PrevX, PrevY
     global CurrentDragAlpha          ; assigned below - without this it is a local and the reset never lands
-    if (idObject != 0)
+    if (idObject != 0 || idChild != 0)
         return
     if (!SnapEnabled && !RestoreEnabled)
         return
@@ -2566,34 +2603,30 @@ PulseWindow(hwnd) {
 SyncDimmerTimer() {
     global MultiMonitorDimmerEnabled, DimmerGuis
     if (MultiMonitorDimmerEnabled) {
-        RegisterAnimation("MonitorDimmerTick", MonitorDimmerTickStep)
+        SetTimer(MonitorDimmerTickStep, 200)
     } else {
-        CancelAnimation("MonitorDimmerTick")
+        SetTimer(MonitorDimmerTickStep, 0)
         for k, g in DimmerGuis {
             FadeOutAndDestroyDimmer(g)
         }
         DimmerGuis.Clear()
     }
+    SyncMediaCore()
 }
 SyncDimmerTimer()
 
-MonitorDimmerTickStep(dt, now) {
+MonitorDimmerTickStep(dt:=0, now:=0) {
     global MultiMonitorDimmerEnabled, DimmerGuis
-    static lastCheck := 0
     
     if (!MultiMonitorDimmerEnabled)
-        return false
-        
-    if (now - lastCheck < 200)
-        return true
-    lastCheck := now
+        return
         
     try count := MonitorGetCount()
     catch
-        return true
+        return
         
     if (count < 2)
-        return true
+        return
         
     try {
         MouseGetPos(&mx, &my)
@@ -2607,7 +2640,7 @@ MonitorDimmerTickStep(dt, now) {
         }
         
         Loop count {
-            if (A_Index == activeMon) {
+            if (A_Index == activeMon || MC_MediaOnMonitor(A_Index)) {
                 if DimmerGuis.Has(A_Index) {
                     g := DimmerGuis[A_Index]
                     DimmerGuis.Delete(A_Index)
@@ -2627,7 +2660,6 @@ MonitorDimmerTickStep(dt, now) {
             }
         }
     }
-    return true
 }
 
 FadeInDimmer(g) {
@@ -2741,7 +2773,7 @@ ToggleQuickLook() {
     RS_Flush()
     QuickLookGui.Show("NoActivate AutoSize Center")
     QuickLookFade(QuickLookGui.Hwnd, 0, 255)
-    RegisterAnimation("CheckQuickLookFocus", CheckQuickLookFocusStep)
+    SetTimer(CheckQuickLookFocusStep, 100)
     return true
 }
 
@@ -2776,50 +2808,41 @@ QuickLookFade(guiObjOrHwnd, startA, endA) {
 CloseQuickLook() {
     global QuickLookGui
     if (QuickLookGui) {
-        CancelAnimation("CheckQuickLookFocus")
+        SetTimer(CheckQuickLookFocusStep, 0)
         guiObj := QuickLookGui
         QuickLookGui := "" 
         QuickLookFade(guiObj, 255, 0)
     }
 }
 
-CheckQuickLookFocusStep(dt, now) {
+CheckQuickLookFocusStep(dt:=0, now:=0) {
     global QuickLookGui
-    static lastCheck := 0
-    if !QuickLookGui
-        return false
+    if !QuickLookGui {
+        SetTimer(CheckQuickLookFocusStep, 0)
+        return
+    }
         
-    if (now - lastCheck < 200)
-        return true
-    lastCheck := now
-    
     ahwnd := WinExist("A")
     if (ahwnd != QuickLookGui.Hwnd && WinGetClass(ahwnd) != "CabinetWClass")
         CloseQuickLook()
-    return true
 }
 
 ; ====== Smart Auto-Hide Taskbar ======
 SyncSmartTaskbar() {
     global SmartTaskbarEnabled
     if (SmartTaskbarEnabled)
-        RegisterAnimation("SmartTaskbarMonitor", SmartTaskbarMonitorStep)
+        SetTimer(SmartTaskbarMonitorStep, 200)
     else
-        CancelAnimation("SmartTaskbarMonitor")
+        SetTimer(SmartTaskbarMonitorStep, 0)
 }
 SyncSmartTaskbar()
 
-SmartTaskbarMonitorStep(dt, now) {
+SmartTaskbarMonitorStep() {
     global SmartTaskbarEnabled
     static LastState := -1
-    static lastCheck := 0
     
     if !SmartTaskbarEnabled
-        return false
-        
-    if (now - lastCheck < 200)
-        return true
-    lastCheck := now
+        return
         
     try {
         tbHwnd := WinExist("ahk_class Shell_TrayWnd")
@@ -2868,7 +2891,6 @@ SmartTaskbarMonitorStep(dt, now) {
             LastState := shouldHide
         }
     }
-    return true
 }
 
 GetTaskbarState() {
@@ -2903,25 +2925,25 @@ SetTaskbarAutoHide(hide) {
 SyncHotCornersTimer() {
     global HotCornersEnabled
     if (HotCornersEnabled)
-        RegisterAnimation("HotCornersMonitor", HotCornersMonitorStep)
+        SetTimer(HotCornersMonitorStep, 50)
     else
-        CancelAnimation("HotCornersMonitor")
+        SetTimer(HotCornersMonitorStep, 0)
 }
 SyncHotCornersTimer()
 
 SyncCursorWrapTimer() {
     global InfiniteWrapEnabled
     if (InfiniteWrapEnabled)
-        RegisterAnimation("CursorWrapMonitor", CursorWrapMonitorStep)
+        SetTimer(CursorWrapMonitorStep, 20)
     else
-        CancelAnimation("CursorWrapMonitor")
+        SetTimer(CursorWrapMonitorStep, 0)
 }
 SyncCursorWrapTimer()
 
-CursorWrapMonitorStep(dt, now) {
+CursorWrapMonitorStep() {
     global InfiniteWrapEnabled
     if (!InfiniteWrapEnabled)
-        return false
+        return
         
     CoordMode("Mouse", "Screen")
     MouseGetPos(&mx, &my)
@@ -2978,20 +3000,14 @@ CursorWrapMonitorStep(dt, now) {
         }
         MouseMove(mx, my, 0)
     }
-    return true
 }
 
-HotCornersMonitorStep(dt, now) {
+HotCornersMonitorStep() {
     global HotCornersEnabled, HotCornerTL, HotCornerTR, HotCornerBL, HotCornerBR
     static LastCorner := "None"
-    static lastCheck := 0
     
     if (!HotCornersEnabled)
-        return false
-        
-    if (now - lastCheck < 100)
-        return true
-    lastCheck := now
+        return
         
     try {
         MouseGetPos(&mx, &my)
@@ -3038,7 +3054,6 @@ HotCornersMonitorStep(dt, now) {
             LastCorner := currentCorner
         }
     }
-    return true
 }
 
 ExecuteHotCornerAction(action) {
@@ -3087,17 +3102,21 @@ ShowVolumeOSD(vol, isMuted) {
             RS_Flush()
             
             OsdGui.SetFont("s24 cWhite", "Segoe UI Emoji")
-            OsdGui.AddText("vIcon x20 y12 w40 h40 BackgroundTrans Center", GetSpeakerIcon(vol, isMuted))
+            OsdGui.AddText("vIcon x15 y12 w40 h40 BackgroundTrans Center", GetSpeakerIcon(vol, isMuted))
             
-            OsdGui.AddText("x70 y29 w150 h6 Background333333")
+            OsdGui.SetFont("s10 cWhite bold", "Segoe UI")
+            pctStr := (isMuted || vol == 0) ? "Muted" : Round(vol) "%"
+            OsdGui.AddText("vPct x55 y21 w50 h24 BackgroundTrans Right", pctStr)
+            
+            OsdGui.AddText("x115 y29 w150 h6 Background333333")
             w := Max(1, Round(150 * (vol / 100)))
-            OsdGui.AddText("vBar x70 y29 w" w " h6 BackgroundFFFFFF")
+            OsdGui.AddText("vBar x115 y29 w" w " h6 BackgroundFFFFFF")
             
-            OsdGui.Show("NoActivate w240 h64")
-            RS_SetRegion(OsdGui.Hwnd, "0-0 w240 h64 r20-20", RS_PRI_ANIM)
+            OsdGui.Show("NoActivate w280 h64")
+            RS_SetRegion(OsdGui.Hwnd, "0-0 w280 h64 r20-20", RS_PRI_ANIM)
             
             MonitorGet(1, &L, &T, &R, &B)
-            x := L + (R - L - 240) // 2
+            x := L + (R - L - 280) // 2
             y := B - 150
             OsdGui.Move(x, y)
             
@@ -3124,6 +3143,7 @@ UpdateOSD(vol, isMuted) {
     global OsdGui
     try {
         OsdGui["Icon"].Text := GetSpeakerIcon(vol, isMuted)
+        OsdGui["Pct"].Text := (isMuted || vol == 0) ? "Muted" : Round(vol) "%"
         w := Max(1, Round(150 * (vol / 100)))
         OsdGui["Bar"].Move(,, w)
         if (isMuted)
@@ -3277,7 +3297,7 @@ TogglePiP() {
     PipGui.OnEvent("Size", PipGuiResize)
     PipGui.OnEvent("ContextMenu", PipGuiContextMenu)
     PipGuiResize(PipGui, 0, pw, ph)
-    RegisterAnimation("PiPMonitor", PiPMonitorStep)
+    SetTimer(PiPMonitorStep, 100)
 }
 
 PipGuiResize(guiObj, minMax, width, height) {
@@ -3301,10 +3321,11 @@ PipGuiContextMenu(guiObj, *) {
     PipGuis.Delete(guiObj.SourceHwnd)
 }
 
-PiPMonitorStep(dt, now) {
+PiPMonitorStep() {
     global PipGuis
     if !IsSet(PipGuis) || PipGuis.Count == 0 {
-        return false
+        SetTimer(PiPMonitorStep, 0)
+        return
     }
         
     for srcHwnd, pipGui in PipGuis.Clone() {
@@ -3314,7 +3335,6 @@ PiPMonitorStep(dt, now) {
             PipGuis.Delete(srcHwnd)
         }
     }
-    return true
 }
 
 ; ====== Global Mic Kill-Switch ======
@@ -3541,35 +3561,35 @@ GetAccentColor() {
 SyncActiveBorderTimer() {
     global ActiveBorderEnabled
     if (ActiveBorderEnabled)
-        RegisterAnimation("ActiveBorderMonitor", ActiveBorderMonitorStep)
+        SetTimer(ActiveBorderMonitorStep, 50)
     else {
-        CancelAnimation("ActiveBorderMonitor")
+        SetTimer(ActiveBorderMonitorStep, 0)
         HideActiveBorder()
     }
 }
 SyncActiveBorderTimer()
 
-ActiveBorderMonitorStep(dt, now) {
+ActiveBorderMonitorStep() {
     global ActiveBorderEnabled, LastBorderHwnd, LastBorderX, LastBorderY, LastBorderW, LastBorderH
     if (!ActiveBorderEnabled)
-        return false
+        return
         
     hwnd := WinExist("A")
     if (!hwnd) {
         HideActiveBorder()
-        return true
+        return
     }
     
     cls := WinGetClass(hwnd)
     if (cls = "WorkerW" || cls = "Progman" || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd" || cls = "AutoHotkeyGUI") {
         HideActiveBorder()
-        return true
+        return
     }
     
     style := WinGetStyle(hwnd)
     if (!(style & 0x10000000) || (style & 0x01000000) || (style & 0x20000000)) { ; Not visible OR Maximized OR Minimized
         HideActiveBorder()
-        return true
+        return
     }
     
     rect := Buffer(16, 0)
@@ -3585,43 +3605,48 @@ ActiveBorderMonitorStep(dt, now) {
         try WinGetPos(&X, &Y, &W, &H, hwnd)
         catch {
             HideActiveBorder()
-            return true
+            return
         }
     }
     
     if (W < 50 || H < 50) {
         HideActiveBorder()
-        return true
+        return
     }
     
-    if (hwnd == LastBorderHwnd && X == LastBorderX && Y == LastBorderY && W == LastBorderW && H == LastBorderH)
-        return true
+    SizeChanged := (W != LastBorderW || H != LastBorderH)
+    if (hwnd == LastBorderHwnd && X == LastBorderX && Y == LastBorderY && !SizeChanged)
+        return
         
     LastBorderHwnd := hwnd
     LastBorderX := X, LastBorderY := Y, LastBorderW := W, LastBorderH := H
     
-    DrawActiveBorder(X, Y, W, H)
-    return true
+    DrawActiveBorder(X, Y, W, H, SizeChanged)
 }
 
-DrawActiveBorder(X, Y, W, H) {
+DrawActiveBorder(X, Y, W, H, SizeChanged:=true) {
     global ActiveBorderGui
     
     if (!ActiveBorderGui) {
         ActiveBorderGui := Gui("-Caption +ToolWindow +AlwaysOnTop +LastFound -DPIScale +E0x20") 
         ActiveBorderGui.BackColor := GetAccentColor()
+        ActiveBorderGui.Show("NoActivate Hide x0 y0 w1 h1")
+        SizeChanged := true
     }
     
     t := 2 ; Thickness
     
     try {
-        ActiveBorderGui.Show("NoActivate x" X " y" Y " w" W " h" H)
-        rect1 := "0-0 w" W " h" t
-        rect2 := "0-" (H-t) " w" W " h" t
-        rect3 := "0-" t " w" t " h" (H-2*t)
-        rect4 := (W-t) "-" t " w" t " h" (H-2*t)
+        if SizeChanged {
+            rect1 := "0-0 w" W " h" t
+            rect2 := "0-" (H-t) " w" W " h" t
+            rect3 := "0-" t " w" t " h" (H-2*t)
+            rect4 := (W-t) "-" t " w" t " h" (H-2*t)
+            RS_SetRegion(ActiveBorderGui.Hwnd, rect1 "  " rect2 "  " rect3 "  " rect4, RS_PRI_ANIM)
+        }
         
-        RS_SetRegion(ActiveBorderGui.Hwnd, rect1 "  " rect2 "  " rect3 "  " rect4, RS_PRI_ANIM)
+        RS_SetPos(ActiveBorderGui.Hwnd, X, Y, W, H, RS_PRI_ANIM)
+        RS_SetAlpha(ActiveBorderGui.Hwnd, 255, RS_PRI_ANIM)
         RS_Flush()
     }
 }
@@ -3761,22 +3786,27 @@ ToggleGhostMode() {
         }
             
         if (GhostWindows.Count == 0)
-            CancelAnimation("GhostMonitor")
-    } else {
-        exStyle := WinGetExStyle(hwnd)
+            SetTimer(GhostMonitorStep, 0)
+        SyncMediaCore()
+        return
+    }
+
+    exStyle := WinGetExStyle(hwnd)
+    if !(exStyle & 0x20) {
+        WinSetExStyle("+0x20", hwnd)
+        WinSetTransparent(255, hwnd)
+        
         GhostWindows[hwnd] := {exStyle: exStyle}
         
-        WinSetAlwaysOnTop(1, hwnd)
-        RegisterAnimation("GhostMonitor", GhostMonitorStep)
+        if (GhostWindows.Count == 1)
+            SetTimer(GhostMonitorStep, 25)
+        SyncMediaCore()
     }
+    WinSetAlwaysOnTop(1, hwnd)
 }
 
-GhostMonitorStep(dt, now) {
+GhostMonitorStep() {
     global GhostWindows
-    static lastCheck := 0
-    if (now - lastCheck < 25)
-        return true
-    lastCheck := now
     
     CoordMode("Mouse", "Screen")
     MouseGetPos(&mx, &my)
@@ -3795,7 +3825,7 @@ GhostMonitorStep(dt, now) {
             WinGetPos(&X, &Y, &W, &H, hwnd)
             dist := GetDistToRect(mx, my, X, Y, W, H)
             
-            if (dist == 0)
+            if (dist == 0 || MC_IsMediaHwnd(hwnd))
                 targetAlpha := maxAlpha
             else if (dist >= maxDist)
                 targetAlpha := minAlpha
@@ -3828,6 +3858,8 @@ Bye(*) {
     global TrayIcons, BossKeyActive, BossKeyWindows, BossKeyMuteState
     global WinEventHook, WinEventCb, RolledUpWindows, CustomTrans
     global OriginalTaskbarState, SmartTaskbarEnabled, DimmerGuis, OsdGui, PipGuis, MicOsdGui, SpotlightGui, ActiveBorderGui
+
+    try MC_Shutdown()
 
     if (ActiveBorderGui)
         try ActiveBorderGui.Destroy()
@@ -3908,6 +3940,26 @@ PreciseSleep(ms) {
         DllCall("Sleep", "UInt", 1)
     while (QPC() < target)
         continue
+}
+
+; ====== MediaCore Integration ======
+SyncMediaCore() {
+    global BreathingEnabled, MultiMonitorDimmerEnabled, ProximityGhostEnabled, ParallaxEnabled, MediaFallbackList
+    wanted := BreathingEnabled || MultiMonitorDimmerEnabled || ProximityGhostEnabled || ParallaxEnabled
+    MC_SetFallbackList(MediaFallbackList)
+    MC_SetWanted(wanted, MultiMonitorDimmerEnabled, QPC())
+    if wanted
+        SetTimer(MC_Tick, 250)
+    else
+        SetTimer(MC_Tick, 0)
+}
+
+; MediaCore takes the clock as a parameter so it stays include-safe (see its
+; header).  SetTimer calls its callback with no arguments, so the clock is read
+; here rather than there - a callback with required parameters fails outright
+; with "Invalid callback function".
+MC_Tick() {
+    MC_SweepStep(QPC())
 }
 
 QPC() {

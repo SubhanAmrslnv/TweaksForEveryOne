@@ -61,6 +61,7 @@ RenderFrame() {
     SchedulerLastTime := now
 
     ; ---- Phase 1: Produce (run all animation callbacks) ----------------------
+    RS_BeginFrame()
     produceStart := QPC()
 
     for key, anim in ActiveAnimations {

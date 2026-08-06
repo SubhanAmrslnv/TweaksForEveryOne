@@ -37,6 +37,23 @@ global RS_FlushCount   := 0     ; total frames flushed
 global RS_LastFlushMs  := 0     ; ms spent in last RS_Flush call
 
 ; ==============================================================================
+;  RS_BeginFrame — called at the start of every render frame to clear priorities
+; ==============================================================================
+RS_BeginFrame() {
+    global RS_Alpha, RS_Pos, RS_Region, RS_ZOrder, RS_ExStyle
+    for hwnd, entry in RS_Alpha
+        entry.pri := 0
+    for hwnd, entry in RS_Pos
+        entry.pri := 0
+    for hwnd, entry in RS_Region
+        entry.pri := 0
+    for hwnd, entry in RS_ZOrder
+        entry.pri := 0
+    for hwnd, entry in RS_ExStyle
+        entry.pri := 0
+}
+
+; ==============================================================================
 ;  Public API — called by feature callbacks (state producers)
 ; ==============================================================================
 
@@ -51,8 +68,10 @@ RS_SetAlpha(hwnd, alpha, pri := 20) {
     if RS_Alpha.Has(hwnd) {
         entry := RS_Alpha[hwnd]
         if (pri >= entry.pri) {
+            entry.pri := pri
+            if (entry.value == numAlpha)
+                return
             entry.value := numAlpha
-            entry.pri   := pri
             entry.dirty := true
         }
     } else {
@@ -69,11 +88,13 @@ RS_SetPos(hwnd, x, y, w := -1, h := -1, pri := 20) {
     if RS_Pos.Has(hwnd) {
         entry := RS_Pos[hwnd]
         if (pri >= entry.pri) {
+            entry.pri := pri
+            if (entry.x == x && entry.y == y && entry.w == w && entry.h == h)
+                return
             entry.x     := x
             entry.y     := y
             entry.w     := w
             entry.h     := h
-            entry.pri   := pri
             entry.dirty := true
         }
     } else {
@@ -89,8 +110,10 @@ RS_SetRegion(hwnd, regionStr, pri := 20) {
     if RS_Region.Has(hwnd) {
         entry := RS_Region[hwnd]
         if (pri >= entry.pri) {
+            entry.pri := pri
+            if (entry.value == regionStr)
+                return
             entry.value := regionStr
-            entry.pri   := pri
             entry.dirty := true
         }
     } else {
@@ -107,9 +130,11 @@ RS_SetZOrder(hwnd, insertAfter, flags := 0x0013, pri := 20) {
     if RS_ZOrder.Has(hwnd) {
         entry := RS_ZOrder[hwnd]
         if (pri >= entry.pri) {
+            entry.pri := pri
+            if (entry.insertAfter == insertAfter && entry.flags == flags)
+                return
             entry.insertAfter := insertAfter
             entry.flags       := flags
-            entry.pri         := pri
             entry.dirty       := true
         }
     } else {
@@ -125,9 +150,11 @@ RS_SetExStyle(hwnd, addBits, removeBits, pri := 20) {
     if RS_ExStyle.Has(hwnd) {
         entry := RS_ExStyle[hwnd]
         if (pri >= entry.pri) {
+            entry.pri := pri
+            if (entry.add == addBits && entry.remove == removeBits)
+                return
             entry.add    := addBits
             entry.remove := removeBits
-            entry.pri    := pri
             entry.dirty  := true
         }
     } else {
@@ -217,7 +244,12 @@ RS_Flush() {
                     hdwp := result
 
                 ; Record what we applied.
-                RS_LastPos[hwnd] := {x: entry.x, y: entry.y, w: entry.w, h: entry.h}
+                if !RS_LastPos.Has(hwnd)
+                    RS_LastPos[hwnd] := {x: entry.x, y: entry.y, w: entry.w, h: entry.h}
+                else {
+                    lp := RS_LastPos[hwnd]
+                    lp.x := entry.x, lp.y := entry.y, lp.w := entry.w, lp.h := entry.h
+                }
                 entry.dirty := false
             }
             DllCall("EndDeferWindowPos", "ptr", hdwp)
@@ -239,7 +271,12 @@ RS_Flush() {
                 try DllCall("SetWindowPos", "ptr", hwnd, "ptr", 0
                     , "int", entry.x, "int", entry.y, "int", wVal, "int", hVal
                     , "uint", flags)
-                RS_LastPos[hwnd] := {x: entry.x, y: entry.y, w: entry.w, h: entry.h}
+                if !RS_LastPos.Has(hwnd)
+                    RS_LastPos[hwnd] := {x: entry.x, y: entry.y, w: entry.w, h: entry.h}
+                else {
+                    lp := RS_LastPos[hwnd]
+                    lp.x := entry.x, lp.y := entry.y, lp.w := entry.w, lp.h := entry.h
+                }
                 entry.dirty := false
             }
         }

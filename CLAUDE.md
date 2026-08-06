@@ -103,13 +103,6 @@ There is **no build system, no test runner, and no CI**. No `.sln`, no `.csproj`
 # Run from source
 & "$env:LOCALAPPDATA\Programs\AutoHotkey\v2\AutoHotkey64.exe" src\WindowTweaks.ahk
 
-# Automated tests - 21 geometry checks, pure functions, touches no windows
-cd tests
-& "$env:LOCALAPPDATA\Programs\AutoHotkey\v2\AutoHotkey64.exe" test-snap.ahk   # exits 0 / 1
-
-# Guided live test - requires the app already running; opens an always-on-top
-# GUI and judges each drag you perform. Never exits with a code.
-& "$env:LOCALAPPDATA\Programs\AutoHotkey\v2\AutoHotkey64.exe" test-live-manual.ahk
 
 # Build the installer -> build\out\WindowTweaksSetup.exe
 .\build\Build-Installer.ps1
@@ -124,10 +117,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build\Build-Installer.ps1 
 .\scripts\Restore-Windows-Tuning.ps1
 ```
 
-`test-snap.ahk` is all-or-nothing — there is no single-test selector. To isolate one case, comment out the other `Check()` calls. Output goes to stdout via `FileAppend(s "\n", "*")`; the exit code is the signal (`ExitApp(Fail > 0 ? 1 : 0)`).
-
-Re-run `test-snap.ahk` after Windows updates — the geometry assumptions are OS-version sensitive.
-
 ## Architecture
 
 **One AutoHotkey v2 process.** `src\WindowTweaks.ahk` is the sole entry point; `#Include SnapCore.ahk` and `#Include TaskbarCore.ahk` (lines 3-4) pull the other two in at compile time. No IPC, no second process, nothing launches anything else. `#SingleInstance Force` is the only cross-instance coordination.
@@ -138,7 +127,7 @@ Re-run `test-snap.ahk` after Windows updates — the geometry assumptions are OS
 | `src\SnapCore.ahk` | Pure geometry + window predicates. No side effects |
 | `src\TaskbarCore.ahk` | Taskbar enumeration and resize. `TB_` prefix = public, `tbc_` = private module state |
 
-**The include contract.** `SnapCore.ahk` and `TaskbarCore.ahk` hold *function definitions only* (plus TaskbarCore's global initializers) — stated in their own headers — so `tests\test-snap.ahk` can `#Include ..\src\SnapCore.ahk` without starting the program. Adding top-level executable statements to either file silently breaks the tests.
+**The include contract.** `SnapCore.ahk` and `TaskbarCore.ahk` hold *function definitions only* (plus TaskbarCore's global initializers) — stated in their own headers. Adding top-level executable statements to either file silently breaks the script.
 
 **Coupling is by shared globals, not parameters.** `LoadSettings()` in `WindowTweaks.ahk` writes `TB_Height` / `TB_AllowClip` / `TB_CropPrimary` and reads `TB_HEIGHTS`, all of which are defined in `TaskbarCore.ahk`. Functions open with a bare `global` or a long global list. This is deliberate, not accidental.
 
@@ -192,8 +181,7 @@ When adding new features or modifying the code, AI agents must strictly adhere t
 - Hotkeys are inert against elevated windows unless the app itself is elevated.
 - **Windows' own Snap Assist wins at screen edges, by design** — the app skips windows Windows has maximised. Judge snapping by **window-to-window** magnetism, not screen edges.
 - `DragFullWindows=1` is a hard functional dependency, not cosmetic: with it off Windows drags a hollow outline and the glide is invisible.
-- **Title-bar drags cannot be automated.** Injected clicks don't engage the window's move loop, so an "automated" drag test either passes vacuously or exercises a code path real drags never take. That is why `test-live-manual.ahk` is manual.
-- `tests\diagnostics\*` are one-off investigation probes, not a regression suite. `probe2.ahk` and `probe3.ahk` mutate the live taskbar and work area and rely on their own restore phase — not safe to batch-run.
+- **Title-bar drags cannot be automated.** Injected clicks don't engage the window's move loop.
 
 ## Docs
 

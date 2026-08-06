@@ -113,8 +113,6 @@ if (Test-Path $backupFile) {
         DragFullWindows     = Get-Value $PATH_DESKTOP  'DragFullWindows'
         MenuShowDelay       = Get-Value $PATH_DESKTOP  'MenuShowDelay'
         MouseHoverTime      = Get-Value $PATH_MOUSE    'MouseHoverTime'
-        CaretWidth          = Get-Value $PATH_DESKTOP  'CaretWidth'
-        CursorBlinkRate     = Get-Value $PATH_DESKTOP  'CursorBlinkRate'
         MinAnimate          = Get-Value $PATH_METRICS  'MinAnimate'
         EnableTransparency  = Get-Value $PATH_PERSONAL 'EnableTransparency'
         TaskbarAnimations   = Get-Value $PATH_ADVANCED 'TaskbarAnimations'
@@ -141,10 +139,17 @@ if ($Animations -or $MinimalAnimations) {
 
     Set-Tuning $PATH_DESKTOP 'MenuShowDelay' '50' 'String'
     Set-Tuning $PATH_MOUSE   'MouseHoverTime' '100' 'String'
-    Set-Tuning $PATH_DESKTOP 'CaretWidth' 3 'DWord'
-    Set-Tuning $PATH_DESKTOP 'CursorBlinkRate' '-1' 'String'
     Say "Eliminate artificial menu and taskbar preview opening delays"
-    Say "Set text cursor (caret) to 3px wide and solid (no blink)"
+
+    # Repair broken caret from previous versions
+    $currentBlink = Get-Value $PATH_DESKTOP 'CursorBlinkRate'
+    if ($currentBlink -eq '-1') {
+        Set-Tuning $PATH_DESKTOP 'CursorBlinkRate' '530' 'String'
+    }
+    $currentWidth = Get-Value $PATH_DESKTOP 'CaretWidth'
+    if ($currentWidth -eq 3) {
+        Set-Tuning $PATH_DESKTOP 'CaretWidth' 1 'DWord'
+    }
 
     # Use the documented API rather than hand-editing UserPreferencesMask, so
     # Windows recalculates its own mask and applies it without a sign-out.
@@ -177,10 +182,12 @@ public class WtSpi {
     $null = [WtSpi]::SystemParametersInfo(0x0049, 8, [ref]$ai, $SPIF)
     Say "Animate windows when minimizing and maximizing"
 
-    # SPI_SETCARETWIDTH takes uiParam = 0 and the width in pvParam. Passing the
-    # width as uiParam sets the caret to 0 wide, and SPIF_UPDATEINIFILE then
-    # writes that 0 straight over the CaretWidth = 3 set above.
-    $null = [WtSpi]::SystemParametersInfo(0x2007, 0, [IntPtr]3, $SPIF)
+    if ($currentBlink -eq '-1') {
+        $null = [WtSpi]::SystemParametersInfo(0x0201, 530, [IntPtr]::Zero, $SPIF)
+    }
+    if ($currentWidth -eq 3) {
+        $null = [WtSpi]::SystemParametersInfo(0x2007, 0, [IntPtr]1, $SPIF)
+    }
 
     # Every constant here is the SET half of its pair, checked against the
     # documented SPI_* values. Three of these were previously wrong and silently
