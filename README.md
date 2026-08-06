@@ -58,8 +58,8 @@ travels further. It never flies off-screen.
 `Win + Ctrl + T` pins the active window above everything else.
 
 ### Position memory
-Each app reopens at the size and position you last left it. Dialogs, popups and
-tool windows are deliberately excluded.
+Each app reopens at the size and position you last left it. Dialogs, popups,
+tool windows, and Picture-in-Picture (PiP) windows are deliberately excluded.
 
 ### Taskbar management
 The Windows 11 taskbar cannot be meaningfully shrunk by an ordinary program (see
@@ -67,6 +67,56 @@ The Windows 11 taskbar cannot be meaningfully shrunk by an ordinary program (see
 we integrate directly with **ExplorerPatcher**. The installer automatically fetches 
 and installs ExplorerPatcher for you, and Window Tweaks provides a clean UI to toggle 
 between Windows 10 and Windows 11 styles, and switch to small icons.
+
+### The Full Feature Suite (40+ Tweaks & Animations)
+
+**15 Power-User Tweaks (Newly Added):**
+- **Smart Auto-Hide Taskbar**: Only hides the taskbar when windows maximize or touch the bottom edge.
+- **macOS "Quick Look"**: Press Space on any file in Explorer to instantly preview it.
+- **Multi-Monitor Focus Dimmer**: Dims inactive monitors by 50% to reduce eye strain.
+- **macOS "Hot Corners"**: Throw your mouse to screen corners to trigger actions (e.g. Hide windows, Task View).
+- **Premium Volume OSD**: A sleek, blurred macOS-style volume indicator when scrolling the taskbar.
+- **Live Window PiP**: `Win+Ctrl+P` creates a live, always-on-top thumbnail of any background window.
+- **Universal Grab & Pan**: Hold Middle-Click to pan/scroll any window (like the Photoshop Hand Tool).
+- **Global Mic Kill-Switch**: Double-tap `Alt` to instantly mute/unmute your microphone system-wide.
+- **Infinite Cursor Wrap**: Teleport your cursor across screen edges for seamless multi-monitor navigation.
+- **Quick Spotlight Launcher**: Double-tap `Ctrl` for a minimalist, lightning-fast search and launch bar.
+- **Smart Active Border**: Draws a sleek, accent-colored border around the currently active window.
+- **Always on Bottom**: `Win+Ctrl+B` pins any window permanently to your desktop background as a widget.
+- **Global Text Expander**: Type `@@mail`, `@@date`, etc., to instantly expand snippets anywhere.
+- **Middle-Click to Close**: Middle-click any window's title bar to instantly close it.
+- **Proximity Ghost Window**: `Win+Ctrl+G` makes a window 80% transparent; it fades in and becomes clickable only when your mouse gets close.
+
+**Performance & OS Tuning:**
+- **Zero-delay Menus (MenuShowDelay)**: Windows menus open instantly (0-50ms) just like macOS, eliminating the artificial 400ms delay.
+- **Snappy Taskbar Previews (MouseHoverTime)**: Taskbar thumbnails appear in 100ms instead of 400ms for a much more responsive feel.
+- **Smooth Scrolling**: Silky smooth mouse wheel scrolling interpolation across all apps.
+
+**Premium Window Animations:**
+- **Fade In / Ease-Out**: Cinematic fade transitions for modes like Focus Mode instead of abrupt cuts.
+- **Custom Text Caret**: A thicker, smoother blinking text cursor (caret) to reduce eye strain and look modern.
+- **Bouncy Snapping**: Windows slightly squish and bounce back with realistic physics when hitting screen edges or other windows.
+- **Gravity Drop Close**: When closing a window, it collapses into a bitmap and falls with gravity (or gets sucked into a black hole).
+- **Breathing Backgrounds**: Inactive background windows slowly fade to 70% opacity after 5 seconds of inactivity, waking up instantly when hovered.
+- **Focus Pulse**: Switching to a window via Alt+Tab makes it pulse (expand by 2-3% and bounce back) to immediately draw your attention.
+- **Ghost Slide-In**: New apps slide up from 30px below while fading in, similar to modern smartphone app launches.
+- **Parallax Dragging**: Windows become transparent based on how fast you drag them, fading back to solid when you stop.
+- **Magnetic Seam Flash**: A brief neon flash effect appears exactly on the seam when two windows magnetically snap together.
+- **Theater Spotlight**: A soft, circular vignette shadow follows your active window like a stage spotlight, dimming the rest of the screen.
+- **Fly-to-Mouse Minimize**: Minimized windows spin and vacuum directly into your mouse cursor instead of dropping to the taskbar.
+- **Window Unrolling**: New windows unroll from top to bottom like a window blind in 0.2 seconds.
+
+**Productivity & Window Management:**
+- **Transparency Control**: `Win + Ctrl + Wheel` to adjust the opacity of any active window.
+- **Cinema / Focus Mode**: `Win + Ctrl + F` to black out the entire background, keeping only the active window visible.
+- **Window Shade / Roll-Up**: Middle-click a window to roll it up (collapse to just the title bar), middle-click to restore.
+- **Minimize to Tray**: Add a tray icon for any active window to declutter your taskbar.
+- **Boss Key**: `Win + Ctrl + Esc` to instantly hide all windows and mute system audio. Press again to restore.
+- **Linux-Style Alt-Drag**: Hold `Alt + LeftClick` anywhere on a window to move it, or `Alt + RightClick` anywhere to resize it from the nearest edge.
+- **Taskbar Volume Scroll**: Hover over the taskbar and scroll the mouse wheel to adjust volume, or middle-click to mute.
+- **Quick Folder Jump**: Press `Ctrl + G` in any File Save/Open dialog to instantly jump to the folder of your most recently active Explorer window.
+- **Global Plain-Text Paste**: `Ctrl + Win + V` strips all formatting, colors, and fonts from your clipboard and pastes as pure plain text anywhere.
+- **Smart Caps Lock**: Tap CapsLock to send `Escape` (or `Backspace`), hold it for 0.4 seconds to actually toggle CapsLock on/off.
 
 ---
 

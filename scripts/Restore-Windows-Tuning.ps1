@@ -40,6 +40,7 @@ Write-Host "`nRestoring Windows tuning" -ForegroundColor Cyan
 Write-Host "Backup taken $($b.Created) on $($b.Computer)`n" -ForegroundColor DarkGray
 
 $PATH_DESKTOP  = 'HKCU:\Control Panel\Desktop'
+$PATH_MOUSE    = 'HKCU:\Control Panel\Mouse'
 $PATH_METRICS  = 'HKCU:\Control Panel\Desktop\WindowMetrics'
 $PATH_ADVANCED = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
 $PATH_EXPLORER = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer'
@@ -77,6 +78,10 @@ if ($b.UserPreferencesMask) {
 }
 
 Restore-One $PATH_DESKTOP  'DragFullWindows'     $b.DragFullWindows     'String'
+Restore-One $PATH_DESKTOP  'MenuShowDelay'       $b.MenuShowDelay       'String'
+Restore-One $PATH_MOUSE    'MouseHoverTime'      $b.MouseHoverTime      'String'
+Restore-One $PATH_DESKTOP  'CaretWidth'          $b.CaretWidth          'DWord'
+Restore-One $PATH_DESKTOP  'CursorBlinkRate'     $b.CursorBlinkRate     'String'
 Restore-One $PATH_METRICS  'MinAnimate'          $b.MinAnimate          'String'
 Restore-One $PATH_PERSONAL 'EnableTransparency'  $b.EnableTransparency  'DWord'
 Restore-One $PATH_ADVANCED 'TaskbarAnimations'   $b.TaskbarAnimations   'DWord'
@@ -99,9 +104,74 @@ public class WtSpi {
 '@
 }
 $SPIF = 3
-if ($null -ne $b.DragFullWindows) {
-    [WtSpi]::SystemParametersInfo(0x0025, [uint32]$b.DragFullWindows, [IntPtr]::Zero, $SPIF) | Out-Null
-}
-[WtSpi]::SystemParametersInfo(0x103F, 0, [IntPtr]1, $SPIF) | Out-Null
 
-Write-Host "`nDone. Sign out and back in for everything to settle.`n" -ForegroundColor Green
+if ($null -ne $b.DragFullWindows) {
+    # A non-numeric backed-up value would otherwise throw under
+    # ErrorActionPreference = Stop and abort the rest of the restore.
+    try {
+        [WtSpi]::SystemParametersInfo(0x0025, [uint32]$b.DragFullWindows, [IntPtr]::Zero, $SPIF) | Out-Null
+    } catch {
+        Write-Host ("  {0,-22} -> could not re-apply: {1}" -f 'DragFullWindows', $_.Exception.Message) -ForegroundColor Yellow
+    }
+}
+
+# SPI_SETCARETWIDTH takes uiParam = 0 and the width in pvParam. Passing it as
+# uiParam sets the caret to 0 wide and writes that over the restored value.
+$caret = 1
+if ($null -ne $b.CaretWidth) { try { $caret = [int]$b.CaretWidth } catch { $caret = 1 } }
+[WtSpi]::SystemParametersInfo(0x2007, 0, [IntPtr]$caret, $SPIF) | Out-Null
+
+# Replay each effect from the mask we just restored, rather than forcing them.
+#
+# This used to be an unconditional SPI_SETUIEFFECTS = ON. With SPIF_UPDATEINIFILE
+# that makes USER32 re-serialise its still-tuned in-memory mask straight back
+# over the registry - undoing the UserPreferencesMask restore 40 lines above,
+# and forcing UI effects on for anyone who had them off. Driving every SPI from
+# the backed-up bits instead keeps registry and in-memory state in agreement.
+$SPI_BITS = @(
+    @{ Code = 0x103F; Byte = 3; Bit = 0x80 }   # SPI_SETUIEFFECTS
+    @{ Code = 0x1003; Byte = 0; Bit = 0x02 }   # SPI_SETMENUANIMATION
+    @{ Code = 0x1005; Byte = 0; Bit = 0x04 }   # SPI_SETCOMBOBOXANIMATION
+    @{ Code = 0x1007; Byte = 0; Bit = 0x08 }   # SPI_SETLISTBOXSMOOTHSCROLLING
+    @{ Code = 0x1013; Byte = 1; Bit = 0x02 }   # SPI_SETMENUFADE
+    @{ Code = 0x1015; Byte = 1; Bit = 0x04 }   # SPI_SETSELECTIONFADE
+    @{ Code = 0x1019; Byte = 1; Bit = 0x10 }   # SPI_SETTOOLTIPFADE
+    @{ Code = 0x101B; Byte = 1; Bit = 0x20 }   # SPI_SETCURSORSHADOW
+    @{ Code = 0x1025; Byte = 2; Bit = 0x04 }   # SPI_SETDROPSHADOW
+    @{ Code = 0x1043; Byte = 4; Bit = 0x02 }   # SPI_SETCLIENTAREAANIMATION
+)
+
+if ($b.UserPreferencesMask) {
+    try {
+        $mb = [byte[]]($b.UserPreferencesMask -split ' ' | ForEach-Object { [Convert]::ToByte($_, 16) })
+        $replayed = 0
+        foreach ($s in $SPI_BITS) {
+            if ($s.Byte -ge $mb.Length) { continue }
+            $on = [bool]($mb[$s.Byte] -band $s.Bit)
+            $val = if ($on) { [IntPtr]1 } else { [IntPtr]0 }
+            [WtSpi]::SystemParametersInfo($s.Code, 0, $val, $SPIF) | Out-Null
+            $replayed++
+        }
+        Write-Host ("  {0,-22} -> replayed {1} effects from the backed-up mask" -f 'UI effects', $replayed)
+    } catch {
+        Write-Host ("  {0,-22} -> could not replay: {1}" -f 'UI effects', $_.Exception.Message) -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "  UI effects             -> no mask in backup, left as-is" -ForegroundColor Yellow
+}
+
+# Explorer\Advanced values (ListviewAlphaSelect, ListviewShadow, TaskbarAnimations)
+# are read at shell start, so nudge Explorer rather than waiting for a sign-out.
+if (-not ('WtShell' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class WtShell {
+  [DllImport("shell32.dll")]
+  public static extern void SHChangeNotify(int eventId, uint flags, IntPtr a, IntPtr b);
+}
+'@
+}
+[WtShell]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
+
+Write-Host "`nDone. Restart Explorer or sign out for everything to settle.`n" -ForegroundColor Green

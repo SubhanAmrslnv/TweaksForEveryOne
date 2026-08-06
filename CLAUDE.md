@@ -30,10 +30,60 @@ Every toggle fires `Notify()` → `TrayTip`, so state changes are always visible
 | **Magnetic snapping** | On drag-release, each axis independently snaps to a screen edge, a monitor work-area edge, or another window's edge. Corners pull harder: once one axis grabs, the other is retried with `CORNER_BOOST` × the reach | `[snap]` `enabled`, `distance`, `cornerBoost`, `neighbour` | `SnapEnabled`, `SNAP_DISTANCE` (30), `CORNER_BOOST` (2.2), `NEIGHBOUR_PROX` (90) |
 | **Ice glide** | Release mid-drag and the window keeps sliding on a quintic ease-out, then snaps to whatever it drifts near. Never leaves the screen | `[glide]` `enabled`, `throw`, `ms` | `GlideEnabled`, `GLIDE_THROW` (0.9), `GLIDE_MS` (650), `GLIDE_MAX` (500) |
 | **Always on top** | Toggles `WS_EX_TOPMOST` on the active window. Hotkey only — no persisted setting, and it self-excludes by PID so it can't pin its own GUI | — | — |
-| **Position memory** | Each app reopens at its last size/position, keyed on `exe_class`. Dialogs, owned windows, `WS_EX_TOOLWINDOW` and anything without `WS_THICKFRAME` are excluded | `[memory]` `enabled` | `RestoreEnabled`, `POS_FILE` |
+| **Position memory** | Each app reopens at its last size/position, keyed on `exe_class`. Dialogs, owned windows, `WS_EX_TOOLWINDOW`, anything without `WS_THICKFRAME`, and Picture-in-Picture (PiP) windows are excluded | `[memory]` `enabled` | `RestoreEnabled`, `POS_FILE` |
 | **Taskbar height** | Resizes taskbar windows and re-places their XAML island children flush to the new bottom edge | `[taskbar]` `height`, `allowClip`, `cropPrimary` | `TB_Height` (32), `TB_AllowClip`, `TB_CropPrimary` |
 
 Taskbar steps are `TB_HEIGHTS := [24, 28, 32, 36, 40, 44, 48]` (`src/TaskbarCore.ahk:5`), 48 being native. Below the measured content height it clamps unless **Allow clipping** is ticked, and the notification reports the height actually used — the primary bar may refuse outright.
+
+### The Full Feature Suite (40+ Tweaks & Animations)
+
+**15 Power-User Tweaks (Newly Added):**
+- **Smart Auto-Hide Taskbar**: Only hides the taskbar when windows maximize or touch the bottom edge.
+- **macOS "Quick Look"**: Press Space on any file in Explorer to instantly preview it.
+- **Multi-Monitor Focus Dimmer**: Dims inactive monitors by 50% to reduce eye strain.
+- **macOS "Hot Corners"**: Throw your mouse to screen corners to trigger actions (e.g. Hide windows, Task View).
+- **Premium Volume OSD**: A sleek, blurred macOS-style volume indicator when scrolling the taskbar.
+- **Live Window PiP**: `Win+Ctrl+P` creates a live, always-on-top thumbnail of any background window.
+- **Universal Grab & Pan**: Hold Middle-Click to pan/scroll any window (like the Photoshop Hand Tool).
+- **Global Mic Kill-Switch**: Double-tap `Alt` to instantly mute/unmute your microphone system-wide.
+- **Infinite Cursor Wrap**: Teleport your cursor across screen edges for seamless multi-monitor navigation.
+- **Quick Spotlight Launcher**: Double-tap `Ctrl` for a minimalist, lightning-fast search and launch bar.
+- **Smart Active Border**: Draws a sleek, accent-colored border around the currently active window.
+- **Always on Bottom**: `Win+Ctrl+B` pins any window permanently to your desktop background as a widget.
+- **Global Text Expander**: Type `@@mail`, `@@date`, etc., to instantly expand snippets anywhere.
+- **Middle-Click to Close**: Middle-click any window's title bar to instantly close it.
+- **Proximity Ghost Window**: `Win+Ctrl+G` makes a window 80% transparent; it fades in and becomes clickable only when your mouse gets close.
+
+**Performance & OS Tuning:**
+- **Zero-delay Menus (MenuShowDelay)**: Windows menus open instantly (0-50ms) just like macOS, eliminating the artificial 400ms delay.
+- **Snappy Taskbar Previews (MouseHoverTime)**: Taskbar thumbnails appear in 100ms instead of 400ms for a much more responsive feel.
+- **Smooth Scrolling**: Silky smooth mouse wheel scrolling interpolation across all apps.
+
+**Premium Window Animations:**
+- **Fade In / Ease-Out**: Cinematic fade transitions for modes like Focus Mode instead of abrupt cuts.
+- **Custom Text Caret**: A thicker, smoother blinking text cursor (caret) to reduce eye strain and look modern.
+- **Bouncy Snapping**: Windows slightly squish and bounce back with realistic physics when hitting screen edges or other windows.
+- **Gravity Drop Close**: When closing a window, it collapses into a bitmap and falls with gravity (or gets sucked into a black hole).
+- **Breathing Backgrounds**: Inactive background windows slowly fade to 70% opacity after 5 seconds of inactivity, waking up instantly when hovered.
+- **Focus Pulse**: Switching to a window via Alt+Tab makes it pulse (expand by 2-3% and bounce back) to immediately draw your attention.
+- **Ghost Slide-In**: New apps slide up from 30px below while fading in, similar to modern smartphone app launches.
+- **Parallax Dragging**: Windows become transparent based on how fast you drag them, fading back to solid when you stop.
+- **Magnetic Seam Flash**: A brief neon flash effect appears exactly on the seam when two windows magnetically snap together.
+- **Theater Spotlight**: A soft, circular vignette shadow follows your active window like a stage spotlight, dimming the rest of the screen.
+- **Fly-to-Mouse Minimize**: Minimized windows spin and vacuum directly into your mouse cursor instead of dropping to the taskbar.
+- **Window Unrolling**: New windows unroll from top to bottom like a window blind in 0.2 seconds.
+
+**Productivity & Window Management:**
+- **Transparency Control**: `Win + Ctrl + Wheel` to adjust the opacity of any active window.
+- **Cinema / Focus Mode**: `Win + Ctrl + F` to black out the entire background, keeping only the active window visible.
+- **Window Shade / Roll-Up**: Middle-click a window to roll it up (collapse to just the title bar), middle-click to restore.
+- **Minimize to Tray**: Add a tray icon for any active window to declutter your taskbar.
+- **Boss Key**: `Win + Ctrl + Esc` to instantly hide all windows and mute system audio. Press again to restore.
+- **Linux-Style Alt-Drag**: Hold `Alt + LeftClick` anywhere on a window to move it, or `Alt + RightClick` anywhere to resize it from the nearest edge.
+- **Taskbar Volume Scroll**: Hover over the taskbar and scroll the mouse wheel to adjust volume, or middle-click to mute.
+- **Quick Folder Jump**: Press `Ctrl + G` in any File Save/Open dialog to instantly jump to the folder of your most recently active Explorer window.
+- **Global Plain-Text Paste**: `Ctrl + Win + V` strips all formatting, colors, and fonts from your clipboard and pastes as pure plain text anywhere.
+- **Smart Caps Lock**: Tap CapsLock to send `Escape` (or `Backspace`), hold it for 0.4 seconds to actually toggle CapsLock on/off.
 
 ### Two traps in this area
 
@@ -102,7 +152,7 @@ Re-run `test-snap.ahk` after Windows updates — the geometry assumptions are OS
 - **`DWMWA_CLOAKED` (attr 14)** filters UWP-suspended and other-virtual-desktop windows; `WS_VISIBLE` alone does not catch them.
 - **`SetWindowPos` lies on `Shell_TrayWnd`.** The primary taskbar clamps its own size inside `WM_WINDOWPOSCHANGING`, which runs synchronously *inside* `SetWindowPos` — the call returns TRUE and the rect never changes. Always verify by re-reading `GetWindowRect` (`TaskbarCore.ahk:198-206`). Secondary bars have no such handler.
 - **`SetWindowRgn` bypasses that clamp** (a region is not a size change), but the shell recomputes the work area from its appbar registration and reverts `SPI_SETWORKAREA` within ~100 ms, leaving a dead strip. This is why "Crop primary" ships off.
-- **Position memory is keyed on exe + window class**, and excludes owned/tool/non-resizable windows — every Chrome popup shares a class with the main window.
+- **Position memory is keyed on exe + window class**, and excludes owned/tool/non-resizable and Picture-in-Picture windows — every Chrome popup shares a class with the main window.
 - New windows are detected via `RegisterShellHookWindow`, not polling. The only timer is a 3-second taskbar check.
 
 ### Runtime files
@@ -128,6 +178,12 @@ Three traps, all of which have cost real debugging time:
 - **Keep `.ahk` files pure ASCII, no BOM.** AutoHotkey reads a BOM-less file in the system codepage, so smart quotes and dashes become mojibake in the UI on other machines.
 
 Conventions: section banners `; ====== Name ======`; predicates named `Is*`; tuning constants SCREAMING_SNAKE, mutable feature flags PascalCase; bare `try { }` with no catch as "best effort, never crash", with validation done by clamping afterwards. Comments explain *why* — almost every one records a measured OS behaviour.
+
+### Defensive Programming & Quality Guidelines
+When adding new features or modifying the code, AI agents must strictly adhere to the following principles to prevent edge-case bugs:
+1. **Defensive Code**: Always anticipate sudden window closures, missing HWNDs, and empty Maps/Arrays. Rely heavily on `try / catch`, `Map.Has()`, and `DllCall("IsWindow", "ptr", hwnd)` checks before interacting with windows.
+2. **Simple and Robust Logic**: Avoid complex mathematical animations or heavy `Loop`s that can cause instability. Prioritize readable, highly stable code over overly complicated transitions.
+3. **Non-Destructive Integration**: New features must be written in an isolated, modular way. Ensure minimal interference with the core architecture and existing hooks.
 
 ## Constraints
 

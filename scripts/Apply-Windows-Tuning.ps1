@@ -13,8 +13,14 @@
     Nothing here disables Windows Update, Defender, or any security feature.
 
 .PARAMETER Animations
-    Fluid window animations, Fluent transparency, and the one setting the ice
-    glide genuinely requires (Show window contents while dragging).
+    Fluid window animations, Fluent transparency, shadows, the translucent
+    selection rectangle, and the one setting the ice glide genuinely requires
+    (Show window contents while dragging).
+
+.PARAMETER MinimalAnimations
+    Only the essentials: Show window contents while dragging, the menu and
+    taskbar-preview delay removals, the caret, and minimise/maximise animation.
+    Skips the decorative effects that -Animations turns on.
 
 .PARAMETER Explorer
     Explorer responsiveness: open to This PC, run folder windows in a separate
@@ -45,6 +51,7 @@ if (-not (Test-Path $backupDir)) { New-Item -ItemType Directory -Path $backupDir
 $backupFile = Join-Path $backupDir 'tuning-backup.json'
 
 $PATH_DESKTOP  = 'HKCU:\Control Panel\Desktop'
+$PATH_MOUSE    = 'HKCU:\Control Panel\Mouse'
 $PATH_METRICS  = 'HKCU:\Control Panel\Desktop\WindowMetrics'
 $PATH_ADVANCED = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
 $PATH_EXPLORER = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer'
@@ -63,6 +70,24 @@ function Get-Value($path, $name) {
 
 function Say($msg, $colour = 'Green') { Write-Host "  $msg" -ForegroundColor $colour }
 
+# Explorer\Advanced values are read once at shell start. Without this nudge the
+# change is real in the registry but invisible until the next sign-out, which
+# reads as "the script did nothing".
+function Update-Explorer {
+    if (-not ('WtShell' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class WtShell {
+  [DllImport("shell32.dll")]
+  public static extern void SHChangeNotify(int eventId, uint flags, IntPtr a, IntPtr b);
+}
+'@
+    }
+    # SHCNE_ASSOCCHANGED, SHCNF_IDLIST
+    [WtShell]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
+}
+
 Write-Host "`nWindow Tweaks - Windows tuning" -ForegroundColor Cyan
 Write-Host "HKCU only. Reversible with Restore-Windows-Tuning.ps1.`n" -ForegroundColor DarkGray
 
@@ -75,11 +100,21 @@ if (Test-Path $backupFile) {
     Say "tuning-backup.json exists in scripts folder - keeping your original values" 'DarkGray'
 } else {
     $mask = Get-Value $PATH_DESKTOP 'UserPreferencesMask'
+    # -not ($mask) would be TRUE for a one-byte 0x00 mask, recording $null and
+    # making the animations permanently unrestorable. Test length, not truth.
+    $maskText = $null
+    if ($null -ne $mask -and $mask.Length -gt 0) {
+        $maskText = ($mask | ForEach-Object { $_.ToString('X2') }) -join ' '
+    }
     $backup = [ordered]@{
         Created             = (Get-Date).ToString('s')
         Computer            = $env:COMPUTERNAME
-        UserPreferencesMask = if ($mask) { ($mask | ForEach-Object { $_.ToString('X2') }) -join ' ' } else { $null }
+        UserPreferencesMask = $maskText
         DragFullWindows     = Get-Value $PATH_DESKTOP  'DragFullWindows'
+        MenuShowDelay       = Get-Value $PATH_DESKTOP  'MenuShowDelay'
+        MouseHoverTime      = Get-Value $PATH_MOUSE    'MouseHoverTime'
+        CaretWidth          = Get-Value $PATH_DESKTOP  'CaretWidth'
+        CursorBlinkRate     = Get-Value $PATH_DESKTOP  'CursorBlinkRate'
         MinAnimate          = Get-Value $PATH_METRICS  'MinAnimate'
         EnableTransparency  = Get-Value $PATH_PERSONAL 'EnableTransparency'
         TaskbarAnimations   = Get-Value $PATH_ADVANCED 'TaskbarAnimations'
@@ -103,7 +138,13 @@ if ($Animations -or $MinimalAnimations) {
     # The one setting the ice glide genuinely requires. With it off, Windows
     # drags a hollow outline and you would never see the slide.
     Set-Tuning $PATH_DESKTOP 'DragFullWindows' '1' 'String'
-    Say "Show window contents while dragging  (REQUIRED by the glide)"
+
+    Set-Tuning $PATH_DESKTOP 'MenuShowDelay' '50' 'String'
+    Set-Tuning $PATH_MOUSE   'MouseHoverTime' '100' 'String'
+    Set-Tuning $PATH_DESKTOP 'CaretWidth' 3 'DWord'
+    Set-Tuning $PATH_DESKTOP 'CursorBlinkRate' '-1' 'String'
+    Say "Eliminate artificial menu and taskbar preview opening delays"
+    Say "Set text cursor (caret) to 3px wide and solid (no blink)"
 
     # Use the documented API rather than hand-editing UserPreferencesMask, so
     # Windows recalculates its own mask and applies it without a sign-out.
@@ -124,48 +165,71 @@ public class WtSpi {
     $SPIF = 3            # SPIF_UPDATEINIFILE | SPIF_SENDCHANGE
     $ON   = [IntPtr]1
 
+    # The one setting the ice glide genuinely requires. The registry write above
+    # is not enough on its own - without this call it stays inert until the next
+    # sign-out, so the headline feature is invisible for the whole session.
+    $null = [WtSpi]::SystemParametersInfo(0x0025, 1, [IntPtr]::Zero, $SPIF)
+    Say "Show window contents while dragging  (REQUIRED by the glide)"
+
     $ai = New-Object WtSpi+ANIMATIONINFO
     $ai.cbSize = 8
     $ai.iMinAnimate = 1
     $null = [WtSpi]::SystemParametersInfo(0x0049, 8, [ref]$ai, $SPIF)
     Say "Animate windows when minimizing and maximizing"
 
-    $OFF = [IntPtr]0
+    # SPI_SETCARETWIDTH takes uiParam = 0 and the width in pvParam. Passing the
+    # width as uiParam sets the caret to 0 wide, and SPIF_UPDATEINIFILE then
+    # writes that 0 straight over the CaretWidth = 3 set above.
+    $null = [WtSpi]::SystemParametersInfo(0x2007, 0, [IntPtr]3, $SPIF)
 
+    # Every constant here is the SET half of its pair, checked against the
+    # documented SPI_* values. Three of these were previously wrong and silently
+    # flipped unrelated system flags:
+    #   0x1017 is SETTOOLTIPANIMATION,  not SETMENUFADE      (0x1013)
+    #   0x104B is SETSPEECHRECOGNITION, not SETDROPSHADOW    (0x1025)
+    #   0x101D is SETMOUSESONAR,        not SETCURSORSHADOW  (0x101B)
     $effectsOn = [ordered]@{
-        'UI effects (master switch)'         = 0x103F
-        'Fade or slide menus into view'      = 0x1003
-        'Slide open combo boxes'             = 0x1005
-        'Smooth-scroll list boxes'           = 0x1007
-        'Fade out menu items after clicking' = 0x1017
+        'UI effects (master switch)'         = 0x103F   # SPI_SETUIEFFECTS
+        'Fade or slide menus into view'      = 0x1003   # SPI_SETMENUANIMATION
+        'Slide open combo boxes'             = 0x1005   # SPI_SETCOMBOBOXANIMATION
+        'Smooth-scroll list boxes'           = 0x1007   # SPI_SETLISTBOXSMOOTHSCROLLING
+        'Fade out menu items after clicking' = 0x1013   # SPI_SETMENUFADE
+        'Selection fade'                     = 0x1015   # SPI_SETSELECTIONFADE
+        'Fade or slide ToolTips into view'   = 0x1019   # SPI_SETTOOLTIPFADE
+        'Show shadows under mouse pointer'   = 0x101B   # SPI_SETCURSORSHADOW
+        'Show shadows under windows'         = 0x1025   # SPI_SETDROPSHADOW
+        'Animate controls inside windows'    = 0x1043   # SPI_SETCLIENTAREAANIMATION
     }
 
-    $effectsOff = [ordered]@{
-        'Selection fade'                     = 0x1015
-        'Animate controls inside windows'    = 0x1043
-        'Show shadows under windows'         = 0x104B
-        'Fade or slide ToolTips into view'   = 0x1019
-        'Show shadows under mouse pointer'   = 0x101D
-    }
-    
-    foreach ($name in $effectsOn.Keys) {
-        $null = [WtSpi]::SystemParametersInfo($effectsOn[$name], 0, $ON, $SPIF)
-        Say $name
-    }
+    # -MinimalAnimations stops here: the glide dependency, the delay removals,
+    # the caret, and minimise/maximise animation. Everything past this point is
+    # decoration, which is exactly what "minimal" is asking to skip. (These two
+    # switches used to run identical code despite the docs promising otherwise.)
+    if ($MinimalAnimations -and -not $Animations) {
+        Say "Minimal: skipped the decorative effects" 'DarkGray'
+        Update-Explorer
+    } else {
+        foreach ($name in $effectsOn.Keys) {
+            $null = [WtSpi]::SystemParametersInfo($effectsOn[$name], 0, $ON, $SPIF)
+            Say $name
+        }
 
-    foreach ($name in $effectsOff.Keys) {
-        $null = [WtSpi]::SystemParametersInfo($effectsOff[$name], 0, $OFF, $SPIF)
+        Set-Tuning $PATH_ADVANCED 'TaskbarAnimations'   1 'DWord'
+        Say "Taskbar animations"
+
+        # The Performance Options checkboxes. All ON: this script is named for
+        # animations and its own help promises Fluent transparency.
+        # ListviewAlphaSelect is "Show translucent selection rectangle", the
+        # Explorer marquee. It must stay enabled.
+        Set-Tuning $PATH_ADVANCED 'ListviewAlphaSelect' 1 'DWord'
+        Set-Tuning $PATH_ADVANCED 'ListviewShadow'      1 'DWord'
+        Set-Tuning $PATH_PERSONAL 'EnableTransparency'  1 'DWord'
+        Set-Tuning $PATH_DWM      'EnableAeroPeek'      1 'DWord'
+        Say "Translucent selection rectangle, icon label shadows, transparency, Aero Peek"
+
+        Update-Explorer
+        Write-Host "  Some of these settle fully only after an Explorer restart." -ForegroundColor DarkGray
     }
-    Say "Disabled other visual effects (shadows, selection fade, etc.)" 'DarkGray'
-
-    Set-Tuning $PATH_ADVANCED 'TaskbarAnimations'   1 'DWord'
-    Say "Taskbar animations"
-
-    Set-Tuning $PATH_ADVANCED 'ListviewAlphaSelect' 0 'DWord'
-    Set-Tuning $PATH_ADVANCED 'ListviewShadow'      0 'DWord'
-    Set-Tuning $PATH_PERSONAL 'EnableTransparency'  0 'DWord'
-    Set-Tuning $PATH_DWM      'EnableAeroPeek'      0 'DWord'
-    Say "Disabled heavy UI features (Transparency, Shadows, Aero peek, Alpha select)" 'DarkGray'
 }
 
 # -------------------------------------------------------------- explorer ----
@@ -178,7 +242,8 @@ if ($Explorer) {
     Say "Open File Explorer to This PC"
     Say "Run folder windows in a separate process (one hang can't freeze the shell)"
     Say "Stop Quick Access probing recent and frequent files"
-    Write-Host "  Sign out and back in for these three to take effect." -ForegroundColor DarkGray
+    Update-Explorer
+    Write-Host "  Restart Explorer or sign out for these four to take effect." -ForegroundColor DarkGray
 }
 
 # --------------------------------------------------------------- notices ----
