@@ -97,7 +97,7 @@ if ($epInstalled) {
                 Say "Downloading $($asset.name)..." 'DarkGray'
                 Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $epSetup -ErrorAction Stop
                 Say "Installing ExplorerPatcher (Please accept the UAC prompt if it appears)..." 'Yellow'
-                $proc = Start-Process -FilePath $epSetup -ArgumentList "/quiet" -Wait -Verb RunAs -PassThru
+                $proc = Start-Process -FilePath $epSetup -ArgumentList "/quiet" -Wait -PassThru
                 if ($proc.ExitCode -eq 0) {
                     Say "ExplorerPatcher installed successfully." 'Green'
                 } else {
@@ -118,7 +118,7 @@ $regFiles = Get-ChildItem -Path "$repo\PatcherSettings\ExplorerPatcher*.reg" -Er
 if ($regFiles) {
     $regFile = $regFiles | Select-Object -First 1
     Say "Applying settings from $($regFile.Name)..." 'Yellow'
-    $regProc = Start-Process reg.exe -ArgumentList "import `"$($regFile.FullName)`"" -Wait -WindowStyle Hidden -Verb RunAs -PassThru
+    $regProc = Start-Process reg.exe -ArgumentList "import `"$($regFile.FullName)`"" -Wait -WindowStyle Hidden -PassThru
     if ($regProc.ExitCode -eq 0) {
         Say "Settings applied." 'Green'
     } else {
@@ -187,6 +187,24 @@ else       { if (Test-Path $startup) { Remove-Item $startup -Force }; Say "Autos
 
 # ----------------------------------------------------------- 6. Windows ----
 Step 6 "Windows settings"
+
+if (-not ('WtSpi' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class WtSpi {
+  [DllImport("user32.dll", SetLastError=true)]
+  public static extern bool SystemParametersInfo(uint a, uint p, IntPtr v, uint w);
+  [DllImport("user32.dll", SetLastError=true)]
+  public static extern bool SystemParametersInfo(uint a, uint p, ref ANIMATIONINFO v, uint w);
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ANIMATIONINFO { public uint cbSize; public int iMinAnimate; }
+}
+'@
+}
+[WtSpi]::SystemParametersInfo(0x1025, 0, [IntPtr]::Zero, 3) | Out-Null
+Say "Disabled Windows shadow effects" 'Yellow'
+
 $drag = (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -ErrorAction SilentlyContinue).DragFullWindows
 $applyTuning = $Tuning
 
@@ -214,16 +232,6 @@ if ($applyTuning) {
     }
     Set-ItemProperty 'HKCU:\Control Panel\Desktop' 'DragFullWindows' '1' -Type String
     
-    if (-not ('WtSpi' -as [type])) {
-        Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-public class WtSpi {
-  [DllImport("user32.dll", SetLastError=true)]
-  public static extern bool SystemParametersInfo(uint a, uint p, IntPtr v, uint w);
-}
-'@
-    }
     [WtSpi]::SystemParametersInfo(0x0025, 1, [IntPtr]::Zero, 3) | Out-Null
     Say "Turned on 'Show window contents while dragging' (required) - nothing else changed" 'Yellow'
 } else {

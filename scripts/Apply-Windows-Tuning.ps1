@@ -204,8 +204,11 @@ public class WtSpi {
         'Selection fade'                     = 0x1015   # SPI_SETSELECTIONFADE
         'Fade or slide ToolTips into view'   = 0x1019   # SPI_SETTOOLTIPFADE
         'Show shadows under mouse pointer'   = 0x101B   # SPI_SETCURSORSHADOW
-        'Show shadows under windows'         = 0x1025   # SPI_SETDROPSHADOW
         'Animate controls inside windows'    = 0x1043   # SPI_SETCLIENTAREAANIMATION
+    }
+
+    $effectsOff = [ordered]@{
+        'Show shadows under windows'         = 0x1025   # SPI_SETDROPSHADOW
     }
 
     # -MinimalAnimations stops here: the glide dependency, the delay removals,
@@ -219,6 +222,10 @@ public class WtSpi {
         foreach ($name in $effectsOn.Keys) {
             $null = [WtSpi]::SystemParametersInfo($effectsOn[$name], 0, $ON, $SPIF)
             Say $name
+        }
+        foreach ($name in $effectsOff.Keys) {
+            $null = [WtSpi]::SystemParametersInfo($effectsOff[$name], 0, [IntPtr]::Zero, $SPIF)
+            Say "Disabled $name" 'Yellow'
         }
 
         Set-Tuning $PATH_ADVANCED 'TaskbarAnimations'   1 'DWord'

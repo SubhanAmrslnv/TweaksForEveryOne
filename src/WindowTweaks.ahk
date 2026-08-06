@@ -41,6 +41,8 @@ global CORNER_BOOST   := 2.2
 global NEIGHBOUR_PROX := 90
 global MIN_DRAG       := 4
 global MAX_LOG_BYTES  := 262144
+global LOG_FLUSH_BYTES := 16384
+global LogBuf         := ""
 global DEBUG          := true
 
 ; How long a window must go untouched before breathing dims it. MediaCore's hold
@@ -111,6 +113,7 @@ global EP_ICON_SIZES  := ["Small", "Large"]
 
 global Win := "", Pages := Map(), NavItems := Map(), CurPage := ""
 global C := Map()
+global IniCache := Map()
 
 LoadSettings()
 RotateLog()
@@ -241,7 +244,6 @@ LoadSettings() {
 ; in the settings window, and every toggle hotkey, so Win+Ctrl+S used to stall the
 ; whole process for 35 ms. A toggle changes exactly one key; writing only that one
 ; costs 0.8 ms, and SaveSettings() no longer writes at all - it queues.
-global IniCache := Map()
 
 PutIni(value, section, key) {
     global INI, IniCache
@@ -352,9 +354,6 @@ RotateLog() {
 ; A held file handle would be faster still, but it keeps the file locked and
 ; leaves the tail unflushed for "Open log"; buffering keeps both, and adds no
 ; permanent handle.
-global LogBuf := ""
-global LOG_FLUSH_BYTES := 16384        ; hard cap so a burst cannot grow forever
-
 WriteLog(s) {
     global DEBUG, LogBuf, LOG_FLUSH_BYTES
     if !DEBUG
@@ -422,7 +421,7 @@ BuildTray() {
 }
 
 SyncTray() {
-    global SnapEnabled, RestoreEnabled
+    global SnapEnabled, RestoreEnabled, BreathingEnabled
     try SnapEnabled ? A_TrayMenu.Check("Magnetic snap`tWin+Ctrl+S")
                     : A_TrayMenu.Uncheck("Magnetic snap`tWin+Ctrl+S")
     try RestoreEnabled ? A_TrayMenu.Check("Position memory`tWin+Ctrl+M")
@@ -1157,18 +1156,18 @@ GetActiveExplorerPath() {
     res := 0
     DllCall("SendMessageTimeout", "ptr", hwnd, "uint", 0x84, "ptr", 0, "ptr", lp, "uint", 2, "uint", 50, "ptr*", &res)
     
-    if (res == 2) {
-        if (MiddleClickCloseEnabled) {
-            try WinClose("ahk_id " hwnd)
-            return
-        }
-        if (RollUpEnabled) {
-            ToggleRollUp(hwnd)
-            return
-        }
-    }
-    
     if (!GrabPanEnabled) {
+        if (res == 2) {
+            KeyWait("MButton")
+            if (MiddleClickCloseEnabled) {
+                try WinClose("ahk_id " hwnd)
+                return
+            }
+            if (RollUpEnabled) {
+                ToggleRollUp(hwnd)
+                return
+            }
+        }
         Send("{Blind}{MButton Down}")
         KeyWait("MButton")
         Send("{Blind}{MButton Up}")
@@ -1219,6 +1218,16 @@ GetActiveExplorerPath() {
     busy := false
 
     if (!dragged) {
+        if (res == 2) {
+            if (MiddleClickCloseEnabled) {
+                try WinClose("ahk_id " hwnd)
+                return
+            }
+            if (RollUpEnabled) {
+                ToggleRollUp(hwnd)
+                return
+            }
+        }
         Send("{Blind}{MButton}")
     }
 }
@@ -1363,6 +1372,11 @@ AltDragMove() {
     if !hwnd || !IsRestorable(hwnd)
         return
 
+    CancelAnimation("Glide_" hwnd)
+    CancelAnimation("Bounce_" hwnd)
+    CancelAnimation("GhostSlideIn_" hwnd)
+    CancelAnimation("Unroll_" hwnd)
+
     try {
         if WinGetMinMax(hwnd) != 0
             return
@@ -1388,7 +1402,8 @@ AltDragMove() {
                 vX := nX - mX
                 vY := nY - mY
 
-                if ParallaxEnabled {
+                global GhostWindows
+                if (ParallaxEnabled && !GhostWindows.Has(hwnd)) {
                     vel := Sqrt(vX**2 + vY**2)
                     alpha := 255 - Round(vel * 3)
                     if (alpha < 100)
@@ -1407,7 +1422,7 @@ AltDragMove() {
                 RS_Commit()
             } else {
                 vX := 0, vY := 0
-                if ParallaxEnabled
+                if (ParallaxEnabled && !GhostWindows.Has(hwnd))
                     RS_SetAlpha(hwnd, 255, RS_PRI_DRAG)
             }
             ; Sleep, not PreciseSleep: this yields, so the frame loop keeps
@@ -1417,7 +1432,7 @@ AltDragMove() {
     }
     busy := false
 
-    if ParallaxEnabled {
+    if (ParallaxEnabled && !GhostWindows.Has(hwnd)) {
         RS_SetAlpha(hwnd, "Off", RS_PRI_DRAG)
         RS_Commit()
     }
@@ -2075,8 +2090,14 @@ ZOrderSpotlight() {
     if !FocusTargetHwnd || !DllCall("IsWindow", "ptr", FocusTargetHwnd)
         return
         
+    isTopmost := 0
+    try isTopmost := WinGetExStyle(FocusTargetHwnd) & 0x8
     prevHwnd := FocusTargetHwnd
     for layer in FocusGuis {
+        if (isTopmost)
+            WinSetExStyle("+0x8", layer.gui.Hwnd)
+        else
+            WinSetExStyle("-0x8", layer.gui.Hwnd)
         try RS_SetZOrder(layer.gui.Hwnd, prevHwnd, 0x0013, RS_PRI_ANIM)
         prevHwnd := layer.gui.Hwnd
     }
@@ -2321,6 +2342,11 @@ WinEvent(hook, event, hwnd, idObject, idChild, thread, time) {
             return
         if !GetRects(hwnd, &sL, &sT, &sR, &sB, &sx, &sy)
             return
+        CancelAnimation("Glide_" hwnd)
+        CancelAnimation("Bounce_" hwnd)
+        CancelAnimation("GhostSlideIn_" hwnd)
+        CancelAnimation("Unroll_" hwnd)
+
         DragHwnd := hwnd, DragL := sL, DragT := sT, DragR := sR, DragB := sB
         VelX := 0, VelY := 0, PrevX := sL, PrevY := sT
         CurrentDragAlpha := 255
@@ -2350,7 +2376,8 @@ SampleVelocityStep(dt, now) {
     VelY := VelY * 0.6 + (T - PrevY) * 0.4
     PrevX := L, PrevY := T
     
-    if (ParallaxEnabled) {
+    global GhostWindows
+    if (ParallaxEnabled && !GhostWindows.Has(DragHwnd)) {
         speed := Sqrt(VelX * VelX + VelY * VelY)
         targetAlpha := Clamp(Round(255 - (speed * 4)), 60, 255)
         
@@ -2383,12 +2410,12 @@ FinishDrag(hwnd, startL, startT, startR, startB) {
         return
     }
 
-    if (ParallaxEnabled)
+    global GhostWindows
+    if (ParallaxEnabled && !GhostWindows.Has(hwnd))
         StartFadeBackAlpha(hwnd, CurrentDragAlpha)
 
     WriteLog(Format("drag end hwnd={1} frame L={2} T={3} R={4} B={5}", hwnd, eL, eT, eR, eB))
     SnapWindow(hwnd, eL, eT, eR, eB, ex, ey)
-    RememberPosition(hwnd)
 }
 
 StartFadeBackAlpha(hwnd, startA) {
@@ -2424,10 +2451,6 @@ SnapWindow(hwnd, L, T, R, B, winX, winY) {
     global SnapEnabled, SNAP_DISTANCE, CORNER_BOOST, NEIGHBOUR_PROX
     global GlideEnabled, GLIDE_THROW, GLIDE_MAX, VelX, VelY
 
-    if !SnapEnabled {
-        return
-    }
-
     ; Carry the release speed forward, so a flick keeps travelling instead of
     ; stopping dead where you let go.
     tx := 0, ty := 0
@@ -2438,13 +2461,19 @@ SnapWindow(hwnd, L, T, R, B, winX, winY) {
     pL := L + tx, pT := T + ty, pR := R + tx, pB := B + ty
     KeepOnScreen(hwnd, &pL, &pT, &pR, &pB, tx, ty)
 
-    ; Snap is judged from where the throw would land, not where you let go.
-    CollectEdges(hwnd, pL, pT, pR, pB, &vLines, &hLines, NEIGHBOUR_PROX)
-    if !ComputeSnap(pL, pT, pR, pB, vLines, hLines, SNAP_DISTANCE, &newL, &newT, CORNER_BOOST)
+    if (SnapEnabled) {
+        ; Snap is judged from where the throw would land, not where you let go.
+        CollectEdges(hwnd, pL, pT, pR, pB, &vLines, &hLines, NEIGHBOUR_PROX)
+        if !ComputeSnap(pL, pT, pR, pB, vLines, hLines, SNAP_DISTANCE, &newL, &newT, CORNER_BOOST)
+            newL := pL, newT := pT
+    } else {
         newL := pL, newT := pT
+    }
 
-    if (newL = L && newT = T)
+    if (newL = L && newT = T) {
+        RememberPosition(hwnd)
         return
+    }
 
     ; Frame space -> WinMove space; they differ by the invisible DWM border.
     destX := winX + (newL - L)
@@ -2548,6 +2577,7 @@ OnSnapLanded(hwnd, destX, destY, crashX, crashY, seams) {
         return
     try {
         WinGetPos(, , &w, &h, hwnd)
+        RememberPosition(hwnd, destX, destY, w, h)
         BounceSqueeze(hwnd, destX, destY, w, h, crashX, crashY)
     }
 }
@@ -2559,7 +2589,7 @@ VerifySnap(hwnd, newL, newT) {
     global ActiveAnimations
     if !DllCall("IsWindow", "ptr", hwnd)
         return
-    if ActiveAnimations.Has("Glide_" hwnd)
+    if ActiveAnimations.Has("Glide_" hwnd) || ActiveAnimations.Has("Bounce_" hwnd)
         return
     if !GetRects(hwnd, &vL, &vT, &vR, &vB, &vx, &vy)
         return
@@ -2827,7 +2857,7 @@ WindowKey(hwnd) {
     return SubStr(RegExReplace(exe "_" cls, "[^A-Za-z0-9_]", ""), 1, 80)
 }
 
-RememberPosition(hwnd) {
+RememberPosition(hwnd, forceX := "", forceY := "", forceW := "", forceH := "") {
     global POS_FILE, RestoreEnabled
     if (!RestoreEnabled || !IsRestorable(hwnd))
         return
@@ -2836,6 +2866,10 @@ RememberPosition(hwnd) {
         return
     try {
         WinGetPos(&x, &y, &w, &h, hwnd)
+        if (forceX != "")
+            x := forceX, y := forceY
+        if (forceW != "")
+            w := forceW, h := forceH
         IniWrite(x, POS_FILE, key, "x")
         IniWrite(y, POS_FILE, key, "y")
         IniWrite(w, POS_FILE, key, "w")
@@ -2865,7 +2899,8 @@ TaskbarCreated(*) {
     WriteLog("explorer restarted - shell hook re-registered (" (ok ? "ok" : "FAILED") ")")
     ; The taskbar we recorded the auto-hide state of no longer exists.
     global SmartTaskbarEnabled, OriginalTaskbarState
-    OriginalTaskbarState := GetTaskbarState()
+    if (OriginalTaskbarState == -1)
+        OriginalTaskbarState := GetTaskbarState()
     if SmartTaskbarEnabled
         SyncSmartTaskbar()
 }
@@ -3050,6 +3085,7 @@ RestorePosition(hwnd) {
         RS_SetPos(hwnd, rx, ry, rw, rh, RS_PRI_USER)
         RS_Commit()
         WriteLog("restored " key " -> " rx "," ry " " rw "x" rh)
+        return {x: rx, y: ry, w: rw, h: rh}
     }
 }
 
@@ -3066,7 +3102,7 @@ HandleNewWindow(hwnd) {
         return
     }
 
-    RestorePosition(hwnd)
+    restoredRect := RestorePosition(hwnd)
 
     if !isHidden
         return
@@ -3075,9 +3111,9 @@ HandleNewWindow(hwnd) {
     ; closed or restyled since we hid it.
     if (OpenAnim != "None" && WillAnimateOpen(hwnd)) {
         if (OpenAnim == "Ghost Slide-In")
-            GhostSlideIn(hwnd)
+            GhostSlideIn(hwnd, restoredRect)
         else if (OpenAnim == "Window Unrolling")
-            UnrollWindow(hwnd)
+            UnrollWindow(hwnd, restoredRect)
         ; Belt and braces: if the animation callback dies before its final
         ; "Off", this un-hides the window anyway. A window we made invisible
         ; must never be able to stay that way.
@@ -3099,11 +3135,15 @@ RevealWindow(hwnd) {
     RS_Commit()
 }
 
-UnrollWindow(hwnd) {
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    catch {
-        RevealWindow(hwnd)
-        return
+UnrollWindow(hwnd, restoredRect := "") {
+    if (IsObject(restoredRect) && restoredRect.HasOwnProp("w")) {
+        x := restoredRect.x, y := restoredRect.y, w := restoredRect.w, h := restoredRect.h
+    } else {
+        try WinGetPos(&x, &y, &w, &h, hwnd)
+        catch {
+            RevealWindow(hwnd)
+            return
+        }
     }
     if (w = 0 || h = 0) {
         RevealWindow(hwnd)
@@ -3141,11 +3181,15 @@ UnrollWindow(hwnd) {
     RegisterAnimation(animKey, UnrollStep)
 }
 
-GhostSlideIn(hwnd) {
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    catch {
-        RevealWindow(hwnd)
-        return
+GhostSlideIn(hwnd, restoredRect := "") {
+    if (IsObject(restoredRect) && restoredRect.HasOwnProp("w")) {
+        x := restoredRect.x, y := restoredRect.y, w := restoredRect.w, h := restoredRect.h
+    } else {
+        try WinGetPos(&x, &y, &w, &h, hwnd)
+        catch {
+            RevealWindow(hwnd)
+            return
+        }
     }
     if (w = 0 || h = 0) {
         RevealWindow(hwnd)
@@ -3157,6 +3201,7 @@ GhostSlideIn(hwnd) {
     endY := y
     
     MoveFast(hwnd, x, startY)
+    RS_Commit()
     
     animKey := "GhostSlideIn_" hwnd
     CancelAnimation(animKey)
@@ -3629,6 +3674,9 @@ HotCornersMonitorStep() {
         return
 
     try {
+        if (GetKeyState("LButton", "P") || GetKeyState("RButton", "P") || GetKeyState("MButton", "P"))
+            return
+            
         MouseGetPos(&mx, &my)
 
         g := ScreenMetrics()
@@ -3721,6 +3769,7 @@ ShowVolumeOSD(vol, isMuted) {
         ; at the same coordinates, which reads as a flicker. The shared fade key
         ; cancels the outgoing fade, and OsdFadeIn brings this one back.
         UpdateOSD(vol, isMuted)
+        try WinSetAlwaysOnTop(1, OsdGui.Hwnd)
         if OsdHiding {
             OsdHiding := false
             try FadeGui(OsdGui, 220)
@@ -3745,6 +3794,7 @@ ShowVolumeOSD(vol, isMuted) {
             OsdGui.AddText("vBar x115 y29 w" w " h6 BackgroundFFFFFF")
             
             OsdGui.Show("NoActivate w280 h64")
+            try WinSetAlwaysOnTop(1, OsdGui.Hwnd)
             RS_SetRegion(OsdGui.Hwnd, "0-0 w280 h64 r20-20", RS_PRI_ANIM)
             
             MonitorGet(1, &L, &T, &R, &B)
@@ -3914,12 +3964,21 @@ TogglePiP() {
 PipGuiResize(guiObj, minMax, width, height) {
     if !guiObj.HasProp("ThumbId")
         return
+        
+    alpha := 255
+    try {
+        a := WinGetTransparent(guiObj.Hwnd)
+        if (a != "")
+            alpha := a
+    }
+
     props := Buffer(48, 0)
-    NumPut("UInt", 0x19, props, 0) 
+    NumPut("UInt", 0x1D, props, 0) ; 0x19 | 0x04 = 0x1D
     NumPut("Int", 0, props, 4)
     NumPut("Int", 0, props, 8)
     NumPut("Int", width, props, 12)
     NumPut("Int", height, props, 16)
+    NumPut("UChar", alpha, props, 36)
     NumPut("Int", 1, props, 40)
     NumPut("Int", 1, props, 44)
     DllCall("dwmapi\DwmUpdateThumbnailProperties", "ptr", guiObj.ThumbId, "ptr", props)
@@ -3939,8 +3998,23 @@ PiPMonitorStep() {
     }
 
     for srcHwnd, pipGui in PipGuis.Clone() {
-        if !DllCall("IsWindow", "ptr", srcHwnd)
+        if !DllCall("IsWindow", "ptr", srcHwnd) {
             ClosePiP(srcHwnd)
+            continue
+        }
+        
+        try {
+            alpha := WinGetTransparent(pipGui.Hwnd)
+            if (alpha == "")
+                alpha := 255
+            if (!pipGui.HasProp("LastAlpha") || pipGui.LastAlpha != alpha) {
+                pipGui.LastAlpha := alpha
+                props := Buffer(48, 0)
+                NumPut("UInt", 0x04, props, 0)
+                NumPut("UChar", alpha, props, 36)
+                DllCall("dwmapi\DwmUpdateThumbnailProperties", "ptr", pipGui.ThumbId, "ptr", props)
+            }
+        }
     }
 }
 
@@ -4162,23 +4236,23 @@ GetAccentColor() {
 SyncActiveBorderTimer() {
     global ActiveBorderEnabled
     if (ActiveBorderEnabled)
-        SetTimer(ActiveBorderMonitorStep, 50)
+        RegisterAnimation("ActiveBorder", ActiveBorderMonitorStep)
     else {
-        SetTimer(ActiveBorderMonitorStep, 0)
+        CancelAnimation("ActiveBorder")
         DestroyActiveBorder()
     }
 }
 SyncActiveBorderTimer()
 
-ActiveBorderMonitorStep() {
+ActiveBorderMonitorStep(dt:=0, now:=0) {
     global ActiveBorderEnabled, LastBorderHwnd, LastBorderX, LastBorderY, LastBorderW, LastBorderH
     if (!ActiveBorderEnabled)
-        return
+        return false
         
     hwnd := WinExist("A")
     if (!hwnd) {
         HideActiveBorder()
-        return
+        return true
     }
     
     ; Guarded, like IsMouseOverTaskbar: this runs 20 times a second on whatever
@@ -4191,50 +4265,57 @@ ActiveBorderMonitorStep() {
         style := WinGetStyle(hwnd)
     } catch {
         HideActiveBorder()
-        return
+        return true
     }
 
     if (cls = "WorkerW" || cls = "Progman" || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd" || cls = "AutoHotkeyGUI") {
         HideActiveBorder()
-        return
+        return true
     }
 
     if (!(style & 0x10000000) || (style & 0x01000000) || (style & 0x20000000)) { ; Not visible OR Maximized OR Minimized
         HideActiveBorder()
-        return
+        return true
     }
 
 
-    rect := Buffer(16, 0)
-    hr := DllCall("dwmapi\DwmGetWindowAttribute", "ptr", hwnd, "uint", 9, "ptr", rect, "uint", 16)
-    if (hr == 0) {
-        X := NumGet(rect, 0, "Int")
-        Y := NumGet(rect, 4, "Int")
-        R := NumGet(rect, 8, "Int")
-        B := NumGet(rect, 12, "Int")
-        W := R - X
-        H := B - Y
+    global RS_Pos
+    if RS_Pos.Has(hwnd) {
+        info := RS_Pos[hwnd]
+        X := info.x, Y := info.y, W := info.w, H := info.h
     } else {
-        try WinGetPos(&X, &Y, &W, &H, hwnd)
-        catch {
-            HideActiveBorder()
-            return
+        rect := Buffer(16, 0)
+        hr := DllCall("dwmapi\DwmGetWindowAttribute", "ptr", hwnd, "uint", 9, "ptr", rect, "uint", 16)
+        if (hr == 0) {
+            X := NumGet(rect, 0, "Int")
+            Y := NumGet(rect, 4, "Int")
+            R := NumGet(rect, 8, "Int")
+            B := NumGet(rect, 12, "Int")
+            W := R - X
+            H := B - Y
+        } else {
+            try WinGetPos(&X, &Y, &W, &H, hwnd)
+            catch {
+                HideActiveBorder()
+                return true
+            }
         }
     }
     
     if (W < 50 || H < 50) {
         HideActiveBorder()
-        return
+        return true
     }
     
     SizeChanged := (W != LastBorderW || H != LastBorderH)
     if (hwnd == LastBorderHwnd && X == LastBorderX && Y == LastBorderY && !SizeChanged)
-        return
+        return true
         
     LastBorderHwnd := hwnd
     LastBorderX := X, LastBorderY := Y, LastBorderW := W, LastBorderH := H
     
     DrawActiveBorder(X, Y, W, H, SizeChanged)
+    return true
 }
 
 global ActiveBorderShown := false
@@ -4554,6 +4635,7 @@ GhostMonitorStep() {
             
             if (!info.HasProp("lastAlpha") || info.lastAlpha != targetAlpha) {
                 RS_SetAlpha(hwnd, targetAlpha, RS_PRI_AMBIENT)
+                RS_Commit()
                 info.lastAlpha := targetAlpha
             }
 
@@ -4596,7 +4678,7 @@ Bye(*) {
     try StopScheduler()
     try SetTimer(BreathingMonitorStep, 0)
     try SetTimer(GhostMonitorStep, 0)
-    try SetTimer(ActiveBorderMonitorStep, 0)
+    CancelAnimation("ActiveBorder")
     try SetTimer(MonitorDimmerTickStep, 0)
     try SetTimer(SmartTaskbarMonitorStep, 0)
     try SetTimer(HotCornersMonitorStep, 0)
@@ -4675,6 +4757,7 @@ Bye(*) {
     for hwnd, info in BottomWindows.Clone()
         try RestoreFromBottom(hwnd)
 
+    RS_Commit()
     RS_Flush()
     RS_Shutdown()
 
