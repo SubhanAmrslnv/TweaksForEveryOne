@@ -2354,6 +2354,12 @@ WinEvent(hook, event, hwnd, idObject, idChild, thread, time) {
     if (!SnapEnabled && !RestoreEnabled && !ParallaxEnabled)
         return
     if (event = 0x000A) {                    ; MOVESIZESTART
+        if (DragHwnd != 0 && DragHwnd != hwnd) {
+            CancelAnimation("SampleVelocity")
+            global GhostWindows
+            if (!GhostWindows.Has(DragHwnd))
+                StartFadeBackAlpha(DragHwnd, CurrentDragAlpha)
+        }
         DragHwnd := 0
         if !IsSnappable(hwnd)
             return
@@ -2363,6 +2369,7 @@ WinEvent(hook, event, hwnd, idObject, idChild, thread, time) {
         CancelAnimation("Bounce_" hwnd)
         CancelAnimation("GhostSlideIn_" hwnd)
         CancelAnimation("Unroll_" hwnd)
+        CancelAnimation("FadeBack_" hwnd)
 
         DragHwnd := hwnd, DragL := sL, DragT := sT, DragR := sR, DragB := sB
         VelX := 0, VelY := 0, PrevX := sL, PrevY := sT
@@ -2379,7 +2386,8 @@ WinEvent(hook, event, hwnd, idObject, idChild, thread, time) {
     ; globals 50 ms later, so a second drag beginning inside that window
     ; overwrote them and this drag was measured against the wrong origin.
     sL := DragL, sT := DragT, sR := DragR, sB := DragB
-    SetTimer(() => FinishDrag(hwnd, sL, sT, sR, sB), -50)    ; defer: FinishDrag enumerates windows
+    sAlpha := CurrentDragAlpha
+    SetTimer(() => FinishDrag(hwnd, sL, sT, sR, sB, sAlpha), -50)    ; defer: FinishDrag enumerates windows
 }
 
 SampleVelocityStep(dt, now) {
@@ -2409,10 +2417,15 @@ SampleVelocityStep(dt, now) {
     return true
 }
 
-FinishDrag(hwnd, startL, startT, startR, startB) {
-    global MIN_DRAG, ParallaxEnabled, CurrentDragAlpha
+FinishDrag(hwnd, startL, startT, startR, startB, startA) {
+    global MIN_DRAG, ParallaxEnabled
     if !DllCall("IsWindow", "ptr", hwnd)
         return
+
+    global GhostWindows
+    if (!GhostWindows.Has(hwnd))
+        StartFadeBackAlpha(hwnd, startA)
+
     if !GetRects(hwnd, &eL, &eT, &eR, &eB, &ex, &ey)
         return
     if (Abs(eL - startL) < MIN_DRAG && Abs(eT - startT) < MIN_DRAG
@@ -2426,10 +2439,6 @@ FinishDrag(hwnd, startL, startT, startR, startB) {
         WriteLog("skip: window ended maximized")
         return
     }
-
-    global GhostWindows
-    if (ParallaxEnabled && !GhostWindows.Has(hwnd))
-        StartFadeBackAlpha(hwnd, CurrentDragAlpha)
 
     WriteLog(Format("drag end hwnd={1} frame L={2} T={3} R={4} B={5}", hwnd, eL, eT, eR, eB))
     SnapWindow(hwnd, eL, eT, eR, eB, ex, ey)
@@ -2874,9 +2883,93 @@ WindowKey(hwnd) {
     return SubStr(RegExReplace(exe "_" cls, "[^A-Za-z0-9_]", ""), 1, 80)
 }
 
+global WindowCmdLineCache := Map()
+
+GetProcessCommandLine(pid, hwnd) {
+    global WindowCmdLineCache
+    if WindowCmdLineCache.Has(hwnd)
+        return WindowCmdLineCache[hwnd]
+
+    cmdLine := ""
+    try {
+        for proc in ComObjGet("winmgmts:").ExecQuery("Select CommandLine from Win32_Process where ProcessId=" pid) {
+            cmdLine := proc.CommandLine
+            break
+        }
+    } catch {
+    }
+    
+    if DllCall("IsWindow", "ptr", hwnd)
+        WindowCmdLineCache[hwnd] := cmdLine
+        
+    return cmdLine
+}
+
+IsMainApplicationWindow(hwnd) {
+    return ClassifyWindowImpl(hwnd) == "Main"
+}
+
+ClassifyWindowImpl(hwnd) {
+    try {
+        if DllCall("GetWindow", "ptr", hwnd, "uint", 4, "ptr")
+            return "Transient"
+            
+        style := WinGetStyle(hwnd)
+        exStyle := WinGetExStyle(hwnd)
+        
+        if !(style & 0x00040000)
+            return "Transient"
+            
+        if !(style & 0x10000000)
+            return "Transient"
+            
+        if (style & 0x80000000)
+            return "Transient"
+            
+        if (exStyle & 0x80)
+            return "Transient"
+            
+        if IsCloaked(hwnd)
+            return "Transient"
+
+        title := WinGetTitle(hwnd)
+        
+        static transientTitles := "i)\b(Welcome|Getting Started|What's New|Tour|Introduction|Onboarding|First Run|First Launch|Tips|Tutorial|Welcome Back"
+            . "|Login|Log In|Sign In|Authentication|Authorization|Verify|Verification|Two Factor|MFA|OTP|Security Check|Account Selection|Account Picker|User Selection|Profile Selection"
+            . "|Chrome Profile Picker|Chrome Welcome|Chrome First Run|Chrome Sync|Chrome Sign In"
+            . "|Edge Profile Picker|Edge Welcome|Edge First Run|Firefox Profile Manager|Brave Welcome|Opera Welcome|Arc Onboarding"
+            . "|Setup|Installer|Installation|Configuration Wizard|Setup Wizard|InstallShield|NSIS|MSI Installer|Inno Setup"
+            . "|Updater|Updating|Downloading Update|Installing Update|Patch Installer|Version Upgrade"
+            . "|Activation|Product Activation|License Activation|Registration|Trial|Subscription Activation"
+            . "|Splash Screen|Loading|Starting|Initializing|Boot Screen"
+            . "|Profile Picker|User Picker|Folder Picker|File Picker|Color Picker|Font Picker|Emoji Picker|Device Picker|Printer Picker"
+            . "|Open File|Save File|Print|Properties|About|Preferences|Options|Settings Dialog|Warning|Information|Confirmation|Message Box"
+            . "|UAC|Permission Request|Allow Access|Administrator Prompt|Windows Security|Credential Dialog"
+            . "|Visual Studio Installer|JetBrains Toolbox|Creative Cloud Installer|Office Installer|Epic Installer|Steam Installer|Riot Installer|EA Installer"
+            . "|Steam Login|Discord Login|Slack Login|Teams Login|Zoom Login|Adobe Login|Epic Login|Battle\.net Login|Riot Login|Dropbox Login|OneDrive Login|Google Login|Apple Login"
+            . "|Progress|Copying|Downloading|Extracting|Syncing|Uploading|Connecting|Waiting|Preparing"
+            . "|Wizard|Choose Profile|Settings|Open|Save As|Account|Choose Account|Choose Workspace|Workspace Picker|Device Setup|Connection Wizard|License|Subscription)\b"
+            
+        if RegExMatch(title, transientTitles)
+            return "Transient"
+
+        pid := WinGetPID(hwnd)
+        cmdLine := GetProcessCommandLine(pid, hwnd)
+        static cmdLineArgs := "i)(--profile-picker|--first-run|--welcome|--setup|--installer|--install|--update|--updater|--repair|--activation|--login|--signin|--profile-manager)"
+        
+        if (cmdLine != "" && RegExMatch(cmdLine, cmdLineArgs))
+            return "Transient"
+
+    } catch {
+        return "Transient"
+    }
+
+    return "Main"
+}
+
 RememberPosition(hwnd, forceX := "", forceY := "", forceW := "", forceH := "") {
     global POS_FILE, RestoreEnabled
-    if (!RestoreEnabled || !IsRestorable(hwnd))
+    if (!RestoreEnabled || !IsRestorable(hwnd) || !IsMainApplicationWindow(hwnd))
         return
     key := WindowKey(hwnd)
     if (key = "")
@@ -2941,7 +3034,9 @@ ShellEvent(wParam, lParam, *) {
     
     if ((wParam & 0x7FFF) = 2) { ; HSHELL_WINDOWDESTROYED
         if (lParam) {
-            global CustomTrans, RolledUpWindows, WinTargetAlpha, WinCurrentAlpha, WinLastActive
+            global CustomTrans, RolledUpWindows, WinTargetAlpha, WinCurrentAlpha, WinLastActive, WindowCmdLineCache
+            if WindowCmdLineCache.Has(lParam)
+                WindowCmdLineCache.Delete(lParam)
             if CustomTrans.Has(lParam)
                 CustomTrans.Delete(lParam)
             if RolledUpWindows.Has(lParam)
@@ -3028,7 +3123,7 @@ RestorePosition(hwnd) {
     global RestoreEnabled, POS_FILE
     if (!RestoreEnabled || !DllCall("IsWindow", "ptr", hwnd))
         return
-    if !IsRestorable(hwnd)
+    if (!IsRestorable(hwnd) || !IsMainApplicationWindow(hwnd))
         return
     key := WindowKey(hwnd)
     if (key = "")
