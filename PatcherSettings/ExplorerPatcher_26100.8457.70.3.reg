@@ -97,7 +97,7 @@ Windows Registry Editor Version 5.00
 [HKEY_CURRENT_USER\Software\ExplorerPatcher\sws]
 "PrimaryOnly"=dword:00000000
 [HKEY_CURRENT_USER\Software\ExplorerPatcher\sws]
-"PerMonitor"=dword:00000001
+"PerMonitor"=dword:00000000
 [HKEY_CURRENT_USER\Software\ExplorerPatcher\sws]
 "SwitcherIsPerApplication"=dword:00000000
 [HKEY_CURRENT_USER\Software\ExplorerPatcher\sws]
