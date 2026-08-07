@@ -59,6 +59,7 @@ if (-not (Test-Path $dest)) {
 
 Copy-Item "$repo\src\StealthPanic.ahk" $dest -Force
 Copy-Item "$repo\src\StealthPanicUI.ahk" $dest -Force
+Copy-Item "$repo\src\StealthPanicConfig.ahk" $dest -Force
 if (Test-Path "$repo\Uninstall Stealth Panic Mode.ps1") {
     Copy-Item "$repo\Uninstall Stealth Panic Mode.ps1" $dest -Force
 }

@@ -1,11 +1,12 @@
 ; StealthPanic.ahk - Triple ESC Stealth Panic Mode Engine
 
+#Include "StealthPanicConfig.ahk"
 global StealthPanicIniPath := A_ScriptDir "\StealthPanic.ini"
 
 global StealthPanicEnabled := IniRead(StealthPanicIniPath, "stealth", "enabled", "1") == "1"
 global StealthPanicTimeout := Number(IniRead(StealthPanicIniPath, "stealth", "timeout", "600"))
 global StealthLaunchSafeApps := IniRead(StealthPanicIniPath, "stealth", "launchapps", "1") == "1"
-global StealthSafeAppList := IniRead(StealthPanicIniPath, "stealth", "applist", "notepad.exe`ncalc.exe")
+global StealthSafeAppList := StealthPanicConfig_ReadAppList(StealthPanicIniPath)
 global StealthLaunchDelay := Number(IniRead(StealthPanicIniPath, "stealth", "delay", "500"))
 global StealthRestoreWorkspace := IniRead(StealthPanicIniPath, "stealth", "restore", "1") == "1"
 global StealthMuteAudio := IniRead(StealthPanicIniPath, "stealth", "muteaudio", "1") == "1"
@@ -265,20 +266,325 @@ RestoreStealthFeatures() {
     StealthSuspendedFeatures.Clear()
 }
 
+global StealthAppCache := Map()
+
 LaunchSafeApps() {
-    global StealthSafeAppList
-    Loop Parse, StealthSafeAppList, "`n", "`r"
-    {
-        app := Trim(A_LoopField)
-        if (app != "") {
-            ; Try to find existing window of the app to activate
-            if (WinExist("ahk_exe " app)) {
-                WinActivate("ahk_exe " app)
+    global StealthSafeAppList, StealthAppCache
+    logPath := A_AppData "\StealthPanic_Launch.log"
+    try FileDelete(logPath)
+    
+    LogLaunch(msg) {
+        try FileAppend(A_Now " - " msg "`n", logPath)
+    }
+    
+    LogLaunch("--- Starting Safe Workspace Launch ---")
+    
+    Loop Parse, StealthSafeAppList, "`n", "`r" {
+        appInput := Trim(A_LoopField)
+        if (appInput == "")
+            continue
+            
+        LogLaunch("`nParsing command: " appInput)
+        appStr := DerefEnv(appInput)
+        LogLaunch("Expanded environment variables: " appStr)
+        
+        exePath := "", args := ""
+        if (SubStr(appStr, 1, 1) == '"') {
+            endQuote := InStr(appStr, '"', false, 2)
+            if (endQuote) {
+                exePath := SubStr(appStr, 2, endQuote - 2)
+                args := Trim(SubStr(appStr, endQuote + 1))
             } else {
-                try Run(app)
+                exePath := SubStr(appStr, 2)
+            }
+        } else {
+            spacePos := InStr(appStr, " ")
+            if (spacePos) {
+                exePath := SubStr(appStr, 1, spacePos - 1)
+                args := Trim(SubStr(appStr, spacePos + 1))
+            } else {
+                exePath := appStr
+            }
+        }
+        
+        SplitPath(exePath, &nameOnly, &dirOnly, &extOnly, &nameNoExt)
+        
+        ; 1. Explorer Specific Logic
+        if (StrLower(nameOnly) == "explorer.exe") {
+            LogLaunch("Explorer detected. Checking existing instances...")
+            if ActivateExplorer(args) {
+                LogLaunch("Launch successful (Activated existing Explorer).")
+                continue
+            }
+            LogLaunch("Launching new Explorer instance...")
+            try {
+                Run("explorer.exe " args)
+                LogLaunch("Launch successful.")
+            } catch as e {
+                LogLaunch("Failed to launch Explorer: " e.Message)
+            }
+            continue
+        }
+        
+        ; 2. Existing Instance Activation
+        if (nameOnly != "" && extOnly == "exe") {
+            LogLaunch("Checking existing instances...")
+            if ActivateExistingInstance(nameOnly) {
+                LogLaunch("Launch successful (Activated existing instance).")
+                continue
+            }
+        }
+        
+        ; 3. Absolute Path
+        if (dirOnly != "" && FileExist(exePath)) {
+            LogLaunch("Absolute path found. Launching...")
+            try {
+                Run(appStr)
+                LogLaunch("Launch successful.")
+            } catch as e {
+                LogLaunch("Failed to launch absolute path: " e.Message)
+            }
+            continue
+        }
+        
+        ; 4. Resolve Path
+        resolvedPath := ResolveAppPath(nameOnly, LogLaunch)
+        if (resolvedPath != "") {
+            LogLaunch("Resolved executable:`n" resolvedPath)
+            
+            cmd := '"' resolvedPath '"' (args != "" ? " " args : "")
+            LogLaunch("Launching...")
+            try {
+                Run(cmd)
+                LogLaunch("Launch successful.")
+            } catch as e {
+                LogLaunch("Failed to launch resolved path: " e.Message)
+            }
+            continue
+        }
+        
+        ; 5. Fallback ShellExecute
+        LogLaunch("Resolution failed. Falling back to ShellExecute / Run()...")
+        try {
+            Run(appStr)
+            LogLaunch("Launch successful (Fallback).")
+        } catch as e {
+            LogLaunch("Error: Could not launch " appStr " | Reason: " e.Message)
+        }
+    }
+    
+    LogLaunch("`n--- Launch Sequence Complete ---")
+}
+
+ActivateExplorer(args) {
+    targetPath := Trim(args, "`" ")
+    
+    if (targetPath != "" && InStr(targetPath, "shell:") == 0) {
+        try {
+            shellApp := ComObject("Shell.Application")
+            for win in shellApp.Windows {
+                try {
+                    if (win.Name == "File Explorer" || win.Name == "Windows Explorer") {
+                        openPath := win.Document.Folder.Self.Path
+                        if (StrCompare(openPath, targetPath) == 0) {
+                            hwnd := win.HWND
+                            WinRestore("ahk_id " hwnd)
+                            WinActivate("ahk_id " hwnd)
+                            return true
+                        }
+                    }
+                }
             }
         }
     }
+    
+    if (args == "") {
+        if WinExist("ahk_class CabinetWClass") {
+            hwnd := WinExist("ahk_class CabinetWClass")
+            WinRestore("ahk_id " hwnd)
+            WinActivate("ahk_id " hwnd)
+            return true
+        }
+    }
+    
+    return false
+}
+
+ActivateExistingInstance(exeName) {
+    hwnds := WinGetList("ahk_exe " exeName)
+    if (hwnds.Length == 0)
+        return false
+        
+    for hwnd in hwnds {
+        if DllCall("IsWindowVisible", "ptr", hwnd) {
+            WinRestore("ahk_id " hwnd)
+            WinActivate("ahk_id " hwnd)
+            return true
+        }
+    }
+    return false
+}
+
+DerefEnv(str) {
+    pos := 1
+    while (pos := RegExMatch(str, "%([^%]+)%", &match, pos)) {
+        val := EnvGet(match[1])
+        if (val != "") {
+            str := StrReplace(str, match[0], val)
+            pos += StrLen(val)
+        } else {
+            pos += StrLen(match[0])
+        }
+    }
+    return str
+}
+
+ResolveAppPath(exeName, LogFunc) {
+    global StealthAppCache
+    
+    if (exeName == "")
+        return ""
+        
+    LogFunc("Checking cache...")
+    if StealthAppCache.Has(exeName) {
+        cached := StealthAppCache[exeName]
+        if FileExist(cached) {
+            return cached
+        } else {
+            StealthAppCache.Delete(exeName)
+            LogFunc("Cache invalidation (file no longer exists).")
+        }
+    }
+    
+    LogFunc("Checking portable directories...")
+    if FileExist(A_ScriptDir "\" exeName) {
+        StealthAppCache[exeName] := A_ScriptDir "\" exeName
+        return StealthAppCache[exeName]
+    }
+    
+    LogFunc("Checking App Paths...")
+    try {
+        appPath := RegRead("HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\" exeName)
+        if FileExist(appPath) {
+            StealthAppCache[exeName] := appPath
+            return appPath
+        }
+    }
+    try {
+        appPath := RegRead("HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\" exeName)
+        if FileExist(appPath) {
+            StealthAppCache[exeName] := appPath
+            return appPath
+        }
+    }
+    
+    LogFunc("Checking PATH...")
+    pathEnv := EnvGet("PATH")
+    Loop Parse, pathEnv, ";" {
+        testPath := Trim(A_LoopField, "`" ")
+        if (testPath != "") {
+            fullPath := testPath "\" exeName
+            if FileExist(fullPath) {
+                StealthAppCache[exeName] := fullPath
+                return fullPath
+            }
+        }
+    }
+    
+    LogFunc("Checking WindowsApps...")
+    localAppData := EnvGet("LOCALAPPDATA")
+    winAppsPath := localAppData "\Microsoft\WindowsApps\" exeName
+    if FileExist(winAppsPath) {
+        StealthAppCache[exeName] := winAppsPath
+        return winAppsPath
+    }
+    
+    lowerName := StrLower(exeName)
+    
+    LogFunc("Checking Visual Studio...")
+    if (lowerName == "devenv.exe") {
+        vsPath := FindVisualStudio()
+        if (vsPath != "") {
+            StealthAppCache[exeName] := vsPath
+            return vsPath
+        }
+    }
+    
+    LogFunc("Checking common install locations...")
+    
+    ; Visual Studio Code
+    if (lowerName == "code.exe") {
+        p1 := localAppData "\Programs\Microsoft VS Code\Code.exe"
+        if FileExist(p1) {
+            StealthAppCache[exeName] := p1
+            return p1
+        }
+        p2 := EnvGet("ProgramFiles") "\Microsoft VS Code\Code.exe"
+        if FileExist(p2) {
+            StealthAppCache[exeName] := p2
+            return p2
+        }
+    }
+    
+    ; Teams
+    if (lowerName == "teams.exe" || lowerName == "ms-teams.exe") {
+        p1 := localAppData "\Microsoft\Teams\current\Teams.exe"
+        if FileExist(p1) {
+            StealthAppCache[exeName] := p1
+            return p1
+        }
+        p2 := localAppData "\Microsoft\Teams\Teams.exe"
+        if FileExist(p2) {
+            StealthAppCache[exeName] := p2
+            return p2
+        }
+    }
+    
+    return ""
+}
+
+FindVisualStudio() {
+    vswhere := EnvGet("ProgramFiles(x86)") "\Microsoft Visual Studio\Installer\vswhere.exe"
+    if FileExist(vswhere) {
+        cmd := '"' vswhere '" -latest -products * -requires Microsoft.VisualStudio.Component.CoreEditor -property productPath'
+        try {
+            shell := ComObject("WScript.Shell")
+            exec := shell.Exec(cmd)
+            out := Trim(exec.StdOut.ReadAll())
+            Loop Parse, out, "`n", "`r" {
+                p := Trim(A_LoopField)
+                if (p != "") {
+                    fullPath := p "\Common7\IDE\devenv.exe"
+                    if FileExist(fullPath)
+                        return fullPath
+                }
+            }
+        }
+    }
+    
+    try {
+        Loop Reg, "HKLM\SOFTWARE\WOW6432Node\Microsoft\VisualStudio\SxS\VS7", "V" {
+            p := RegRead()
+            if FileExist(p "Common7\IDE\devenv.exe")
+                return p "Common7\IDE\devenv.exe"
+        }
+    }
+    
+    pf64 := EnvGet("ProgramFiles")
+    pf32 := EnvGet("ProgramFiles(x86)")
+    years := ["2026", "2022", "2019", "2017"]
+    editions := ["Enterprise", "Professional", "Community", "Preview", "BuildTools"]
+    for year in years {
+        for ed in editions {
+            p := pf64 "\Microsoft Visual Studio\" year "\" ed "\Common7\IDE\devenv.exe"
+            if FileExist(p)
+                return p
+            p32 := pf32 "\Microsoft Visual Studio\" year "\" ed "\Common7\IDE\devenv.exe"
+            if FileExist(p32)
+                return p32
+        }
+    }
+    return ""
 }
 
 OnExit(ExitStealthPanic)

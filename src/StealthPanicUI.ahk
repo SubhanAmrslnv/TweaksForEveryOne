@@ -4,12 +4,13 @@ Persistent
 ; StealthPanicUI.ahk - Standalone Configuration UI for Stealth Panic Mode
 
 StealthIni := A_ScriptDir "\StealthPanic.ini"
+#Include "StealthPanicConfig.ahk"
 
 ; Read current values
 StealthPanicEnabled := IniRead(StealthIni, "stealth", "enabled", "1") == "1"
 StealthPanicTimeout := IniRead(StealthIni, "stealth", "timeout", "600")
 StealthLaunchSafeApps := IniRead(StealthIni, "stealth", "launchapps", "1") == "1"
-StealthSafeAppList := IniRead(StealthIni, "stealth", "applist", "notepad.exe`ncalc.exe")
+StealthSafeAppList := StealthPanicConfig_ReadAppList(StealthIni)
 StealthLaunchDelay := IniRead(StealthIni, "stealth", "delay", "500")
 StealthRestoreWorkspace := IniRead(StealthIni, "stealth", "restore", "1") == "1"
 StealthMuteAudio := IniRead(StealthIni, "stealth", "muteaudio", "1") == "1"
@@ -60,7 +61,7 @@ SaveSettings(*) {
     IniWrite(chkEnable.Value ? "1" : "0", StealthIni, "stealth", "enabled")
     IniWrite(txtTimeout.Value, StealthIni, "stealth", "timeout")
     IniWrite(chkLaunchApps.Value ? "1" : "0", StealthIni, "stealth", "launchapps")
-    IniWrite(txtApps.Value, StealthIni, "stealth", "applist")
+    StealthPanicConfig_WriteAppList(StealthIni, txtApps.Value)
     IniWrite(txtDelay.Value, StealthIni, "stealth", "delay")
     IniWrite(chkRestore.Value ? "1" : "0", StealthIni, "stealth", "restore")
     IniWrite(chkMuteAudio.Value ? "1" : "0", StealthIni, "stealth", "muteaudio")
