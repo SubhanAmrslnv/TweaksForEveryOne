@@ -10,7 +10,7 @@ A Windows 11 tray utility written in **AutoHotkey v2** (magnetic window snapping
 
 ## Features and hotkeys
 
-**Win + Ctrl** drives everything. Hotkeys are declared in one block (`src/WindowTweaks.ahk`, search `=== Hotkeys ===`) and each one delegates to a named function that the tray menu binds to as well — change behaviour in the function, never in the hotkey line, or the two drift apart.
+**Win + Ctrl** drives everything, in two tiers: `Win+Ctrl+<key>` *acts on the active window*, `Win+Ctrl+Shift+<key>` *toggles a feature flag*. Hotkeys are declared in one block (`src/WindowTweaks.ahk`, search `=== Hotkeys ===`) and each one delegates to a named function that the tray menu binds to as well — change behaviour in the function, never in the hotkey line, or the two drift apart.
 
 | Hotkey | Action | Entry point |
 |---|---|---|
@@ -27,8 +27,30 @@ A Windows 11 tray utility written in **AutoHotkey v2** (magnetic window snapping
 | `Win+Ctrl+H` | Minimize to tray | `HideToTray()` |
 | `Win+Ctrl+Esc` | Boss key | `ToggleBossKey()` |
 | `Win+Ctrl+Wheel` | Transparency of the active window | `ChangeTransparency()` |
+| `Win+Ctrl+K` | Centre the active window, keep its size | `CenterWindow()` |
+| `Win+Ctrl+U` | Cycle size 50 / 75 / 90 % of the work area, centred | `CycleWindowSize()` |
+| `Win+Ctrl+J` | Move to the next monitor, scaled to its work area | `MoveToNextMonitor()` |
+| `Win+Ctrl+Numpad1..9` | Tile to that cell of a 3×3 grid (keypad-shaped) | `TileWindow(cell)` |
+| `Win+Ctrl+Numpad0` | Maximize / restore | `ToggleMaximize()` |
+| `Win+Ctrl+Up/Down` | Top / bottom half (laptop alias for Numpad8/2) | `TileWindow(8/2)` |
+| `Win+Ctrl+Z` | Undo the last layout change to this window | `UndoLayout()` |
+| `Win+Ctrl+X` | Reset the active window to fully opaque | `ResetTransparency()` |
+| `Win+Ctrl+Y` | Restore all rolled-up / ghosted / tray-hidden windows | `RestoreAllWindows()` |
+| `Win+Ctrl+L` | Spotlight launcher (alias for double-tap Ctrl) | `ToggleSpotlight()` |
+| `Win+Ctrl+A` | Mic kill-switch (alias for double-tap Alt) | `ToggleDefaultMic()` |
+| `Win+Ctrl+I` | Quick Look preview (alias for Space in Explorer) | `ToggleQuickLook()` |
+| `Win+Ctrl+Shift+C` | Hot corners on / off | `ToggleHotCorners()` |
+| `Win+Ctrl+Shift+A` | Smart active border on / off | `ToggleActiveBorder()` |
+| `Win+Ctrl+Shift+W` | Infinite cursor wrap on / off | `ToggleCursorWrap()` |
+| `Win+Ctrl+Shift+D` | Multi-monitor dimmer on / off | `ToggleDimmer()` |
+| `Win+Ctrl+Shift+T` | Smart auto-hide taskbar on / off | `ToggleSmartTaskbar()` |
+| `Win+Ctrl+Shift+G` | Magnetic window groups on / off | `ToggleMagneticGroups()` |
+| `Win+Ctrl+Shift+P` | Universal grab & pan on / off | `ToggleGrabPan()` |
+| `Win+Ctrl+Shift+R` / `+Q` | Restart / Exit | `Reload()` / `ExitApp()` |
 | `Alt+F4` | Close with the gravity-drop animation | `GravityClose()` |
 | `(Tray Menu)` | Restart / Exit | `Reload()` / `ExitApp()` |
+
+Every keypad tile hotkey is declared **twice** — `Numpad7` *and* `NumpadHome`, and so on. With NumLock off the keypad sends the navigation names, so binding only the digit names leaves the whole gesture dead for anyone who keeps NumLock off.
 
 Conditional on their feature flag: `Alt+LButton` / `Alt+RButton` (alt-drag), `*MButton` (grab-pan / roll-up / close), wheel and middle-click over the taskbar, `Ctrl+G` in file dialogs, `Ctrl+Win+V`, `CapsLock`, `Space` in Explorer, double-tap `LAlt` (mic), double-tap `Ctrl` (spotlight).
 
@@ -43,7 +65,25 @@ Every toggle fires `Notify()` → `TrayTip`, so state changes are always visible
 | **Always on top** | Toggles `WS_EX_TOPMOST` on the active window. Hotkey only — no persisted setting, and it self-excludes by PID so it can't pin its own GUI | — | — |
 | **Position memory** | Each app reopens at its last size/position, keyed on `exe_class`. Dialogs, owned windows, `WS_EX_TOOLWINDOW`, anything without `WS_THICKFRAME`, and Picture-in-Picture (PiP) windows are excluded | `[memory]` `enabled` | `RestoreEnabled`, `POS_FILE` |
 
-Everything else lives under `[memory]` too (the section name is historical — it is now the general feature-flag bucket), plus `[corners]` for hot corners, `[taskbar] smart`, and `[snippets]` for the text expander.
+Feature *flags* still live under `[memory]` (the section name is historical — it is the general flag bucket), plus `[corners]`, `[taskbar] smart`, `[snap]`, `[glide]`, `[mouse]`, `[window]` and `[snippets]` for the text expander. Every tunable *number* lives in a per-feature section owned by the tuning registry: `[snap]`, `[glide]`, `[breathing]`, `[ghost]`, `[border]`, `[dimmer]`, `[focus]`, `[wrap]`, `[corners]`, `[osd]`, `[trans]`, `[anim]`, `[mouse]`. See **The tuning registry** below — that table, not this one, is where a range is defined.
+
+### Infinite Cursor Wrap — the intent model
+
+`CursorWrapMonitorStep` is not a threshold test; it is a small state machine, and the shape matters because the outer edge of the desktop is somewhere the pointer lands constantly (reaching a Back button, a close box, a scrollbar, the Start button). The original fired on any contact with the outermost pixel column, including mid-drag.
+
+Three gates, **all** of which must pass:
+
+1. **Approach speed** at the moment of contact (`[wrap] speed`, px/s). Sampled from the tick *before* contact — once Windows clamps the pointer at the edge its measured speed is zero by definition, so it cannot be sampled after.
+2. **Dwell** (`[wrap] delay`, ms). Leaving the band resets the state, so a glance off the edge never accumulates.
+3. **Cooldown** (`[wrap] cooldown`, ms) since the last wrap, so one gesture cannot chain.
+
+Plus `[wrap] tolerance` for how wide the contact band is. Setting `speed` or `delay` to 0 disables that gate individually, which is how the old instant behaviour stays reachable.
+
+Two things are deliberately **not** settings: suppression while any mouse button is down or `DragHwnd` is set (teleporting the cursor mid-drag is never wanted — `HotCornersMonitorStep` set that precedent), and the landing inset, which is derived as `tolerance + 8` so the destination can never re-arm the gate it just left.
+
+The brief's "activation distance" collapses into `tolerance`: once the pointer reaches the edge it is clamped there, so further physical travel *into* the edge is not observable without raw input. The "push harder" intent is carried by the dwell and speed gates instead.
+
+Hot Corners uses the same dwell model (`[corners] size`, `[corners] delay`) for the same reason, so the two features feel like one design.
 
 ### The Full Feature Suite (40+ Tweaks & Animations)
 
@@ -83,6 +123,36 @@ Everything else lives under `[memory]` too (the section name is historical — i
 - **Fly-to-Mouse Minimize**: Minimized windows spin and vacuum directly into your mouse cursor instead of dropping to the taskbar.
 - **Window Unrolling**: New windows unroll from top to bottom like a window blind in 0.2 seconds.
 
+**Next-Gen Physics & Tactile Animations (Recently Added):**
+- **Ripple Click**: Every mouse click sends a subtle, water-drop ripple originating from the cursor.
+- **Context Menu Unfold**: Right-click menus smoothly unfold downwards like origami instead of appearing instantly.
+- **Elastic Drag (Ghost Drift)**: Dragging files or text creates a rubber-band effect where the ghost image trails behind and bounces forward.
+- **Cursor Yawn & Breathe**: Leaving the mouse idle makes the cursor "stretch and yawn" before moving again.
+- **Momentum Tilt**: Dragging a window tilts it slightly in the direction of motion, swinging back with inertia when stopped.
+- **Black Hole Minimize & Delete**: Windows and deleted files get sucked into a tiny gravity well (funnel) with physics-based warping.
+- **Resistance Edge**: Snapping a window to a screen edge creates a satisfying rubber-band resistance effect.
+- **Focus Depth (Portal Scale-In)**: The active window subtly scales up and pushes background windows backward for depth of field.
+- **Spark Typing & Acoustic Keystrokes**: Type with zero-latency mechanical ASMR clicks (MIDI) while a neon equalizer bounces at the window bottom, and your caret leaves a glowing neon trail.
+- **Carousel Alt-Tab**: A 3D rotating carousel replacement for the standard flat Alt-Tab menu.
+- **Dynamic Notch (OSD)**: Volume and brightness adjustments drop down a sleek iOS-style Dynamic Island pill from the top of the screen.
+- **Curtain Drop (Win+D)**: Showing the desktop drops all windows simultaneously with a kinetic motion-blur effect.
+- **Motion Blur Scroll**: Fast mouse-wheel scrolling applies a vertical motion blur to make 60Hz screens feel fluid.
+- **Overscroll Bounce**: Scrolling past the end of a page elastically stretches and springs back.
+- **Taskbar Icon Wave & Elastic Toasts**: Hovering over the taskbar creates a macOS-like icon wave, and notifications bounce elastically into view.
+- **Start Menu Slide-Up Blur**: Opening the Start menu slides it up while deeply blurring the entire background.
+- **Window Throw & Catch**: Forcefully flick a window towards another monitor, and it will kinetically fly across screens.
+- **Shatter to Close**: Shift+Alt+F4 smashes the active window into dozens of 3D glass shards that fall with gravity.
+- **Lightsaber Seam Glow**: Hovering over the seam between two snapped windows ignites a neon cyan glow.
+- **Privacy Blur on Unfocus**: Mark a window as private (Win+Alt+B). When inactive, it gets a heavy frosted glass overlay.
+
+**Keyboard Window Layout:**
+- **Numpad Tiling**: `Win+Ctrl+Numpad1..9` tiles to a 3x3 grid of the work area, laid out like the keypad. Both the digit and navigation names of every keypad key are bound, so it works with NumLock either way.
+- **Centre / Cycle Size / Next Monitor / Maximize / Undo**: `Win+Ctrl+K` / `U` / `J` / `Numpad0` / `Z`. All except maximize go through `ApplyLayout()`.
+- **Restore Everything**: `Win+Ctrl+Y` unrolls, un-ghosts and un-hides every window the program is holding — the recovery path for state a user cannot see.
+- **Reset Transparency**: `Win+Ctrl+X`.
+
+**Feature Toggles (`Win+Ctrl+Shift+<key>`):** hot corners `C`, active border `A`, cursor wrap `W`, multi-monitor dimmer `D`, smart auto-hide taskbar `T`, magnetic groups `G`, grab & pan `P`. Each flips the flag, persists it, updates the settings checkbox if the window is open, notifies, and calls the feature's `Sync*` — that last step is what actually starts or stops the timer.
+
 **Productivity & Window Management:**
 - **Transparency Control**: `Win + Ctrl + Wheel` to adjust the opacity of any active window.
 - **Cinema / Focus Mode**: `Win + Ctrl + F` to black out the entire background, keeping only the active window visible.
@@ -95,7 +165,50 @@ Everything else lives under `[memory]` too (the section name is historical — i
 - **Global Plain-Text Paste**: `Ctrl + Win + V` strips all formatting, colors, and fonts from your clipboard and pastes as pure plain text anywhere.
 - **Smart Caps Lock**: Tap CapsLock to send `Escape` (or `Backspace`), hold it for 0.4 seconds to actually toggle CapsLock on/off.
 
-### Two traps in this area
+### Keyboard window layout
+
+`; ====== Window layout ======` in `WindowTweaks.ahk` holds `CenterWindow`, `CycleWindowSize`, `TileWindow`, `MoveToNextMonitor`, `UndoLayout` and `ToggleMaximize`. Everything except `ToggleMaximize` funnels through **`ApplyLayout(hwnd, tx, ty, tw, th)`**, which takes a target rect *in visible-frame coordinates* and is the only place that knows the four things that make a keyboard move correct:
+
+1. It calls `RS_Commit()`. These are one-shot producers, so nothing else ever flushes them — see the render-pipeline section.
+2. It converts frame space to `WinMove` space using `GetRects()` + `WinGetPos()`, the same conversion `SnapWindow` does. Widths need it too (`destW := tw + (winW - (fR - fL))`), not just origins.
+3. It cancels `Glide_`, `Bounce_` and `RollUp_` on that window first. A live glide writes `RS_SetPos` at the same priority every frame and would overwrite the queued move with no error.
+4. It clears the roll-up region, because a rolled-up window is clipped to its *old* width and resizing it without that leaves a torn window.
+
+Add a new layout action by computing a frame rect and handing it to `ApplyLayout` — do not queue `RS_SetPos` directly.
+
+`ToggleMaximize` is the deliberate exception: it uses `WinMaximize`/`WinRestore` and **cannot** use `IsRestorable()` as its gate, because that goes through `IsSnappable()`, which rejects maximized windows — the one window it exists to un-maximize.
+
+Work areas are read live via `MonitorGetWorkArea` rather than cached in `ScreenMetrics()`: the work area changes when the taskbar auto-hides and that raises no `WM_DISPLAYCHANGE`, so a cached copy would be stale exactly when Smart Auto-Hide is on. Only the *monitor* rects come from the cache (`MonitorIndexAt`). This is a hotkey path, so the ~3 µs is irrelevant.
+
+`LayoutUndo` and `SizeCycleIdx` are per-HWND Maps and are pruned in the `HSHELL_WINDOWDESTROYED` branch of the shell hook alongside `RolledUpWindows`.
+
+## The tuning registry — where every user-tunable number lives
+
+`TUNE_SPEC` (near the top of `WindowTweaks.ahk`, right after `EP_ICON_SIZES`) is **one row per tunable number** and the single source of truth for its INI section/key, default, `lo`/`hi` bounds, `step`, decimal places, settings page, label and hint. Loading, clamping, persistence and the settings control are all generated from it.
+
+It exists because the original five numeric settings repeated their range in three places — the declared default, the clamp block at the end of `LoadSettings`, and the `Clamp()` call in `ApplyUi` — and those had already drifted.
+
+| Piece | Role |
+|---|---|
+| `TUNE_SPEC` | the table. `TS(...)` builds a row |
+| `TUNE_VAL` | key → validated value. **Not** `TUNE`: identifiers are case-insensitive, so a `TUNE` map and a `Tune()` accessor are the same name and the script refuses to load |
+| `Tune(key)` / `TuneAlpha(key)` | read a value; `TuneAlpha` converts a percentage row to 0-255 |
+| `TuneLoad` / `TuneSave` / `TuneApplyUi` / `TuneRow` | called from `LoadSettings`, `WriteSettings`, `ApplyUi`, `BuildWin` |
+| `SyncTuningGlobals()` | mirrors the eight rows that back a long-standing global (`SNAP_DISTANCE`, `CORNER_BOOST`, `NEIGHBOUR_PROX`, `GLIDE_THROW`, `GLIDE_MS`, `GLIDE_MAX`, `BREATHE_IDLE_MS`, `CursorYawnIdleTime`) so every existing read site is untouched and pays no Map lookup |
+
+Rules that come with it:
+
+- **`lo` is the lowest *usable* value, not the lowest legal one.** A feature is switched off with its checkbox, never by typing 0 into its duration. Where 0 does mean something — "stop where you let go", "screen edges only", "gate disabled" — the row's hint says so.
+- **`step` is documentation, not quantisation.** These are typed fields; snapping 33 to 35 while someone is typing 330 is hostile. It is surfaced in the generated hint instead.
+- **Opacity is always a percentage.** Every opacity setting is stored 0-100 and converted by `TuneAlpha`, so the unit never varies between features. Durations are always ms, distances always px.
+- **`ApplyUi(writeBack)`**: the debounced `Change` path passes `false`, `LoseFocus` and close pass `true`. Correcting an out-of-range number back into its control 600 ms after the last keystroke rewrites the field while the user is still typing it.
+- Adding a setting = one `TUNE_SPEC` row + one `TuneRow(pg, key, FG, cSub)` call where it belongs on a page. Nothing else.
+
+Two settings are deliberately *not* in the registry because they are not numbers: `BorderColor` (`auto` or `RRGGBB`, validated by shape) and `MediaFallbackList`.
+
+### Three traps in this area
+
+**A space followed by `;` starts a comment even inside a double-quoted string.** `x := "a ; b"` fails to load with `Missing """`; `x := "a; b"` is fine. This is why the shipped `media_fallback` default writes `"a.exe; b.exe"` and never `"a.exe ; b.exe"`. Verified against 2.0 in this repo — check any literal that contains a semicolon.
 
 **Enumerated settings must be validated by membership, not range.** Every setting that feeds a DropDownList (`OpenAnim`, `SmartCapsAction`, the four `HotCorner*`, `EP_Style`, `EP_IconSize`) goes through `IniPick(section, key, allowedList, default)` in `LoadSettings`, and the control is built from the *same* list with `IndexOf()` for its `Choose<n>`. The lists live in one place — `OPEN_ANIMS`, `CAPS_ACTIONS`, `CORNER_ACTIONS`, `EP_STYLES`, `EP_ICON_SIZES` near the top of the file. Two things break if you skip this: `DropDownList.Choose("not in the list")` throws *inside* `BuildWin`, which leaves `Win+Ctrl+W` permanently dead after one hand-edited `settings.ini`; and a value the dropdown cannot display leaves the GUI showing one thing while the engine uses another. Range-check the numeric settings; list-check these.
 
@@ -103,7 +216,11 @@ Tray menu labels embed their hotkey after a literal tab — `"Magnetic snap\tWin
 
 ### Windows shortcuts this claims
 
-AutoHotkey hooks the keyboard ahead of Windows, so while the program runs, `Win+Ctrl+S` no longer opens Speech Recognition. The rest are unclaimed by Windows. Deliberately **not** touched: `Win+Ctrl+←/→` (virtual desktops), `Win+↑/↓`, `Win+Tab`, `Win+D`, `Win+E`.
+AutoHotkey hooks the keyboard ahead of Windows, so while the program runs, `Win+Ctrl+S` no longer opens Speech Recognition. The rest are unclaimed by Windows.
+
+Deliberately **not** touched, and this is the constraint that dictated the whole key allocation: `Win+Ctrl+←/→` (virtual desktops), `Win+Ctrl+D` (new virtual desktop), `Win+Ctrl+Q` (Quick Assist), `Win+Ctrl+C` (colour filters), `Win+Ctrl+N` / `Win+Ctrl+Enter` (Narrator), `Win+Ctrl+O` (on-screen keyboard), `Win+Ctrl+Space` (previous input method), `Win+Ctrl+Shift+B` (reset the graphics driver), `Win+Ctrl+<digit>` (last active window of taskbar app N), `Win+↑/↓`, `Win+Tab`, `Win+D`, `Win+E`. Several of those are accessibility features; shadowing them is not a trade this program gets to make on the user's behalf. That is why "centre the window" is on `K` and not the obvious `C`, and why left/right halves have no arrow alias — `Win+←/→` already does that job.
+
+Before adding a hotkey, check this list. The free `Win+Ctrl` letters are now down to `V` (taken by `Ctrl+Win+V`) and nothing else; the second tier `Win+Ctrl+Shift+<key>` is where new bindings should go.
 
 ## Commands
 
@@ -169,7 +286,13 @@ Deliberately **not** cached: window positions. A cache is only valid when the ca
 
 **Call `RS_RemoveHwnd(hwnd)` whenever a window we touched is destroyed.** For foreign windows the shell hook does it. For our own overlay GUIs (seam flash, dimmers, OSDs, focus layers, active border, gravity animation) nothing does, because `WS_EX_TOOLWINDOW` / `NoActivate` windows raise no shell destroy notification — so every destroy site does it explicitly, and `RS_SweepDead()` is the backstop.
 
+**Never read the pending Maps as if they were state.** `RS_Pos[hwnd]` is a *request* that has not been applied and can still be outranked in the same flush — and every move-only producer (`Glide`, `MoveFast`, curtain, toast) queues `w = h = -1` to mean `SWP_NOSIZE`. The active border used `RS_Pos` as a position source, so `W`/`H` came back as `-1`, failed its own `W < 50` sanity check and hid the border for the whole of every glide, snap and layout key. Measure the window (DWM frame bounds, `WinGetPos` fallback).
+
 **`AnimationScheduler.ahk`** runs `RenderFrame` every 16 ms: call every registered callback (produce), then `RS_Flush()` exactly once (render). A callback returns `true` to stay registered, `false` to be removed. The produce loop iterates a **snapshot of the keys**, not the Map — 11 other timers, every hotkey and the `SetWinEventHook` callback can interrupt it between lines and several of them call `RegisterAnimation`/`CancelAnimation`; mutating a Map under a live `for` enumerator shifts items and silently skips or repeats animations. `RS_Flush()` is likewise re-entrancy-guarded, because timers call it directly while the frame loop may be inside it.
+
+`StopScheduler()` **re-checks `ActiveAnimations.Count` and refuses to stop while work is queued.** `RenderFrame` tests the count and then calls it, and those two steps are not atomic: anything that interrupts in between and calls `RegisterAnimation` saw `SchedulerRunning` still true (so `StartScheduler` was a no-op) and then had its timer killed underneath it. `Bye()` passes `StopScheduler(true)` to override, because it is about to undo every animation anyway.
+
+**Two animations must not share a window at the same priority — and the shell hook is a producer too.** `Pulse_<hwnd>` and `Glide_<hwnd>` both wrote `RS_Pos[hwnd]` at `RS_PRI_ANIM`; Map keys enumerate sorted, so `Pulse_` was produced last and won every frame, and `PulseStep` had captured a *mid-glide* rect that it then restored on its final frame — activating a window mid-snap discarded the snap. `PulseWindow` now declines while a glide or bounce is registered, the same guard `VerifySnap` uses. Focus Depth was worse: it wrote at `RS_PRI_USER`, out-ranking every glide, bounce and pulse on any window the user switched away from. It is an ambient depth cue, so it belongs at `RS_PRI_ANIM`; only `RestoreFocusDepth` stays `USER`, because that one *is* an explicit command.
 
 ### Performance: what things actually cost
 
@@ -285,9 +408,19 @@ taskbar's own animations are a Windows setting (`TaskbarAnimations`), handled by
 
 ### Timers
 
-There is no single "the only timer" any more. `RenderFrame` at 16 ms while animating; then per-feature monitors, each started/stopped by its own `Sync*` function so a feature nobody enabled costs nothing: cursor wrap 20 ms, ghost proximity 25 ms, hot corners / active border / focus 50 ms, PiP / Quick Look 100 ms, breathing / dimmer / smart taskbar 200 ms, MediaCore 250 ms. Plus one-shot `SetTimer(..., -ms)` calls for deferred work.
+There is no single "the only timer" any more. `RenderFrame` at 16 ms while animating; then per-feature monitors, each started/stopped by its own `Sync*` function so a feature nobody enabled costs nothing: cursor wrap 20 ms, ghost proximity 25 ms, taskbar/UI 32 ms, shake+yawn detector 40 ms, hot corners / active border / focus 50 ms, PiP / Quick Look 100 ms, breathing / dimmer / smart taskbar 200 ms, MediaCore 250 ms, breathe-cursor idle 1 s. Plus one-shot `SetTimer(..., -ms)` calls for deferred work.
 
-**Drag pipeline**: `SetWinEventHook` on `EVENT_SYSTEM_MOVESIZESTART`/`END` → `SampleVelocityStep` on the frame loop (EMA-smoothed velocity, parallax alpha) → `FinishDrag` deferred 50 ms with the start rect captured in the closure (it enumerates windows, so it must not run inside the hook) → `SnapWindow` → `Glide` → `VerifySnap` scheduled for after the glide lands. A `~LButton` hotkey was rejected because it makes AHK install a low-level mouse hook that wakes on every mouse move — measured at ~1.6% of a core while idle. MOVESIZEEND also fires *after* the OS modal move loop, which is the only safe moment to reposition.
+**Every polling timer must have a `Sync*`, and `Bye()` must stop it.** Three did not: `CheckTaskbarAndUI` (32 ms), `ShakeDetector` (40 ms) and `CheckMouseIdle` (1 s) were armed unconditionally at load and ran forever regardless of their flags — `CheckToasts` alone enumerates every top-level window with a title filter on each tick. They are now `SyncTaskbarUiTimer()`, `SyncShakeDetector()` and `SyncCursorFxTimer()`, called from the deferred-init block and from `ApplyUi`. `Bye()` stops all of them plus the nine private 16 ms FX loops; several of those can otherwise re-create an overlay *after* `RS_Shutdown()`, and `Bye()` is also the tray → Restart path.
+
+**A monitor is a `SetTimer`, never a `RegisterAnimation`.** The active border was registered as an animation whose callback always returned `true`, so `ActiveAnimations` was never empty, the scheduler never reached its idle shutdown, and enabling the border pinned the 15 ms frame loop *and* `timeBeginPeriod(1)` for the whole session. Same mistake as the OSD auto-hides. If it polls rather than interpolates, it is a timer — and it must call `RS_Commit()` itself.
+
+**A feature that owns an overlay must tear it down when its flag goes false, and the flag test belongs *inside* that function.** Gating the call site instead means switching the feature off stops the only code that could ever clean up: Start Menu Blur stranded a full-screen 170-alpha sheet over the desktop, Lightsaber left a cyan bar welded to a window edge, Privacy Blur left opaque sheets over every marked window. `RenderTaskbarWave` had the right shape; the others now match it, and `CheckTaskbarAndUI` calls all four unconditionally so they *can* clean up.
+
+**Drag pipeline**: `SetWinEventHook` on `EVENT_SYSTEM_MOVESIZESTART`/`END` → `SampleVelocityStep` on the frame loop (EMA-smoothed velocity, parallax alpha) → `FinishDrag` deferred 50 ms with the start rect captured in the closure (it enumerates windows, so it must not run inside the hook) → `SnapWindow` → `Glide` → `VerifySnap` scheduled for after the glide lands. MOVESIZEEND also fires *after* the OS modal move loop, which is the only safe moment to reposition.
+
+A `~LButton` hotkey was originally rejected because it makes AHK install a low-level mouse hook that wakes on every mouse move — measured at ~1.6% of a core while idle. **That optimisation has since been given up**: `~LButton`, `~WheelUp`/`~WheelDown` and `*MButton` all exist now, and AHK installs the mouse hook whenever any mouse hotkey is defined, `#HotIf` notwithstanding. An attempt to verify whether disabling them releases the hook was inconclusive (`KeyHistory`, the only way to read hook state, installs both hooks itself). What *was* fixed is the per-event work: Elastic Scroll, middle-click Roll-Up and middle-click Close now default off, so the `#HotIf` is false and the bodies do not run; and the `WM_NCHITTEST` probe is skipped unless Roll-Up or Close is actually on.
+
+**Nothing keyed to input may touch the disk.** `window-positions.ini` was written with four synchronous `IniWrite`s (~771 µs each ≈ 3 ms) at the end of every drag *and* again from `OnSnapLanded`. It is buffered in `PendingPositions` and flushed by a 900 ms one-shot (`WritePositions`), exactly like `SaveSettings` → `WriteSettings`; `Bye()` and `ForgetPositions` deal with the buffer directly. For the same reason `RememberPosition` no longer calls `IsMainApplicationWindow`, which reaches a **WMI query** through `ClassifyWindowImpl` — tens of milliseconds of blocking COM on the drag path. Classification belongs on the window-created path, where `RestorePosition` already does it.
 
 The hook callback is **not** created with `"F"` (fast) mode. Fast mode runs on top of whatever script thread the event interrupted and must be trivial; this one queries the window, registers an animation and arms a timer.
 

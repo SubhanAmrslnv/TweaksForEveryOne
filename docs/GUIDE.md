@@ -155,7 +155,44 @@ mouse is over it.
 | `Win + Ctrl + Wheel` | Transparency |
 | `Alt + F4` | Close, with the gravity animation |
 
-Several more appear only when their feature is switched on.
+### Moving windows from the keyboard
+
+| Key | Does |
+|---|---|
+| `Win + Ctrl + Numpad 1`–`9` | Tile to a 3×3 grid, laid out like the keypad |
+| `Win + Ctrl + Numpad 0` | Maximize / restore |
+| `Win + Ctrl + K` | Centre the window, keeping its size |
+| `Win + Ctrl + U` | Cycle its size: 50% → 75% → 90%, centred |
+| `Win + Ctrl + J` | Move it to the next monitor |
+| `Win + Ctrl + ↑` / `↓` | Top half / bottom half |
+| `Win + Ctrl + Z` | Undo the last one of these |
+
+The grid follows the shape of the numeric keypad, so the key you press is where
+the window ends up — `7` is the top-left quarter, `4` the left half, `2` the
+bottom half. NumLock does not have to be on.
+
+Left and right halves are the two the keypad covers but the arrow keys don't:
+Windows' own `Win + ←/→` already does those.
+
+### Getting out of trouble
+
+| Key | Does |
+|---|---|
+| `Win + Ctrl + Y` | Restore **everything** — unroll, un-ghost and un-hide every window |
+| `Win + Ctrl + X` | Make the active window fully opaque again |
+| `Win + Ctrl + Shift + R` | Restart the program |
+| `Win + Ctrl + Shift + Q` | Quit |
+
+`Win + Ctrl + Y` is the one to remember. If a window has vanished to its title
+bar, gone see-through, or disappeared into the tray, this brings it back.
+
+### Switching a feature on or off
+
+`Win + Ctrl + Shift +` … `C` hot corners, `A` active border, `W` cursor wrap,
+`D` multi-monitor dimmer, `T` smart auto-hide taskbar, `G` magnetic groups,
+`P` grab & pan. Each shows a tray notification and remembers the new state.
+
+Several more hotkeys appear only when their feature is switched on.
 `HOTKEYS.md` has the full list, the conflicts with Windows' own shortcuts, and
 how to change them.
 
@@ -163,19 +200,51 @@ how to change them.
 
 ## The settings window
 
-Six pages down the left:
+Seven pages down the left:
 
 | Page | What's on it |
 |---|---|
-| **Window Management** | Snapping (distance, corner boost, neighbour reach, seam flash), ice glide (throw, slide time), parallax drag, alt-drag, fly-to-mouse minimize, grab & pan, roll-up, position memory |
-| **Power Features** | Spotlight, live PiP, ghost window, always on bottom, middle-click close, minimize to tray, quick folder jump, Quick Look |
-| **System & Media** | Taskbar volume scroll, volume OSD, mic kill-switch, boss key, text expander, smart CapsLock, plain-text paste |
-| **Multi-Monitor** | Cursor wrap, focus dimmer, active border, breathing, focus pulse, new-window animation |
-| **Hot Corners** | Enable, plus an action per corner |
-| **General** | Start with Windows, smart auto-hide taskbar, taskbar style / icon size, restart Explorer, open log, open folder, hotkeys, this guide |
+| **Window Management** | Snapping (distance, corner boost, neighbour reach, seam flash), ice glide (throw, slide time, throw distance), drag opacity floor, tiling grid gap, rubber-band travel, alt-drag, fly-to-mouse minimize, grab & pan, roll-up, position memory |
+| **Power Features** | Spotlight, live PiP, ghost window (opacity, fade range, click range), always on bottom, middle-click close, minimize to tray, quick folder jump, Quick Look |
+| **System & Media** | Taskbar volume scroll, volume OSD (step, hold time, opacity), mic kill-switch, boss key, text expander, smart CapsLock, plain-text paste, "never dim these apps" |
+| **Multi-Monitor** | Cursor wrap (tolerance, hold time, approach speed, cooldown), focus dimmer strength, active border (thickness, opacity, colour), breathing (delay, opacity), shake to find, cursor yawn, focus pulse, new-window animation |
+| **Animation** | Durations and intensities shared across features — open animation, focus pulse, snap bounce, roll-up, seam flash, gravity close, overlay fade, OSD slide, focus-mode dim / softness / corners, transparency wheel step and floor |
+| **Hot Corners** | Enable, corner size, hold time, plus an action per corner |
+| **General** | Start with Windows, gravity drop on close, debug log, smart auto-hide taskbar, taskbar style / icon size, restart Explorer, open log, open folder, hotkeys, this guide |
 
 Changes apply as you make them — there's no OK button. Typed values apply about
 half a second after you stop typing. It follows your Windows light/dark theme.
+
+### About the numbers
+
+Every numeric field shows its usable range in the grey hint beside it, like
+`px from an edge (4-120)`. A value outside that range is corrected when you leave
+the field, not while you are typing, so you can always finish typing a number. A
+value that is nonsense — or a `settings.ini` hand-edited into a bad state — falls
+back to the default rather than stopping the program from starting.
+
+The **minimum is the lowest usable value, not zero**. To switch a feature off use
+its checkbox; don't set its duration to nothing. Where `0` genuinely means
+something the hint says so: throw strength `0` is "stop where you let go",
+neighbour reach `0` is "screen edges only", and cursor-wrap hold time or approach
+speed at `0` switches that one gate off.
+
+Opacities are always a percentage, durations always milliseconds, distances
+always pixels — the same everywhere in the app.
+
+### Things that ship switched off
+
+These change how the mouse behaves system-wide, so they start disabled and you
+opt in:
+
+| Setting | Why it's off |
+|---|---|
+| **Rubber-Band Scroll** | Physically nudges whatever window is under the pointer on every wheel notch. |
+| **Middle-click title bar to roll up** | Puts this app in front of every middle click in the system. `Win+Ctrl+R` rolls a window up whether this is on or not. |
+| **Middle-Click to Close** | Same, and a stray middle click closes a window. |
+| **Context Menu Unfold** | Animates every right-click menu in Windows. |
+
+Turning any of them on in the settings window is all it takes.
 
 ---
 

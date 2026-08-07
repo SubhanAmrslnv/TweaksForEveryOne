@@ -8,10 +8,16 @@ One tray program, about 18 MB, near-zero CPU when idle. Nothing is installed
 outside your user profile.
 
 ```
-Win + Ctrl + W    settings
-Win + Ctrl + T    pin a window on top
-Win + Ctrl + S    magnetic snapping on / off
+Win + Ctrl + W          settings
+Win + Ctrl + T          pin a window on top
+Win + Ctrl + S          magnetic snapping on / off
+Win + Ctrl + K          centre the active window
+Win + Ctrl + Numpad1-9  tile it to a 3x3 grid, laid out like the keypad
+Win + Ctrl + J          send it to the next monitor
+Win + Ctrl + Z          undo that
 ```
+
+Full list: [docs/HOTKEYS.md](docs/HOTKEYS.md).
 
 ---
 
@@ -74,6 +80,19 @@ What Window Tweaks does to the taskbar itself is **Smart Auto-Hide** — hiding 
 only when a window is maximized or reaches the bottom edge — and putting volume on
 the mouse wheel while the pointer is over it.
 
+### Everything is tunable
+
+Roughly 45 numbers that used to be hard-coded — animation durations, opacities,
+distances, radii, delays and thresholds — are settings, each with a validated
+range shown next to the field. Opacities are always a percentage, durations
+always milliseconds, distances always pixels. The minimum of each range is the
+lowest *usable* value: to switch a feature off, use its checkbox rather than
+setting its duration to zero. See [docs/GUIDE.md](docs/GUIDE.md#about-the-numbers).
+
+Four features ship **switched off** because they change how the mouse behaves
+system-wide — Rubber-Band Scroll, middle-click Roll-Up, Middle-Click to Close and
+Context Menu Unfold. Turn on whichever you want in the settings window.
+
 ### The Full Feature Suite (40+ Tweaks & Animations)
 
 **15 Power-User Tweaks (Newly Added):**
@@ -85,7 +104,7 @@ the mouse wheel while the pointer is over it.
 - **Live Window PiP**: `Win+Ctrl+P` creates a live, always-on-top thumbnail of any background window.
 - **Universal Grab & Pan**: Hold Middle-Click to pan/scroll any window (like the Photoshop Hand Tool).
 - **Global Mic Kill-Switch**: Double-tap `Alt` to instantly mute/unmute your microphone system-wide.
-- **Infinite Cursor Wrap**: Teleport your cursor across screen edges for seamless multi-monitor navigation.
+- **Infinite Cursor Wrap**: Push the cursor into the left or right edge of the desktop and hold to teleport to the other side. Needs a deliberate push - approach speed, hold time, cooldown and edge tolerance are all configurable - so reaching for something at the screen edge never triggers it, and it never fires mid-drag.
 - **Quick Spotlight Launcher**: Double-tap `Ctrl` for a minimalist, lightning-fast search and launch bar.
 - **Smart Active Border**: Draws a sleek, accent-colored border around the currently active window.
 - **Always on Bottom**: `Win+Ctrl+B` pins any window permanently to your desktop background as a widget.
@@ -111,6 +130,40 @@ the mouse wheel while the pointer is over it.
 - **Theater Spotlight**: A soft, circular vignette shadow follows your active window like a stage spotlight, dimming the rest of the screen.
 - **Fly-to-Mouse Minimize**: Minimized windows spin and vacuum directly into your mouse cursor instead of dropping to the taskbar.
 - **Window Unrolling**: New windows unroll from top to bottom like a window blind in 0.2 seconds.
+
+**Next-Gen Physics & Tactile Animations (Recently Added):**
+- **Ripple Click**: Every mouse click sends a subtle, water-drop ripple originating from the cursor.
+- **Context Menu Unfold**: Right-click menus smoothly unfold downwards like origami instead of appearing instantly.
+- **Elastic Drag (Ghost Drift)**: Dragging files or text creates a rubber-band effect where the ghost image trails behind and bounces forward.
+- **Cursor Yawn & Breathe**: Leaving the mouse idle makes the cursor "stretch and yawn" before moving again.
+- **Momentum Tilt**: Dragging a window tilts it slightly in the direction of motion, swinging back with inertia when stopped.
+- **Black Hole Minimize & Delete**: Windows and deleted files get sucked into a tiny gravity well (funnel) with physics-based warping.
+- **Resistance Edge**: Snapping a window to a screen edge creates a satisfying rubber-band resistance effect.
+- **Focus Depth (Portal Scale-In)**: The active window subtly scales up and pushes background windows backward for depth of field.
+- **Spark Typing & Acoustic Keystrokes**: Type with zero-latency mechanical ASMR clicks (MIDI) while a neon equalizer bounces at the window bottom, and your caret leaves a glowing neon trail.
+- **Carousel Alt-Tab**: A 3D rotating carousel replacement for the standard flat Alt-Tab menu.
+- **Dynamic Notch (OSD)**: Volume and brightness adjustments drop down a sleek iOS-style Dynamic Island pill from the top of the screen.
+- **Curtain Drop (Win+D)**: Showing the desktop drops all windows simultaneously with a kinetic motion-blur effect.
+- **Motion Blur Scroll**: Fast mouse-wheel scrolling applies a vertical motion blur to make 60Hz screens feel fluid.
+- **Overscroll Bounce**: Scrolling past the end of a page elastically stretches and springs back.
+- **Taskbar Icon Wave & Elastic Toasts**: Hovering over the taskbar creates a macOS-like icon wave, and notifications bounce elastically into view.
+- **Start Menu Slide-Up Blur**: Opening the Start menu slides it up while deeply blurring the entire background.
+- **Window Throw & Catch**: Forcefully flick a window towards another monitor, and it will kinetically fly across screens.
+- **Shatter to Close**: Shift+Alt+F4 smashes the active window into dozens of 3D glass shards that fall with gravity.
+- **Lightsaber Seam Glow**: Hovering over the seam between two snapped windows ignites a neon cyan glow.
+- **Privacy Blur on Unfocus**: Mark a window as private (Win+Alt+B). When inactive, it gets a heavy frosted glass overlay.
+
+**Keyboard Window Layout:**
+- **Numpad Tiling**: `Win + Ctrl + Numpad 1-9` tiles the active window to a 3x3 grid laid out exactly like the keypad — `7` is the top-left quarter, `4` the left half, `2` the bottom half. Works with NumLock on or off.
+- **Centre & Resize**: `Win + Ctrl + K` centres a window without resizing it; `Win + Ctrl + U` cycles it through 50% / 75% / 90% of the work area, centred.
+- **Next Monitor**: `Win + Ctrl + J` sends a window to the next display, scaling it so a half-width window stays half-width on a screen of a different resolution.
+- **Maximize Toggle**: `Win + Ctrl + Numpad 0`.
+- **Undo Layout**: `Win + Ctrl + Z` puts the window back where it was before the last layout key.
+- **Restore Everything**: `Win + Ctrl + Y` is the panic key — it unrolls, un-ghosts and un-hides every window the program is holding, in one press.
+- **Reset Transparency**: `Win + Ctrl + X` returns the active window to fully opaque.
+
+**Feature Toggles (`Win + Ctrl + Shift + key`):**
+- Hot corners (`C`), smart active border (`A`), infinite cursor wrap (`W`), multi-monitor dimmer (`D`), smart auto-hide taskbar (`T`), magnetic window groups (`G`), grab & pan (`P`) — each toggles instantly, shows a tray notification, and saves the new state.
 
 **Productivity & Window Management:**
 - **Transparency Control**: `Win + Ctrl + Wheel` to adjust the opacity of any active window.

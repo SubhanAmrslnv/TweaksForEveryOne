@@ -63,8 +63,22 @@ StartScheduler() {
     }
 }
 
-StopScheduler() {
-    global SchedulerRunning
+; Refuses to stop while work is queued.
+;
+; RenderFrame calls this after checking ActiveAnimations.Count == 0, and those
+; two steps are not atomic: any of the 11 timers, every hotkey and the
+; SetWinEventHook callback can interrupt in between and call RegisterAnimation.
+; That call saw SchedulerRunning still true, so StartScheduler was a no-op, and
+; then this ran and killed the timer - leaving a live animation registered with
+; nothing to drive it until something else happened to register another one.
+; Re-checking here closes the window from the other side.
+;
+; `force` is for Bye(), which has to stop the loop even though animations are
+; still registered - it is about to undo all of them.
+StopScheduler(force := false) {
+    global SchedulerRunning, ActiveAnimations
+    if (!force && ActiveAnimations.Count)
+        return
     if (SchedulerRunning) {
         SetTimer(RenderFrame, 0)
         SchedulerRunning := false
@@ -101,21 +115,35 @@ RenderFrame() {
     for key, unused in ActiveAnimations
         keys.Push(key)
 
+    ; The whole body is inside the try, not just anim.Call. The snapshot above
+    ; protects the ENUMERATION from concurrent mutation; it does not protect the
+    ; LOOKUP. Every one of the timers, hotkeys and the SetWinEventHook callback
+    ; listed in this file's header can interrupt between `Has(key)` and
+    ; `ActiveAnimations[key]` and several of them call CancelAnimation - so that
+    ; two-line gap could raise "key not found".
+    ;
+    ; That throw propagated out of RenderFrame, and the consequences were silent
+    ; and total: AHK kills a timer whose callback throws, StopScheduler() below
+    ; never ran, so SchedulerRunning stayed true and every later
+    ; RegisterAnimation -> StartScheduler() became a no-op. No animation ran again
+    ; for the rest of the session, and timeBeginPeriod(1) leaked until exit.
     for key in keys {
-        if !ActiveAnimations.Has(key)          ; cancelled since the snapshot
-            continue
-        anim := ActiveAnimations[key]
-        try
-            keepAlive := anim.Call(dt, now)
-        catch
-            keepAlive := false
-        if keepAlive
-            continue
-        ; Only retire what we actually ran: a callback is allowed to re-register
-        ; its own key (roll-up does exactly this), and that fresh registration
-        ; must not be thrown away by the finishing one.
-        if (ActiveAnimations.Has(key) && ActiveAnimations[key] == anim)
-            ActiveAnimations.Delete(key)
+        try {
+            if !ActiveAnimations.Has(key)          ; cancelled since the snapshot
+                continue
+            anim := ActiveAnimations[key]
+            try
+                keepAlive := anim.Call(dt, now)
+            catch
+                keepAlive := false
+            if keepAlive
+                continue
+            ; Only retire what we actually ran: a callback is allowed to
+            ; re-register its own key (roll-up does exactly this), and that fresh
+            ; registration must not be thrown away by the finishing one.
+            if (ActiveAnimations.Has(key) && ActiveAnimations[key] == anim)
+                ActiveAnimations.Delete(key)
+        }
     }
 
     FrameProduceMs := QPC() - produceStart
