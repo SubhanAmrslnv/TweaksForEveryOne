@@ -153,7 +153,7 @@ Context Menu Unfold. Turn on whichever you want in the settings window.
 - **Lightsaber Seam Glow**: Hovering over the seam between two snapped windows ignites a neon cyan glow.
 - **Privacy Blur on Unfocus**: Mark a window as private (Win+Alt+B). When inactive, it gets a heavy frosted glass overlay.
 
-> **Note:** Some features might be annoying, such as **Focus Depth of Field** (3d background scale) and **Focus Pulse** (HeartBeat Active). If you don't like windows jumping up and down, you can turn them off! :)
+> **Note:** Some features might be annoying, such as **Focus Depth of Field** (3d background scale), **Focus Pulse** (HeartBeat Active), and **Motion Blur Scroll** (Vertical speed blur). If you don't like windows jumping up and down, you can turn them off! :)
 
 **Keyboard Window Layout:**
 - **Numpad Tiling**: `Win + Ctrl + Numpad 1-9` tiles the active window to a 3x3 grid laid out exactly like the keypad — `7` is the top-left quarter, `4` the left half, `2` the bottom half. Works with NumLock on or off.

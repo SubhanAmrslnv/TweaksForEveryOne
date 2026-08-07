@@ -144,7 +144,7 @@ New-Item -ItemType Directory -Path $dest -Force | Out-Null
 # The program is installed flat: WindowTweaks.ahk includes SnapCore.ahk
 # from its own folder, and its Guide button opens GUIDE.md from there too.
 $copied = 0
-foreach ($f in 'WindowTweaks.ahk', 'SnapCore.ahk', 'AnimationScheduler.ahk', 'RenderCore.ahk', 'MediaCore.ahk') {
+foreach ($f in 'WindowTweaks.ahk', 'SnapCore.ahk', 'AnimationScheduler.ahk', 'RenderCore.ahk', 'MediaCore.ahk', 'StealthPanic.ahk', 'StealthPanicUI.ahk') {
     $p = Join-Path $repo "src\$f"
     if (-not (Test-Path $p)) { Say "MISSING: src\$f" 'Red'; return }
     Copy-Item $p (Join-Path $dest $f) -Force
@@ -167,18 +167,33 @@ Say "Copied $copied files" 'Green'
 
 # --------------------------------------------------------- 5. shortcuts ----
 Step 5 "Creating shortcuts"
-$ws = New-Object -ComObject WScript.Shell
+$WshShell = New-Object -ComObject WScript.Shell
+$icoPathDest = Join-Path $dest 'WindowTweaks.ico'
+
+$Shortcut = $WshShell.CreateShortcut($startMenu)
+$Shortcut.TargetPath = $ahk
+$Shortcut.Arguments = "`"$dest\WindowTweaks.ahk`""
+$Shortcut.WorkingDirectory = $dest
+if (Test-Path $icoPathDest) { $Shortcut.IconLocation = $icoPathDest }
+$Shortcut.Save()
+
+$uiShortcut = $WshShell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Programs')) 'Stealth Panic Mode Settings.lnk'))
+$uiShortcut.TargetPath = $ahk
+$uiShortcut.Arguments = "`"$dest\StealthPanicUI.ahk`""
+$uiShortcut.WorkingDirectory = $dest
+$uiShortcut.Save()
+
+Say "Added to Start Menu" 'Green'
+
 function New-Link ($path) {
-    $s = $ws.CreateShortcut($path)
+    $s = $WshShell.CreateShortcut($path)
     $s.TargetPath       = $ahk
     $s.Arguments        = '"' + (Join-Path $dest 'WindowTweaks.ahk') + '"'
     $s.WorkingDirectory = $dest
     $s.Description      = 'Window Tweaks'
-    $icoPath            = Join-Path $dest 'WindowTweaks.ico'
-    if (Test-Path $icoPath) { $s.IconLocation = "$icoPath,0" }
+    if (Test-Path $icoPathDest) { $s.IconLocation = "$icoPathDest,0" }
     $s.Save()
 }
-New-Link $startMenu ; Say "Start Menu" 'Green'
 New-Link $desktop   ; Say "Desktop" 'Green'
 
 $auto = -not $NoAutoStart
