@@ -47,12 +47,33 @@ if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Path $stage  -Force | Out-Null
 New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 
-$payload = @(
-    @{ From = 'src\WindowTweaks.ahk';                Res = 'WindowTweaks.ahk' }
-    @{ From = 'src\SnapCore.ahk';                    Res = 'SnapCore.ahk' }
-    @{ From = 'src\RenderCore.ahk';                  Res = 'RenderCore.ahk' }
-    @{ From = 'src\AnimationScheduler.ahk';          Res = 'AnimationScheduler.ahk' }
-    @{ From = 'src\MediaCore.ahk';                   Res = 'MediaCore.ahk' }
+# Every .ahk in src\ ships, discovered rather than listed. A missing include
+# target is a LOAD-time error, so a module left out of this list shipped a
+# setup.exe that installed an app which could not start at all - and that is
+# invisible during development, because running from src\ finds the file anyway.
+# Enumerating the directory is the only version of this that cannot drift.
+# test_*.ahk are standalone harnesses, not part of the program.
+$ahkFiles = Get-ChildItem (Join-Path $repo 'src') -Filter '*.ahk' -File |
+            Where-Object { $_.Name -notlike 'test_*' } |
+            Sort-Object Name
+if (-not ($ahkFiles.Name -contains 'WindowTweaks.ahk')) {
+    throw "src\WindowTweaks.ahk is missing - it is the entry point."
+}
+# Setup.cs reverses the resource-name flattening with Replace("_", "\\"), so an
+# underscore in a payload filename extracts into a phantom subdirectory and the
+# app fails to load on end-user machines and nowhere else. Catch it at build
+# time rather than shipping it. (scripts_*.ps1 below are the deliberate use of
+# that encoding and are handled separately.)
+$badName = $ahkFiles | Where-Object { $_.Name -like '*_*' }
+if ($badName) {
+    throw "Module filenames may not contain an underscore (Setup.cs unflattens '_' to '\'): $($badName.Name -join ', ')"
+}
+
+$payload = @()
+foreach ($f in $ahkFiles) {
+    $payload += @{ From = "src\$($f.Name)"; Res = $f.Name }
+}
+$payload += @(
     @{ From = 'docs\GUIDE.md';                       Res = 'GUIDE.md' }
     @{ From = 'docs\HOTKEYS.md';                     Res = 'HOTKEYS.md' }
     @{ From = 'docs\ANIMATIONS.md';                  Res = 'ANIMATIONS.md' }
@@ -73,7 +94,7 @@ foreach ($p in $payload) {
     # /resource:<file>,<name>  ->  name is what Setup.cs looks for
     $resArgs += '/resource:"{0}",res.{1}' -f $staged, $p.Res
 }
-Write-Host "  Embedding $($payload.Count) files" -ForegroundColor DarkGray
+Write-Host "  Embedding $($payload.Count) files ($($ahkFiles.Count) .ahk modules)" -ForegroundColor DarkGray
 
 # --------------------------------------------------------------- compile ----
 $cscArgs = @(

@@ -5,6 +5,13 @@ snap.log
 snap.log.old
 taskbar-height.ini
 
+# Stealth Panic Mode, written next to whichever copy is running. The app list is
+# a sidecar text file rather than an ini key because ini values cannot contain a
+# newline - see the header of src/StealthPanicConfig.ahk.
+StealthPanic.ini
+StealthPanicApps.txt
+StealthPanicApps.txt.tmp
+
 # Per-machine backup of registry values, written by Apply-Windows-Tuning.ps1.
 # Committing this would push one PC's original settings onto another.
 scripts/tuning-backup.json

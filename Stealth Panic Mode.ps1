@@ -80,7 +80,10 @@ ExitStealthApp(ItemName, ItemPos, MyMenu) {
 }
 
 ShowStealthSettings(ItemName, ItemPos, MyMenu) {
-    try Run(A_ScriptDir "\StealthPanicUI.ahk")
+    ; Launched through the interpreter explicitly. Running a .ahk directly goes
+    ; via the file association, which drops the argument - and the argument is
+    ; what tells the GUI which ini this engine is actually using.
+    try Run('"' A_AhkPath '" "' A_ScriptDir '\StealthPanicUI.ahk" "' StealthPanicIniPath '"')
 }
 
 TraySetIcon("shell32.dll", 48)
@@ -107,9 +110,14 @@ $Shortcut.Arguments = "`"$runnerPath`""
 $Shortcut.WorkingDirectory = $dest
 $Shortcut.Save()
 
-$uiShortcut = $WshShell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Programs')) 'Stealth Panic Mode Settings.lnk'))
+# Named "(Standalone)" so it cannot overwrite the shortcut Install.ps1 creates.
+# Both used to be called 'Stealth Panic Mode Settings.lnk', so installing both
+# products left exactly one shortcut pointing at whichever folder was installed
+# last - and it then edited an ini the other install's engine never reads.
+# The ini path is passed explicitly for the same reason.
+$uiShortcut = $WshShell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Programs')) 'Stealth Panic Mode Settings (Standalone).lnk'))
 $uiShortcut.TargetPath = $ahk
-$uiShortcut.Arguments = "`"$dest\StealthPanicUI.ahk`""
+$uiShortcut.Arguments = "`"$dest\StealthPanicUI.ahk`" `"$dest\StealthPanic.ini`""
 $uiShortcut.WorkingDirectory = $dest
 $uiShortcut.Save()
 

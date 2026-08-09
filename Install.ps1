@@ -143,11 +143,21 @@ New-Item -ItemType Directory -Path $dest -Force | Out-Null
 
 # The program is installed flat: WindowTweaks.ahk includes SnapCore.ahk
 # from its own folder, and its Guide button opens GUIDE.md from there too.
+#
+# Every .ahk in src\ is copied, discovered rather than listed. A missing include
+# target is a LOAD-time error, so a module left out of a hardcoded list installed
+# an app that could not start - and running from src\ never showed it, because
+# the file was there. Keep this in step with build\Build-Installer.ps1, which
+# discovers the same set. test_*.ahk are standalone harnesses, not the program.
 $copied = 0
-foreach ($f in 'WindowTweaks.ahk', 'SnapCore.ahk', 'AnimationScheduler.ahk', 'RenderCore.ahk', 'MediaCore.ahk', 'StealthPanic.ahk', 'StealthPanicUI.ahk', 'StealthPanicConfig.ahk') {
-    $p = Join-Path $repo "src\$f"
-    if (-not (Test-Path $p)) { Say "MISSING: src\$f" 'Red'; return }
-    Copy-Item $p (Join-Path $dest $f) -Force
+$ahkFiles = Get-ChildItem (Join-Path $repo 'src') -Filter '*.ahk' -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -notlike 'test_*' } |
+            Sort-Object Name
+if (-not ($ahkFiles.Name -contains 'WindowTweaks.ahk')) {
+    Say "MISSING: src\WindowTweaks.ahk (the entry point)" 'Red'; return
+}
+foreach ($f in $ahkFiles) {
+    Copy-Item $f.FullName (Join-Path $dest $f.Name) -Force
     $copied++
 }
 foreach ($f in 'GUIDE.md', 'HOTKEYS.md', 'ANIMATIONS.md', 'TASKBAR-AND-INTERNALS.md', 'WINDOWS-TUNING.md') {
@@ -177,9 +187,14 @@ $Shortcut.WorkingDirectory = $dest
 if (Test-Path $icoPathDest) { $Shortcut.IconLocation = $icoPathDest }
 $Shortcut.Save()
 
+# The settings GUI is a separate process, so it is told which StealthPanic.ini
+# to edit rather than deriving one from its own folder. Without this it would
+# guess from A_ScriptDir, and a machine that also has the standalone install
+# ends up with the GUI editing one folder's config while the engine reads
+# another's - settings that appear to save and then have no effect.
 $uiShortcut = $WshShell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Programs')) 'Stealth Panic Mode Settings.lnk'))
 $uiShortcut.TargetPath = $ahk
-$uiShortcut.Arguments = "`"$dest\StealthPanicUI.ahk`""
+$uiShortcut.Arguments = "`"$dest\StealthPanicUI.ahk`" `"$dest\StealthPanic.ini`""
 $uiShortcut.WorkingDirectory = $dest
 $uiShortcut.Save()
 
