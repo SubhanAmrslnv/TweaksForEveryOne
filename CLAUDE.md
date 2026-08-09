@@ -48,7 +48,10 @@ A Windows 11 tray utility written in **AutoHotkey v2** (magnetic window snapping
 | `Win+Ctrl+Shift+P` | Universal grab & pan on / off | `ToggleGrabPan()` |
 | `Win+Ctrl+Shift+R` / `+Q` | Restart / Exit | `Reload()` / `ExitApp()` |
 | `Alt+F4` | Close with the gravity-drop animation | `GravityClose()` |
+| `Esc Esc Esc` | Stealth Panic Mode on / off (see its own section) | `ToggleStealthPanic()` |
 | `(Tray Menu)` | Restart / Exit | `Reload()` / `ExitApp()` |
+
+The triple-`Esc` binding is `~Esc`, so Escape still reaches the focused window — it does not go through `IsDoublePress` and it lives in `src\StealthPanic.ahk`, not the hotkey block. Note `Escape` is already claimed behind two other `#HotIf` contexts (`WindowTweaks.ahk:1725` Spotlight, `:1737` Quick Look).
 
 Every keypad tile hotkey is declared **twice** — `Numpad7` *and* `NumpadHome`, and so on. With NumLock off the keypad sends the navigation names, so binding only the digit names leaves the whole gesture dead for anyone who keeps NumLock off.
 
@@ -242,11 +245,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build\Build-Installer.ps1 
 # Windows tuning
 .\scripts\Apply-Windows-Tuning.ps1 [-Animations | -Explorer | -All]
 .\scripts\Restore-Windows-Tuning.ps1
+
+# Structural checks - the closest thing to a test suite. Run after every change
+# that moves code between modules. See "Architecture rules" below.
+.\scripts\Check-Split.ps1              # parse, motion proof, HotIf, case, hotkeys
+.\scripts\Check-Split.ps1 -IniCheck    # + settings.ini round-trip (launches the app ~3s)
+.\scripts\Check-Split.ps1 -Baseline    # re-anchor the references after an intended change
 ```
 
 ## Architecture
 
-**One AutoHotkey v2 process.** `src\WindowTweaks.ahk` is the sole entry point; the four `#Include` lines at the top pull the rest in at load time. No IPC, no second process, nothing launches anything else. `#SingleInstance Force` is the only cross-instance coordination.
+**One AutoHotkey v2 process** for everything except the Stealth Panic settings GUI (below). `src\WindowTweaks.ahk` is the sole entry point; the `#Include` lines at the top pull the rest in at load time. `#SingleInstance Force` is the only cross-instance coordination.
 
 | File | Role |
 |---|---|
@@ -255,10 +264,32 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build\Build-Installer.ps1 
 | `src\RenderCore.ahk` | The only place allowed to touch a window's position, alpha, region or z-order |
 | `src\AnimationScheduler.ahk` | One 16 ms timer multiplexing every animation |
 | `src\MediaCore.ahk` | WASAPI "is this window playing audio/video?", so playing windows are never faded |
+| `src\StealthPanic.ahk` | Stealth Panic Mode engine — triple-ESC hotkey, hide/mute/suspend, safe-app launcher |
+| `src\StealthPanicConfig.ahk` | Storage for the Stealth Panic safe-app list. Included by both of the above |
+| `src\StealthPanicUI.ahk` | Stealth Panic settings GUI — **a separate process**, not part of the app shell |
 
-**The include contract.** All four included files hold *function definitions and global initialisers only* — stated in their own headers. Adding top-level executable statements to any of them silently breaks the script. `MediaCore.ahk` is additionally kept free of `QPC()`, `RegisterAnimation()` and `WriteLog()` calls so a test harness can include it alone; every function that needs the clock takes `now` as a parameter.
+**The include contract.** The five included files hold *function definitions and global initialisers only* — stated in their own headers. Adding top-level executable statements to any of them silently breaks the script. `MediaCore.ahk` is additionally kept free of `QPC()`, `RegisterAnimation()` and `WriteLog()` calls so a test harness can include it alone; every function that needs the clock takes `now` as a parameter.
 
 **Coupling is by shared globals, not parameters.** Functions open with a bare `global` or a long global list. This is deliberate. Note the AHK v2 rule it relies on: a function may *read* a global without declaring it, but must declare it to *assign*. An assignment to an undeclared name silently creates a local instead — which is why `ApplyUi`, `LoadSettings` and `SaveSettings` use a bare `global`, and why any name assigned in those functions becomes a global (hence the `ui*` / `ep*` prefixes on their scratch variables).
+
+### Architecture rules — mandatory, not aspirational
+
+SOLID, DRY, separation of concerns and single-source-of-truth are **requirements** for this repo, adapted to AHK v2. The goal is not more files; it is clear ownership. Optimise for that, never for file count.
+
+**Ownership.** One file, one responsibility. A file approaching ~1000 lines gets reviewed for natural boundaries; ~2000+ is an architectural problem unless there is a documented reason. `src\WindowTweaks.ahk` is currently **9,281 lines** and is being split — the phased plan, the 23 target module boundaries with their source line ranges, and the per-phase smoke tests are in **`docs\MODULARIZATION.md`**. Read it before moving any code. Do not append a new feature to `WindowTweaks.ahk`; find or create the module that owns the responsibility.
+
+**Single source of truth.** A value, rule, mapping or validation gets one authoritative definition. `TUNE_SPEC` is the worked example: one row per tunable number, and load/clamp/persist/UI are all generated from it. Adding a setting must not mean editing five unrelated functions. Where a mirror is required for performance (`SyncTuningGlobals`), say explicitly which copy is authoritative and which is derived.
+
+**Layering.** Dependencies flow one way: input → feature logic → shared services → infrastructure → Win32. A feature expresses desired state; infrastructure applies it. Concretely: nothing outside `RenderCore.ahk` may call `WinSetTransparent`, `SetWindowPos`, `WinMove`, `WinSetRegion` or `WinSetExStyle`; a polling monitor is a `SetTimer`, an interpolation is a `RegisterAnimation`; GUI event handlers, tray items and hotkeys all delegate to the *same* named feature function rather than re-implementing it.
+
+**Do not over-abstract.** No interface with one implementation, no pattern for a one-off, and above all **no `Utils.ahk` / `Common.ahk` / `Helpers.ahk` / `Misc.ahk`** — a module name must state a responsibility. Extract only where a real boundary exists; prefer incremental behaviour-preserving refactoring over any rewrite.
+
+**Verify structurally.** There is no test runner, so `scripts\Check-Split.ps1` is the safety net — run it after any change that moves code between modules. Its **motion proof** is the important one: it hashes the sorted code lines of the whole resolved `#Include` stream, so a pure code-motion commit must leave it byte-identical. If a commit legitimately changes behaviour, re-anchor with `-Baseline` **in that same commit**, so the next agent is comparing against something true. Reference artifacts live in `build\refs\` and are committed on purpose.
+
+Two AHK v2 facts the split leans on, both easy to get wrong:
+
+- **A top-level `global X := ...` is a super-global** — visible inside every function in the whole script, including functions in other files defined textually earlier. That is why moving a feature into its own module cannot break name resolution. The inverse is silent: a declaration duplicated in two modules raises **no error**, and the later `#Include` wins.
+- **`#HotIf` is positional, not scoped, and bleeds across `#Include` boundaries.** A module ending with an open `#HotIf` applies that context to the first hotkeys of the next included file. Every module that defines a hotkey opens and closes with a bare `#HotIf`; `Check-Split.ps1` enforces it. The same applies to `#UseHook`, `#InputLevel`, `#MaxThreadsPerHotkey` and `#Warn`.
 
 ### The render pipeline — read this before touching any visual feature
 
@@ -439,9 +470,35 @@ The hook callback is **not** created with `"F"` (fast) mode. Fast mode runs on t
 - **A timer callback that throws pops an error dialog and kills that timer** — the feature is then dead for the rest of the session. Any window query in a monitor must be inside `try` with an explicit fallback; `IsMouseOverTaskbar()` is the pattern to copy.
 - **`SetParent` across processes** (always-on-bottom) is not really supported by Win32 and is not undone by anything except `RestoreFromBottom()`. A window left parented to `WorkerW` cannot be alt-tabbed to, cannot be moved normally, and dies with the next Explorer restart — so exit-time restoration is mandatory, not polish.
 
+### Stealth Panic Mode
+
+Triple-tap `Esc` (default window 600 ms) hides every window, mutes system audio and the microphone, suspends the overlay and animation features, and launches a configured list of "safe" applications. Triple-tap again to put everything back.
+
+It is a **bolt-on**, not part of the app shell, and the seams matter:
+
+- `src\StealthPanic.ahk` is `#Include`d by `WindowTweaks.ahk` (hosted case) **and** runs on its own under `%LOCALAPPDATA%\Stealth Panic Mode` via `Stealth Panic Mode.ps1` (standalone case). Half the functions it wants to call — `SyncActiveBorderTimer`, `SyncBreathingTimers`, `ClosePiP`, `UnGhostWindow` — do not exist standalone. **A direct call to a missing function is a LOAD-time error that `try` cannot catch**, so every one of them goes through `StealthCall(name, args*)`, which resolves `%name%` at *runtime* and swallows the failure. Same reason the existing `IsSet(...)` guards are there; `IsSet` on an unknown identifier returns false rather than failing to load (verified).
+- It has **its own config file** (`StealthPanic.ini`, section `[stealth]`) and **its own settings GUI in a separate process**. It does not use `IniStr` / `PutIni` / `IniCache` / `LoadSettings` / `WriteSettings` / `ApplyUi`. Note `StealthPanicUI.ahk` defines its own `SaveSettings(*)` — harmless while the processes are separate, a hard collision with `WindowTweaks.ahk:585` the moment anyone merges them.
+- The GUI takes the ini path as **argument 1** (`StealthPanicConfig_ResolveIniPath()`), falling back to `A_ScriptDir`. Both installers pass it. Without that handoff, a machine carrying both installs has the GUI editing one folder's config while the engine reads another's — settings that appear to save and then do nothing.
+- Saving does **not** reload Window Tweaks; that would run `Bye()` and un-hide every window, drop the tray icons and cancel every animation just to pick up a list. Instead `ToggleStealthPanic()` calls `StealthPanicRefreshSettings()` on the way **in** — and deliberately not on the way out, because `StealthMuteAudio`/`StealthMuteMic` decide whether the *original* mute state is handed back and must still hold what they held when it was captured. The reload `PostMessage` remains, but only targets the genuine standalone runner.
+- `SuspendStealthFeatures()` / `RestoreStealthFeatures()` must call `StealthSyncFeatures()` after flipping the flags. Flipping a flag alone leaves the feature's timer running and its overlay on screen — the same failure mode documented under Timers, and worst here, since the whole point is that nothing of the previous workspace shows.
+
+**Why the safe-app list is not in the ini, and must not be moved back.** Measured on 26200 / AHK 2.0.26:
+
+| Behaviour | Consequence |
+|---|---|
+| `IniWrite` writes the LF bytes but `IniRead` stops at the first newline | A multi-line value stores as one line — this was the "only the first app survives" bug — and the remaining lines become key-less orphans in `[stealth]` **permanently**, since `IniDelete` removes only the `applist=` line |
+| A single-key `IniRead` strips surrounding double quotes and trims whitespace | `"C:\Program Files\...\devenv.exe"` reads back unquoted and then fails the quote parsing in `LaunchSafeApps` |
+| A whole-section `IniRead` does **not** strip, and returns `key=value` pairs LF-separated in physical file order | The two read paths on the same file disagree with each other |
+
+So the list lives in `StealthPanicApps.txt`, one entry per line, UTF-8 **with** a BOM, written temp-then-`MoveFileExW`. Its path is derived from the *ini path*, never `A_ScriptDir`. `StealthPanicConfig_ReadAppList` checks sidecar → `[SafeApps]` → legacy `[stealth] applist` → default, and migrates forward. **The legacy key is checked last on purpose**: checking it first is exactly what made a saved list collapse back to one app on every reopen.
+
+Two rules for that module: nothing in it may throw (it runs from a top-level initialiser that `WindowTweaks.ahk` includes, so an exception is a load-time error that kills the whole app), and the ini stores are purged only *after* the sidecar is written and read back — purging first turns a failed write into data loss. `src\test_stealthconfig.ahk` is the harness; it prints raw bytes both ways and exits with the failure count.
+
+`CLAUDE.md`'s "pure ASCII, no BOM" rule is about `.ahk` **source** files. The sidecar is runtime data and its BOM is deliberate.
+
 ### Runtime files
 
-`settings.ini`, `window-positions.ini`, `snap.log` (+ `.old`, rotated at 256 KB) are written to `A_ScriptDir` — so running from source writes into `src\`, not the installed copy at `%LOCALAPPDATA%\Window Tweaks`. All gitignored. Nothing is written outside the program folder except a Startup `.lnk`; the registry is read-only (`AppsUseLightTheme`) — there is no `Run` key, service, or scheduled task.
+`settings.ini`, `window-positions.ini`, `snap.log` (+ `.old`, rotated at 256 KB) are written to `A_ScriptDir` — so running from source writes into `src\`, not the installed copy at `%LOCALAPPDATA%\Window Tweaks`. Stealth Panic adds `StealthPanic.ini` and `StealthPanicApps.txt` next to whichever copy is running. All gitignored. Nothing is written outside the program folder except a Startup `.lnk`; the registry is read-only (`AppsUseLightTheme`) — there is no `Run` key, service, or scheduled task.
 
 ## Packaging
 
@@ -450,6 +507,12 @@ Two independent installers that must be kept in sync: `Install.ps1` (6 steps) an
 `build\Setup.cs` is compiled by the `csc.exe` that ships with the .NET Framework, i.e. a **C# 5 compiler**: no string interpolation, no expression-bodied members, no null-conditional. Keep it plain (the constraint is stated at `Setup.cs:6-8`).
 
 `build\obj\` is a **generated staging directory** — `Build-Installer.ps1` wipes and repopulates it on every build, flattening `scripts\X.ps1` → `scripts_X.ps1` because manifest resource names cannot contain a path separator (`Setup.cs` reverses it with `Replace("_", "\\")`, so no payload filename may contain an underscore). It is gitignored. **Never edit anything under `build\obj\` — edit `src\`, `docs\`, or `scripts\`.**
+
+**The `.ahk` payload is discovered, not listed — and two rules keep that working.** Both installers used to enumerate the eight `.ahk` files by name, which meant a new module was a *load-time* failure of the installed copy that was invisible during development, because running from `src\` finds the file regardless. `Install.ps1` and `Build-Installer.ps1` now both glob `src\*.ahk` excluding `test_*`. Therefore:
+
+- **No module filename may contain an underscore.** `Setup.cs:335` unflattens `_` to `\`, so `Window_Commands.ahk` extracts as `Window\Commands.ahk` and the app fails to load on end-user machines and nowhere else. `Build-Installer.ps1` now throws at build time if you try.
+- **The split stays flat in `src\`** — no `src\features\`, no `src\ui\`. Module names carry the grouping instead. The installers copy flat and `#Include` resolves against the entry file's own directory.
+- `test_*.ahk` are standalone harnesses and are deliberately excluded from both.
 
 The output exe is unsigned; SmartScreen will warn.
 
@@ -464,7 +527,12 @@ Three traps, all of which have cost real debugging time:
 - **Collect-then-delete when removing entries from a Map you are iterating.** Deleting the current item shifts the remainder under the enumerator index and silently skips the next one. `MC_Expire()` and `BreathingAnimatorStep()` show the pattern; `.Clone()` is the alternative.
 - **Guard long-running hotkey loops with `static busy`.** `#MaxThreadsPerHotkey 2` lets a second press interrupt the first, and two loops driving the same window from different origin snapshots fight each other.
 
-**No offline syntax check exists** — AHK 2.0 has no `/validate` (that is 2.1+). To parse-check the whole file without running it, copy `src\*.ahk` somewhere, prepend `ExitApp` to a copy of `WindowTweaks.ahk`, and run it with `/ErrorStdOut`: AHK parses the entire script before executing anything, so a load-time error is reported and `ExitApp` stops it before a single hook, timer or tray icon is installed. Exit code 0 and no output means it parses.
+**No offline syntax check exists** — AHK 2.0 has no `/validate` (that is 2.1+). To parse-check the whole file without running it, copy `src\*.ahk` somewhere, prepend `ExitApp` to a copy of `WindowTweaks.ahk`, and run it with `/ErrorStdOut`: AHK parses the entire script before executing anything, so a load-time error is reported and `ExitApp` stops it before a single hook, timer or tray icon is installed. Exit code 0 and no output means it parses. **`scripts\Check-Split.ps1` does exactly this as its first check** — run that instead of doing it by hand, and get the six structural checks with it.
+
+Two traps that cost time while building that script, both about *empty* output rather than wrong output:
+
+- **`Get-Content -Raw` on an empty file emits `AutomationNull`** — nothing at all, not `$null` — so `[string](...)` still yields `$null` and `.Trim()` throws. Only string interpolation, `"$(Get-Content ...)"`, reliably turns "no output" into `""`. Empty output is the *success* case for the parse check, so this failed exactly when everything was fine.
+- **Killing the app with `Stop-Process -Force` skips `OnExit(Bye)`**, and `Bye()` is what calls `WriteSettings()`. Settings are written by a 700 ms debounced one-shot that a fresh run never triggers, so a force-killed instance wrote a 4-line `settings.ini` instead of 131. Close it with `taskkill` (no `/F`), which posts `WM_CLOSE` and lets AHK exit normally. Anything that needs the app's persisted state must let it exit gracefully.
 
 Conventions: section banners `; ====== Name ======`; predicates named `Is*`; tuning constants SCREAMING_SNAKE, mutable feature flags PascalCase; bare `try { }` with no catch as "best effort, never crash", with validation done by clamping afterwards. Comments explain *why* — almost every one records a measured OS behaviour or a bug that has actually been hit.
 
@@ -486,3 +554,5 @@ When adding new features or modifying the code, AI agents must strictly adhere t
 ## Docs
 
 `docs\GUIDE.md` (user-facing), `docs\HOTKEYS.md`, `docs\ANIMATIONS.md` (which Windows settings the glide needs and why), `docs\WINDOWS-TUNING.md` (a worked example from one machine — the reasoning transfers, the readings don't), `docs\TASKBAR-AND-INTERNALS.md` (the measured taskbar research and the snapping design — the taskbar-height engine it describes has been removed, so read the first half as history and the snapping half as current).
+
+`docs\MODULARIZATION.md` is the live plan for splitting `WindowTweaks.ahk` — phase order, module boundaries, the `FEATURE_SPEC` / `TEARDOWN_SPEC` designs, and the AHK v2 traps the split hits. It is a working document, not user-facing, and is **not** shipped by the installer. Keep it current as phases land.

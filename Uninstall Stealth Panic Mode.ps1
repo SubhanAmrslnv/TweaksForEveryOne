@@ -16,6 +16,9 @@ Write-Host "`n  Stealth Panic Mode - uninstall`n" -ForegroundColor Cyan
 $dest      = Join-Path $env:LOCALAPPDATA 'Stealth Panic Mode'
 $startup   = Join-Path ([Environment]::GetFolderPath('Startup'))  'Stealth Panic Mode.lnk'
 $startMenu = Join-Path ([Environment]::GetFolderPath('Programs')) 'Stealth Panic Mode.lnk'
+# Created by the installer and previously left behind on uninstall.
+$settings  = Join-Path ([Environment]::GetFolderPath('Programs')) 'Stealth Panic Mode Settings (Standalone).lnk'
+$unlink    = Join-Path ([Environment]::GetFolderPath('Programs')) 'Uninstall Stealth Panic Mode.lnk'
 
 Write-Host "[1/3] Stopping the program" -ForegroundColor Cyan
 $found = 0
@@ -27,8 +30,9 @@ Start-Sleep -Milliseconds 800
 
 Write-Host "[2/3] Deleting Shortcuts" -ForegroundColor Cyan
 $del = 0
-if (Test-Path $startup) { Remove-Item $startup -Force; $del++ }
-if (Test-Path $startMenu) { Remove-Item $startMenu -Force; $del++ }
+foreach ($lnk in $startup, $startMenu, $settings, $unlink) {
+    if (Test-Path $lnk) { Remove-Item $lnk -Force; $del++ }
+}
 Say "Deleted $del shortcuts"
 
 Write-Host "[3/3] Removing Files" -ForegroundColor Cyan

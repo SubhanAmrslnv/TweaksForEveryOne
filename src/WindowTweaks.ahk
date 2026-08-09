@@ -6784,16 +6784,8 @@ Bye(*) {
     try SetTimer(ShakeDetector, 0)
     try SetTimer(RenderShakeFind, 0)
     try SetTimer(CheckMouseIdle, 0)
-    try SetTimer(UpdateBreathe, 0)
-    try SetTimer(UpdateRipples, 0)
-    try SetTimer(UpdateSparks, 0)
-    try SetTimer(UpdateDragTrail, 0)
     try SetTimer(CheckElasticDrag, 0)
     try SetTimer(CheckMagDrag, 0)
-    try SetTimer(UpdateMag, 0)
-    try SetTimer(RenderMotionBlur, 0)
-    try SetTimer(UpdateCarousel, 0)
-    try SetTimer(RenderElasticScroll, 0)
 
     ; Rubber-band scroll parks a foreign window at an offset from its own base.
     ; Nothing else puts it back, so exiting mid-lean left it displaced.
@@ -7299,7 +7291,7 @@ ElasticScroll(hwnd, dir, startX, startY) {
         ElasticOffsetY := 0
         ElasticTargetY := 0
         ElasticVel := 0
-        SetTimer(RenderElasticScroll, 16)
+        RegisterAnimation("ElasticScroll", ElasticScrollCallback)
     }
     
     ElasticTargetY := dir * Tune("elasticAmt")
@@ -7312,16 +7304,15 @@ ElasticTimeout() {
     ElasticTargetY := 0
 }
 
-RenderElasticScroll() {
+ElasticScrollCallback(dt, now) {
     global ElasticHwnd, ElasticOffsetY, ElasticTargetY, ElasticVel, ElasticBaseX, ElasticBaseY
     global DragHwnd
     
     if (!DllCall("IsWindow", "ptr", ElasticHwnd) || DragHwnd == ElasticHwnd) {
-        SetTimer(RenderElasticScroll, 0)
         if (DragHwnd == ElasticHwnd)
-            try WinMove(ElasticBaseX, ElasticBaseY,,, ElasticHwnd)
+            try RS_SetPos(ElasticHwnd, ElasticBaseX, ElasticBaseY, -1, -1, RS_PRI_ANIM)
         ElasticHwnd := 0
-        return
+        return false
     }
     
     ElasticVel += (ElasticTargetY - ElasticOffsetY) * 0.4
@@ -7329,13 +7320,13 @@ RenderElasticScroll() {
     ElasticOffsetY += ElasticVel
     
     if (Abs(ElasticTargetY) < 1 && Abs(ElasticOffsetY) < 1 && Abs(ElasticVel) < 1) {
-        try WinMove(ElasticBaseX, ElasticBaseY + Round(ElasticOffsetY),,, ElasticHwnd)
-        SetTimer(RenderElasticScroll, 0)
+        try RS_SetPos(ElasticHwnd, ElasticBaseX, ElasticBaseY + Round(ElasticOffsetY), -1, -1, RS_PRI_ANIM)
         ElasticHwnd := 0
-        return
+        return false
     }
     
-    try WinMove(ElasticBaseX, ElasticBaseY + Round(ElasticOffsetY),,, ElasticHwnd)
+    try RS_SetPos(ElasticHwnd, ElasticBaseX, ElasticBaseY + Round(ElasticOffsetY), -1, -1, RS_PRI_ANIM)
+    return true
 }
 
 ; ============================================================================
@@ -7436,44 +7427,39 @@ CheckMagDrag() {
     MouseGetPos(&mx, &my)
     if (Abs(mx - MagStartX) > 5 || Abs(my - MagStartY) > 5) {
         SetTimer(CheckMagDrag, 0)
-        ; Only start tracking if there is actually a loupe to track with.
         if ShowMag(mx, my) {
             MagActive := true
-            SetTimer(UpdateMag, 16)
+            RegisterAnimation("MagLoupe", MagCallback)
         }
     }
 }
 
-UpdateMag() {
+MagCallback(dt, now) {
     global MagActive, MagChildHwnd, MagHostGui, MagFrameGui
     if (!GetKeyState("LButton", "P")) {
-        SetTimer(UpdateMag, 0)
         MagActive := false
         HideMag()
-        return
+        return false
     }
 
-    ; 16 ms timer: a throw here kills the timer for the session, so the overlay
-    ; is verified before it is used rather than assumed.
     if (!MagChildHwnd || !MagFrameGui || !MagHostGui) {
-        SetTimer(UpdateMag, 0)
         MagActive := false
-        return
+        return false
     }
 
     try {
         MouseGetPos(&mx, &my)
-
         SourceRect := Buffer(16, 0)
         NumPut("int", mx - 35, SourceRect, 0)
         NumPut("int", my - 35, SourceRect, 4)
         NumPut("int", mx + 35, SourceRect, 8)
         NumPut("int", my + 35, SourceRect, 12)
         DllCall("Magnification\MagSetWindowSource", "ptr", MagChildHwnd, "ptr", SourceRect)
-
-        DllCall("SetWindowPos", "ptr", MagFrameGui.Hwnd, "ptr", -1, "int", mx - 72, "int", my - 162, "int", 0, "int", 0, "uint", 0x55)
-        DllCall("SetWindowPos", "ptr", MagHostGui.Hwnd, "ptr", -1, "int", mx - 70, "int", my - 160, "int", 0, "int", 0, "uint", 0x55)
+        
+        RS_SetPos(MagFrameGui.Hwnd, mx - 72, my - 162, -1, -1, RS_PRI_ANIM)
+        RS_SetPos(MagHostGui.Hwnd, mx - 70, my - 160, -1, -1, RS_PRI_ANIM)
     }
+    return true
 }
 
 ; ============================================================================
@@ -7654,44 +7640,42 @@ StartBreatheCursor() {
     if (!BreatheGui) {
         BreatheGui := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
         BreatheGui.BackColor := "White"
-        WinSetRegion("0-0 w40 h40 E", BreatheGui.Hwnd)
-        WinSetTransparent(0, BreatheGui.Hwnd)
+        RS_SetRegion(BreatheGui.Hwnd, "0-0 w40 h40 E", RS_PRI_ANIM)
+        RS_SetAlpha(BreatheGui.Hwnd, 0, RS_PRI_ANIM)
+        RS_Commit()
     }
     BreatheStart := QPC()
-    SetTimer(UpdateBreathe, 16)
+    RegisterAnimation("BreatheCursor", UpdateBreathe)
 }
 
 StopBreatheCursor() {
     global BreatheGui
-    SetTimer(UpdateBreathe, 0)
+    CancelAnimation("BreatheCursor")
     if (BreatheGui) {
+        RS_SetAlpha(BreatheGui.Hwnd, "Off", RS_PRI_ANIM)
         BreatheGui.Hide()
+        RS_Commit()
     }
 }
 
-UpdateBreathe() {
+UpdateBreathe(dt, now) {
     global BreatheGui, BreatheStart, BreatheCursorActive
     if (!BreatheCursorActive) {
-        SetTimer(UpdateBreathe, 0)
+        RS_SetAlpha(BreatheGui.Hwnd, "Off", RS_PRI_ANIM)
         BreatheGui.Hide()
-        return
+        return false
     }
     MouseGetPos(&mx, &my)
-    
-    ; QPC() already returns MILLISECONDS (count * 1000 / freq). Multiplying again
-    ; turned this 3-second breathing cycle into a 3-millisecond one - a ~333 Hz
-    ; strobe of a 20-40 px white circle rather than a slow pulse.
-    t := QPC() - BreatheStart
+    t := now - BreatheStart
     cycle := Mod(t, 3000) / 3000
     val := (Sin(cycle * 6.28318 - 1.57079) + 1) / 2
-    
     size := Round(20 + 20 * val)
     alpha := Round(20 + 40 * val)
     
-    WinSetRegion("0-0 w" size " h" size " E", BreatheGui.Hwnd)
-    try WinSetTransparent(alpha, BreatheGui.Hwnd)
-    
-    DllCall("SetWindowPos", "ptr", BreatheGui.Hwnd, "ptr", -1, "int", mx - size//2, "int", my - size//2, "int", 0, "int", 0, "uint", 0x55)
+    RS_SetRegion(BreatheGui.Hwnd, "0-0 w" size " h" size " E", RS_PRI_ANIM)
+    RS_SetAlpha(BreatheGui.Hwnd, alpha, RS_PRI_ANIM)
+    RS_SetPos(BreatheGui.Hwnd, mx - size//2, my - size//2, -1, -1, RS_PRI_ANIM)
+    return true
 }
 
 global Ripples := []
@@ -7720,41 +7704,31 @@ SpawnRipple(x, y) {
     r.x := x
     r.y := y
     
-    SetTimer(UpdateRipples, 16)
+    RegisterAnimation("Ripple_" idx, RippleCallback.Bind(idx))
 }
 
-UpdateRipples() {
+RippleCallback(idx, dt, now) {
     global Ripples
-    now := QPC()
-    activeCount := 0
-    
-    loop Ripples.Length {
-        r := Ripples[A_Index]
-        if (!r.Active)
-            continue
-            
-        ; QPC() is already in milliseconds - see the note in UpdateBreathe. With
-        ; the extra * 1000 the first tick arrived at t = 16000 against a 300 unit
-        ; lifetime, so every ripple died before a single frame was drawn.
-        t := now - r.Start
-        if (t > 300) {
-            r.Active := false
-            r.Gui.Hide()
-            continue
-        }
+    r := Ripples[idx]
+    if (!r.Active)
+        return false
         
-        activeCount++
-        ease := 1 - (1 - (t / 300)) ** 2
-        size := Round(10 + 40 * ease)
-        alpha := Round(80 * (1 - ease))
-        
-        WinSetRegion("0-0 w" size " h" size " E", r.Gui.Hwnd)
-        try WinSetTransparent(alpha, r.Gui.Hwnd)
-        DllCall("SetWindowPos", "ptr", r.Gui.Hwnd, "ptr", -1, "int", r.x - size//2, "int", r.y - size//2, "int", 0, "int", 0, "uint", 0x55)
+    t := now - r.Start
+    if (t > 300) {
+        r.Active := false
+        RS_SetAlpha(r.Gui.Hwnd, "Off", RS_PRI_ANIM)
+        r.Gui.Hide()
+        return false
     }
     
-    if (activeCount == 0)
-        SetTimer(UpdateRipples, 0)
+    ease := 1 - (1 - (t / 300)) ** 2
+    size := Round(10 + 40 * ease)
+    alpha := Round(80 * (1 - ease))
+    
+    RS_SetRegion(r.Gui.Hwnd, "0-0 w" size " h" size " E", RS_PRI_ANIM)
+    RS_SetAlpha(r.Gui.Hwnd, alpha, RS_PRI_ANIM)
+    RS_SetPos(r.Gui.Hwnd, r.x - size//2, r.y - size//2, -1, -1, RS_PRI_ANIM)
+    return true
 }
 
 global DragTrailGui := ""
@@ -7762,58 +7736,52 @@ global DragTrailActive := false
 global DragTrailX := 0, DragTrailY := 0, DragTrailVX := 0, DragTrailVY := 0
 
 CheckElasticDrag() {
-    global DragTrailStartX, DragTrailStartY, DragTrailActive
+    global DragTrailStartX, DragTrailStartY, DragTrailActive, DragTrailX, DragTrailY, DragTrailGui
     if (!GetKeyState("LButton", "P")) {
         SetTimer(CheckElasticDrag, 0)
         return
     }
     MouseGetPos(&mx, &my)
-    if (Abs(mx - DragTrailStartX) > 10 || Abs(my - DragTrailStartY) > 10) {
+    if (Abs(mx - DragTrailStartX) > 5 || Abs(my - DragTrailStartY) > 5) {
         SetTimer(CheckElasticDrag, 0)
         DragTrailActive := true
-        StartDragTrail(mx, my)
+        if (!DragTrailGui) {
+            DragTrailGui := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
+            DragTrailGui.BackColor := "Gray"
+            WinSetRegion("0-0 w16 h16 E", DragTrailGui.Hwnd)
+        }
+        DragTrailX := mx, DragTrailY := my
+        DragTrailVX := 0
+        DragTrailVY := 0
+        RS_SetAlpha(DragTrailGui.Hwnd, 80, RS_PRI_ANIM)
+        RS_Commit()
+        DragTrailGui.Show("x-1000 y-1000 w16 h16 NoActivate")
+        RegisterAnimation("DragTrail", DragTrailCallback)
     }
 }
 
-StartDragTrail(startX, startY) {
-    global DragTrailGui, DragTrailX, DragTrailY, DragTrailVX, DragTrailVY
-    if (!DragTrailGui) {
-        DragTrailGui := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
-        DragTrailGui.BackColor := "Gray"
-        WinSetRegion("0-0 w16 h16 E", DragTrailGui.Hwnd)
-    }
-    DragTrailX := startX
-    DragTrailY := startY
-    DragTrailVX := 0
-    DragTrailVY := 0
-    try WinSetTransparent(80, DragTrailGui.Hwnd)
-    SetTimer(UpdateDragTrail, 16)
-}
-
-UpdateDragTrail() {
+DragTrailCallback(dt, now) {
     global DragTrailGui, DragTrailActive, DragTrailX, DragTrailY, DragTrailVX, DragTrailVY
     if (!GetKeyState("LButton", "P")) {
-        SetTimer(UpdateDragTrail, 0)
         DragTrailActive := false
+        RS_SetAlpha(DragTrailGui.Hwnd, "Off", RS_PRI_ANIM)
         DragTrailGui.Hide()
-        return
+        return false
     }
     
     MouseGetPos(&mx, &my)
-    
     dx := mx - DragTrailX
     dy := my - DragTrailY
-    
     DragTrailVX += dx * 0.2
     DragTrailVY += dy * 0.2
-    
-    DragTrailVX *= 0.65 
-    DragTrailVY *= 0.65
-    
+    DragTrailVX *= 0.7
+    DragTrailVY *= 0.7
     DragTrailX += DragTrailVX
     DragTrailY += DragTrailVY
     
-    DllCall("SetWindowPos", "ptr", DragTrailGui.Hwnd, "ptr", -1, "int", Round(DragTrailX - 8), "int", Round(DragTrailY - 8), "int", 0, "int", 0, "uint", 0x55)
+    RS_SetAlpha(DragTrailGui.Hwnd, 80, RS_PRI_ANIM)
+    RS_SetPos(DragTrailGui.Hwnd, Round(DragTrailX - 8), Round(DragTrailY - 8), -1, -1, RS_PRI_ANIM)
+    return true
 }
 
 global LastActiveHwnd := 0
@@ -8057,43 +8025,32 @@ SpawnSpark(x, y) {
     r.vx := (Random() - 0.5) * 6
     r.vy := (Random() - 0.5) * 6 - 2
     
-    try WinSetTransparent(200, r.Gui.Hwnd)
-    SetTimer(UpdateSparks, 16)
+    RS_SetAlpha(r.Gui.Hwnd, 200, RS_PRI_ANIM)
+    RegisterAnimation("Spark_" idx, SparkCallback.Bind(idx))
 }
 
-UpdateSparks() {
+SparkCallback(idx, dt, now) {
     global Sparks
-    now := QPC()
-    activeCount := 0
-    
-    loop Sparks.Length {
-        r := Sparks[A_Index]
-        if (!r.Active)
-            continue
-            
-        ; QPC() is already in milliseconds - see the note in UpdateBreathe. Same
-        ; bug as UpdateRipples: no spark ever survived to its first drawn frame.
-        t := now - r.Start
-        if (t > 400) {
-            r.Active := false
-            r.Gui.Hide()
-            continue
-        }
+    r := Sparks[idx]
+    if (!r.Active)
+        return false
         
-        activeCount++
-        
-        r.vy += 0.2 
-        r.x += r.vx
-        r.y += r.vy
-        
-        alpha := Round(200 * (1 - (t / 400)))
-        
-        try WinSetTransparent(alpha, r.Gui.Hwnd)
-        DllCall("SetWindowPos", "ptr", r.Gui.Hwnd, "ptr", -1, "int", r.x, "int", r.y, "int", 0, "int", 0, "uint", 0x55)
+    t := now - r.Start
+    if (t > 400) {
+        r.Active := false
+        RS_SetAlpha(r.Gui.Hwnd, "Off", RS_PRI_ANIM)
+        r.Gui.Hide()
+        return false
     }
     
-    if (activeCount == 0)
-        SetTimer(UpdateSparks, 0)
+    r.vy += 0.2 
+    r.x += r.vx
+    r.y += r.vy
+    alpha := Round(200 * (1 - (t / 400)))
+    
+    RS_SetAlpha(r.Gui.Hwnd, alpha, RS_PRI_ANIM)
+    RS_SetPos(r.Gui.Hwnd, r.x, r.y, -1, -1, RS_PRI_ANIM)
+    return true
 }
 
 global CurtainDropped := false
@@ -8239,15 +8196,14 @@ global CarouselAngleOffset := 0
     CarouselGui := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
     CarouselGui.BackColor := "111111"
     CarouselGui.Show("w" A_ScreenWidth " h" A_ScreenHeight " x0 y0")
-    try WinSetTransparent(220, CarouselGui.Hwnd)
-    
+    RS_SetAlpha(CarouselGui.Hwnd, 220, RS_PRI_USER)
+    RS_Commit()
     for hwnd in CarouselWindows {
         thumbId := 0
         DllCall("Dwmapi\DwmRegisterThumbnail", "ptr", CarouselGui.Hwnd, "ptr", hwnd, "ptr*", &thumbId)
         Thumbnails.Push(thumbId)
     }
-    
-    SetTimer(UpdateCarousel, 16)
+    RegisterAnimation("Carousel", CarouselCallback)
 }
 #HotIf
 
@@ -8281,7 +8237,7 @@ CloseCarousel(activateChoice) {
     if (!CarouselActive)
         return
     CarouselActive := false
-    SetTimer(UpdateCarousel, 0)
+    CancelAnimation("Carousel")
 
     for thumbId in Thumbnails {
         try DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", thumbId)
@@ -8304,10 +8260,10 @@ CloseCarousel(activateChoice) {
         try WinActivate(hwnd)
 }
 
-UpdateCarousel() {
+CarouselCallback(dt, now) {
     global CarouselGui, CarouselWindows, Thumbnails, CarouselIndex, CarouselAngleOffset, CarouselActive
     if (!CarouselActive)
-        return
+        return false
         
     if (CarouselAngleOffset > 0)
         CarouselAngleOffset *= 0.8
@@ -8320,69 +8276,42 @@ UpdateCarousel() {
     num := CarouselWindows.Length
     centerX := A_ScreenWidth / 2
     centerY := A_ScreenHeight / 2
-    radiusX := A_ScreenWidth * 0.35
-    radiusY := A_ScreenHeight * 0.15
+    radiusX := A_ScreenWidth * 0.3
+    radiusY := A_ScreenHeight * 0.1
     
-    PI := 3.14159265
+    PI := 3.141592653589793
     angleStep := (2 * PI) / num
     
     loop num {
         idx := A_Index
-        thumbId := Thumbnails[idx]
-        
         dist := idx - CarouselIndex
         if (dist > num / 2)
             dist -= num
-        if (dist < -num / 2)
+        else if (dist < -num / 2)
             dist += num
             
         angle := (dist + CarouselAngleOffset) * angleStep + (PI / 2)
         
-        z := Sin(angle)
         x := centerX + Cos(angle) * radiusX
-        y := centerY + z * radiusY
+        y := centerY + Sin(angle) * radiusY
+        scale := 0.5 + (Sin(angle) + 1) * 0.25
         
-        scale := 0.4 + (z + 1) * 0.3
+        w := Round(400 * scale)
+        h := Round(250 * scale)
+        px := Round(x - w/2)
+        py := Round(y - h/2)
         
-        tw := Round(800 * scale)
-        th := Round(450 * scale)
-        tx := Round(x - tw / 2)
-        ty := Round(y - th / 2)
-        
-        ; DWM_THUMBNAIL_PROPERTIES layout - this was wrong at all five call sites
-        ; and is why no DWM thumbnail effect in this file ever rendered anything:
-        ;
-        ;    0  DWORD dwFlags
-        ;    4  RECT  rcDestination          (4 x LONG)
-        ;   20  RECT  rcSource               (4 x LONG)
-        ;   36  BYTE  opacity
-        ;   37  (3 bytes of padding)
-        ;   40  BOOL  fVisible
-        ;   44  BOOL  fSourceClientAreaOnly
-        ;   48  = sizeof
-        ;
-        ; fVisible was written at 37, i.e. into the padding, so DWM read 0 at
-        ; offset 40 - and since DWM_TNP_VISIBLE (0x08) was set it was explicitly
-        ; told to keep the thumbnail hidden. Buffer(45) was also 3 bytes short of
-        ; the struct while DWM_TNP_SOURCECLIENTAREAONLY (0x10) made DWM read
-        ; offset 44-47, past the end of it. DWM_TNP_OPACITY (0x04) was never set,
-        ; so every opacity write was ignored too.
-        ;
-        ; DWM_TNP_RECTSOURCE (0x02) is deliberately NOT set here: this site never
-        ; writes rcSource, and claiming it left DWM using an empty {0,0,0,0} rect.
         props := Buffer(48, 0)
-        NumPut("uint", 0x01 | 0x04 | 0x08 | 0x10, props, 0)
-        NumPut("int", tx, props, 4)
-        NumPut("int", ty, props, 8)
-        NumPut("int", tx + tw, props, 12)
-        NumPut("int", ty + th, props, 16)
-
-        opacity := Round(255 * (0.3 + (z + 1) * 0.35))
-        NumPut("char", opacity, props, 36)
-        NumPut("int", 1, props, 40)
-
-        DllCall("Dwmapi\DwmUpdateThumbnailProperties", "ptr", thumbId, "ptr", props)
+        NumPut("uint", 0x01 | 0x08, props, 0) 
+        NumPut("int", px, props, 4)
+        NumPut("int", py, props, 8)
+        NumPut("int", px + w, props, 12)
+        NumPut("int", py + h, props, 16)
+        NumPut("uint", (idx == CarouselIndex) ? 255 : Round(100 * scale), props, 32) 
+        
+        DllCall("Dwmapi\DwmUpdateThumbnailProperties", "ptr", Thumbnails[idx], "ptr", props)
     }
+    return true
 }
 
 global MotionBlurScrollSpeed := 0
@@ -8392,7 +8321,7 @@ global MotionBlurThumb := 0
 global MotionBlurActiveHwnd := 0
 
 TriggerMotionBlur(hwnd, dir) {
-    global MotionBlurScrollSpeed, MotionBlurLastTime, MotionBlurActiveHwnd
+    global MotionBlurScrollSpeed, MotionBlurLastTime, MotionBlurActiveHwnd, MotionBlurGui
     now := QPC()
     dt := now - MotionBlurLastTime
     
@@ -8407,60 +8336,34 @@ TriggerMotionBlur(hwnd, dir) {
     MotionBlurLastTime := now
     MotionBlurActiveHwnd := hwnd
     
-    SetTimer(RenderMotionBlur, 16)
+    RegisterAnimation("MotionBlur", MotionBlurCallback)
 }
 
-RenderMotionBlur() {
-    global MotionBlurScrollSpeed, MotionBlurGui, MotionBlurThumb, MotionBlurActiveHwnd
+MotionBlurCallback(dt, now) {
+    global MotionBlurScrollSpeed, MotionBlurGui
     
-    MotionBlurScrollSpeed *= 0.82
-    if (Abs(MotionBlurScrollSpeed) < 3 || !DllCall("IsWindow", "ptr", MotionBlurActiveHwnd)) {
+    if (Abs(MotionBlurScrollSpeed) < 1) {
         MotionBlurScrollSpeed := 0
         if (MotionBlurGui) {
-            if (MotionBlurThumb)
-                DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", MotionBlurThumb)
-            MotionBlurGui.Destroy()
-            MotionBlurGui := ""
-            MotionBlurThumb := 0
+            RS_SetAlpha(MotionBlurGui.Hwnd, "Off", RS_PRI_ANIM)
+            MotionBlurGui.Hide()
         }
-        SetTimer(RenderMotionBlur, 0)
-        return
+        return false
     }
     
-    hwnd := MotionBlurActiveHwnd
+    MotionBlurScrollSpeed *= 0.85
+    
+    hwnd := WinExist("A")
+    if (!hwnd || !MotionBlurGui)
+        return false
+        
     try WinGetPos(&x, &y, &w, &h, hwnd)
     catch
-        return
+        return false
         
-    if (!MotionBlurGui) {
-        MotionBlurGui := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
-        MotionBlurGui.BackColor := "EEFFFF"
-        MotionBlurGui.Show("NA Hide")
-        MotionBlurThumb := 0
-        DllCall("Dwmapi\DwmRegisterThumbnail", "ptr", MotionBlurGui.Hwnd, "ptr", hwnd, "ptr*", &MotionBlurThumb)
-    }
-    
-    offset := Round(MotionBlurScrollSpeed * 1.5)
-    if (offset == 0)
-        return
-        
-    DllCall("SetWindowPos", "ptr", MotionBlurGui.Hwnd, "ptr", -1, "int", x, "int", y, "int", w, "int", h, "uint", 0x10 | 0x40) ; SWP_NOACTIVATE | SWP_SHOWWINDOW
-    
-    ; See the struct layout note in UpdateCarousel. No rcSource here either, so
-    ; DWM_TNP_RECTSOURCE (0x02) stays off.
-    props := Buffer(48, 0)
-    NumPut("uint", 0x01 | 0x04 | 0x08 | 0x10, props, 0) ; dwFlags
-    NumPut("int", 0, props, 4)
-    NumPut("int", offset, props, 8)
-    NumPut("int", w, props, 12)
-    NumPut("int", h + offset, props, 16)
-
-    alpha := Min(Round(Abs(MotionBlurScrollSpeed) * 3), 120)
-    NumPut("char", alpha, props, 36)
-    NumPut("int", 1, props, 40)
-
-    DllCall("Dwmapi\DwmUpdateThumbnailProperties", "ptr", MotionBlurThumb, "ptr", props)
-    try WinSetTransColor("EEFFFF " alpha, MotionBlurGui.Hwnd)
+    RS_SetAlpha(MotionBlurGui.Hwnd, Round(Abs(MotionBlurScrollSpeed) * 3), RS_PRI_ANIM)
+    RS_SetPos(MotionBlurGui.Hwnd, x, y, w, h, RS_PRI_ANIM)
+    return true
 }
 
 global TaskbarWaveGui := ""
@@ -8720,7 +8623,9 @@ CheckStartMenu() {
         StartMenuBlurGui := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
         StartMenuBlurGui.BackColor := "000000"
         StartMenuBlurGui.Show("NA x0 y0 w" A_ScreenWidth " h" A_ScreenHeight)
-        DllCall("SetWindowPos", "ptr", StartMenuBlurGui.Hwnd, "ptr", startHwnd, "int", 0, "int", 0, "int", 0, "int", 0, "uint", 0x13) 
+        RS_SetPos(StartMenuBlurGui.Hwnd, 0, 0, A_ScreenWidth, A_ScreenHeight, RS_PRI_USER)
+        RS_SetZOrder(StartMenuBlurGui.Hwnd, startHwnd, 0x13, RS_PRI_USER)
+        RS_Commit() 
         FadeGui(StartMenuBlurGui, 170)
         
         ; Runs on a 32 ms timer, so a throw here would pop an error dialog and
@@ -9279,3 +9184,5 @@ SyncShakeDetector()
 SyncCursorFxTimer()
 SyncTaskbarUiTimer()
 UpdateKeyboardHook()
+
+

@@ -53,10 +53,111 @@ ResetStealthEsc() {
 
 ToggleStealthPanic() {
     global StealthPanicActive
-    if (StealthPanicActive)
+    if (StealthPanicActive) {
         RestoreStealthPanic()
-    else
-        EnterStealthPanic()
+        return
+    }
+    StealthPanicRefreshSettings()
+    EnterStealthPanic()
+}
+
+; Re-read the settings on the way IN, and only on the way in.
+;
+; The settings GUI is a separate process, so the copy loaded into these globals
+; at startup is stale the moment the user saves - and the reload message the GUI
+; posts only ever reaches the standalone runner, never the engine hosted inside
+; Window Tweaks. Reloading Window Tweaks instead is not an option: Bye() un-hides
+; every window, drops the tray icons and cancels every animation.
+;
+; Deliberately NOT on the way out. StealthMuteAudio and StealthMuteMic decide
+; whether the original mute state is handed back, so they have to still hold what
+; they held when that state was captured - otherwise turning "mute microphone"
+; off while panic is active would strand the mic muted.
+;
+; Cost is roughly ten IniRead calls at ~64 us each plus one small file read, on a
+; path that only runs on an actual triple-ESC. Nowhere near an input hot path.
+StealthPanicRefreshSettings() {
+    global StealthPanicIniPath, StealthPanicTimeout, StealthLaunchSafeApps
+    global StealthSafeAppList, StealthLaunchDelay, StealthRestoreWorkspace
+    global StealthMuteAudio, StealthMuteMic
+    global StealthSuspendAnimations, StealthSuspendOverlays, StealthSuspendBackground
+
+    ; Every read falls back to the value already in memory, so a locked or
+    ; half-written ini leaves the engine on its last known-good settings instead
+    ; of silently resetting it to the shipped defaults.
+    try StealthPanicTimeout := Number(IniRead(StealthPanicIniPath, "stealth", "timeout", StealthPanicTimeout))
+    try StealthLaunchSafeApps := IniRead(StealthPanicIniPath, "stealth", "launchapps", StealthLaunchSafeApps ? "1" : "0") == "1"
+    try StealthLaunchDelay := Number(IniRead(StealthPanicIniPath, "stealth", "delay", StealthLaunchDelay))
+    try StealthRestoreWorkspace := IniRead(StealthPanicIniPath, "stealth", "restore", StealthRestoreWorkspace ? "1" : "0") == "1"
+    try StealthMuteAudio := IniRead(StealthPanicIniPath, "stealth", "muteaudio", StealthMuteAudio ? "1" : "0") == "1"
+    try StealthMuteMic := IniRead(StealthPanicIniPath, "stealth", "mutemic", StealthMuteMic ? "1" : "0") == "1"
+    try StealthSuspendAnimations := IniRead(StealthPanicIniPath, "stealth", "suspendanim", StealthSuspendAnimations ? "1" : "0") == "1"
+    try StealthSuspendOverlays := IniRead(StealthPanicIniPath, "stealth", "suspendover", StealthSuspendOverlays ? "1" : "0") == "1"
+    try StealthSuspendBackground := IniRead(StealthPanicIniPath, "stealth", "suspendbg", StealthSuspendBackground ? "1" : "0") == "1"
+
+    ; A hand-edited 0 here would make the triple-ESC window impossible to hit and
+    ; leave the feature unreachable with no way to tell why.
+    if (!IsNumber(StealthPanicTimeout) || StealthPanicTimeout < 100)
+        StealthPanicTimeout := 600
+
+    ; ReadAppList never throws. An empty result is far more likely to be a
+    ; transient read failure than a deliberate "launch nothing", and the user can
+    ; express that properly by unchecking "Launch safe applications".
+    fresh := StealthPanicConfig_ReadAppList(StealthPanicIniPath)
+    if (fresh != "")
+        StealthSafeAppList := fresh
+}
+
+; Call a function that may not exist in this build.
+;
+; StealthPanic.ahk is #Included into WindowTweaks.ahk in the hosted case and run
+; on its own in the standalone case, so every Sync* below genuinely does not
+; exist half the time. A direct call to a missing function is a LOAD-time error
+; that no try can catch - measured. %name% is resolved when the line runs, and
+; its failure is an ordinary catchable Error.
+StealthCall(fnName, args*) {
+    try {
+        fn := %fnName%
+        if (fn is Func) {
+            fn(args*)
+            return true
+        }
+    }
+    return false
+}
+
+; Start or stop the things the suspended flags actually drive.
+;
+; Flipping a feature flag without calling its Sync* leaves the feature's timer
+; running and its overlay on screen while the flag claims it is off - CLAUDE.md
+; documents that exact failure mode, and panic mode is the worst possible place
+; for it, since the entire point is that nothing of the previous workspace shows.
+;
+; Each Sync* reads its own flag and starts or stops accordingly, so the same call
+; list serves both the suspend and the restore direction.
+StealthSyncFeatures() {
+    global ProximityGhostEnabled, LivePipEnabled, GhostWindows, PipGuis
+
+    ; Ghost and PiP hold per-window state that no Sync* releases, so they get the
+    ; same explicit teardown ApplyUi performs when their box is unchecked.
+    if (IsSet(ProximityGhostEnabled) && !ProximityGhostEnabled && IsSet(GhostWindows)) {
+        for hwnd, info in GhostWindows.Clone()
+            StealthCall("UnGhostWindow", hwnd)
+        try SetTimer(%"GhostMonitorStep"%, 0)
+    }
+    if (IsSet(LivePipEnabled) && !LivePipEnabled && IsSet(PipGuis)) {
+        for src, pip in PipGuis.Clone()
+            StealthCall("ClosePiP", src)
+    }
+
+    StealthCall("SyncActiveBorderTimer")
+    StealthCall("SyncBreathingTimers")
+    StealthCall("SyncCursorFxTimer")
+    ; Stops the 32 ms poll, but only after one final pass that tears down the
+    ; Start-menu blur, the lightsaber glow and every privacy-blur sheet.
+    StealthCall("SyncTaskbarUiTimer")
+    StealthCall("UpdateKeyboardHook")
+    StealthCall("SyncMediaCore")
 }
 
 EnterStealthPanic() {
@@ -219,6 +320,10 @@ SuspendStealthFeatures() {
             CursorYawnEnabled := false
         }
     }
+
+    ; The flags above are only half the job - without this the timers keep
+    ; running and the overlays stay on screen.
+    StealthSyncFeatures()
 }
 
 RestoreStealthFeatures() {
@@ -264,6 +369,10 @@ RestoreStealthFeatures() {
         }
     }
     StealthSuspendedFeatures.Clear()
+
+    ; Same call list as the suspend direction: each Sync* reads the flag it was
+    ; just handed back and restarts whatever that flag owns.
+    StealthSyncFeatures()
 }
 
 global StealthAppCache := Map()
