@@ -1493,20 +1493,20 @@ RestartExplorer() {
 
 ShowHotkeys() {
     MsgBox(
-    "GLOBAL WINDOWS:`n"
-  . "Win+Ctrl+W`tSettings menu`n"
-  . "Win+Ctrl+T`tAlways on top (active window)`n"
-  . "Win+Ctrl+B`tAlways on bottom (Desktop Widget)`n"
-  . "Win+Ctrl+G`tProximity Ghost Window mode`n"
-  . "Win+Ctrl+P`tLive Window Picture-in-Picture`n"
-  . "Win+Ctrl+R`tRoll up / unroll the active window`n"
-  . "Win+Ctrl+H`tMinimize the active window to the tray`n"
-  . "Win+Ctrl+E`tBreathing windows on / off`n"
-  . "Win+Ctrl+F`tFocus mode (cinema) on / off`n"
-  . "Win+Ctrl+S`tMagnetic snapping on / off`n"
-  . "Win+Ctrl+M`tPosition memory on / off`n"
-  . "Win+Ctrl+Esc`tBoss key - hide everything and mute`n"
-  . "Win+Ctrl+Wheel`tTransparency of the active window`n"
+    "SHIFT+ALT HOTKEYS:`n"
+  . "Shift+Alt+W`tSettings menu`n"
+  . "Shift+Alt+O`tAlways on top (active window)`n"
+  . "Shift+Alt+B`tAlways on bottom (Desktop Widget)`n"
+  . "Shift+Alt+G`tProximity Ghost Window mode`n"
+  . "Shift+Alt+P`tLive Window Picture-in-Picture`n"
+  . "Shift+Alt+R`tRoll up / unroll the active window`n"
+  . "Shift+Alt+H`tMinimize the active window to the tray`n"
+  . "Shift+Alt+E`tBreathing windows on / off`n"
+  . "Shift+Alt+F`tFocus mode (cinema) on / off`n"
+  . "Shift+Alt+S`tMagnetic snapping on / off`n"
+  . "Shift+Alt+M`tPosition memory on / off`n"
+  . "Shift+Alt+Esc`tBoss key - hide everything and mute`n"
+  . "Shift+Alt+Wheel`tTransparency of the active window`n"
   . "Alt+F4`t`tClose with the gravity-drop animation`n`n"
   . "SYSTEM & MEDIA:`n"
   . "Ctrl+Win+V`tPaste as plain text`n"
@@ -1557,78 +1557,74 @@ ForgetPositions() {
 }
 
 ; =========================================================== Hotkeys ===========================================================
-^!w::ShowWin()
++!w::ShowWin()
 +!s::ToggleSnap()
 +!m::ToggleMemory()
 +!f::ToggleFocusMode()
-^!h::HideToTray()
-^!r::ToggleRollUp()
++!h::HideToTray()
++!r::ToggleRollUp()
 +!e::ToggleBreathing()
-^!Esc::ToggleBossKey()
++!Esc::ToggleBossKey()
 
 #HotIf AlwaysOnBottomEnabled
-^!b::ToggleAlwaysOnBottom()
++!b::ToggleAlwaysOnBottom()
 #HotIf
 
 #HotIf ProximityGhostEnabled
-^!g::ToggleGhostMode()
++!g::ToggleGhostMode()
 #HotIf
-^!WheelUp::ChangeTransparency(1)
-^!WheelDown::ChangeTransparency(-1)
++!WheelUp::ChangeTransparency(1)
++!WheelDown::ChangeTransparency(-1)
 
 #HotIf LivePipEnabled
-^!p::TogglePiP()
++!p::TogglePiP()
 #HotIf
 
 ; ----- Window layout ---------------------------------------------------------
-; Win+Ctrl+<key> acts on the active window. Win+Ctrl+Shift+<key> toggles a
-; feature on or off - see the second-tier block below.
-;
-; Deliberately unbound: Win+Ctrl+Left/Right (Windows virtual-desktop switching)
-; and Win+Left/Right, which already tile to the left and right halves. Also
-; avoided across both tiers: Win+Ctrl+D/Q/C/N/O/Enter/Space and Win+Ctrl+Shift+B,
-; all of which Windows 11 claims for the desktop switcher, Quick Assist, colour
-; filters, Narrator, the on-screen keyboard and the graphics-driver reset.
-^!c::CenterWindow()
-^!u::CycleWindowSize()
-^!j::MoveToNextMonitor()
-^!z::UndoLayout()
+; Shift+Alt+<key> acts on the active window. 
+; All primary features and layout commands are mapped to this 3-key chord.
++!k::CenterWindow()
++!u::CycleWindowSize()
++!n::MoveToNextMonitor()
++!z::UndoLayout()
 
 ; 3x3 grid tiling, laid out like the numeric keypad: corners are quarters, 8/2
 ; are the top and bottom halves, 4/6 the left and right halves, 5 a centred half.
 ; Both names of every keypad key are bound, because with NumLock OFF the keypad
 ; sends NumpadHome/NumpadUp/... instead of Numpad7/Numpad8/... - binding only the
 ; digit names would leave the whole gesture dead for anyone who keeps NumLock off.
-^!Numpad7::TileWindow(7)
-^!Numpad8::TileWindow(8)
-^!Numpad9::TileWindow(9)
-^!Numpad4::TileWindow(4)
-^!Numpad5::TileWindow(5)
-^!Numpad6::TileWindow(6)
-^!Numpad1::TileWindow(1)
-^!Numpad2::TileWindow(2)
-^!Numpad3::TileWindow(3)
-^!Numpad0::ToggleMaximize()
++!Numpad7::TileWindow(7)
++!Numpad8::TileWindow(8)
++!Numpad9::TileWindow(9)
++!Numpad4::TileWindow(4)
++!Numpad5::TileWindow(5)
++!Numpad6::TileWindow(6)
++!Numpad1::TileWindow(1)
++!Numpad2::TileWindow(2)
++!Numpad3::TileWindow(3)
++!Numpad0::ToggleMaximize()
 
 ; Laptop aliases for the two halves that have no Windows equivalent. The arrow
 ; keys are only free vertically - Win+Ctrl+Left/Right switch virtual desktops.
++!Up::TileWindow(8)
++!Down::TileWindow(2)
 
 ; ----- Utility ---------------------------------------------------------------
-^!x::ResetTransparency()
-^!y::RestoreAllWindows()
-+!r::Reload()
-+!q::ExitApp()
++!x::ResetTransparency()
++!y::RestoreAllWindows()
++!F5::Reload()
++!F6::ExitApp()
 
 ; ----- Keyboard access to gesture-only features ------------------------------
 ; Each of these already has a gesture; the gesture stays. A double-tap has to be
 ; disambiguated from two ordinary shortcuts (see IsDoublePress below), so an
 ; unambiguous key for the same action is worth having.
 #HotIf SpotlightEnabled
-^!l::ToggleSpotlight()
++!l::ToggleSpotlight()
 #HotIf
 
 #HotIf MicKillSwitchEnabled
-^!a:: {
++!a:: {
     state := ToggleDefaultMic()
     if (state != -1)
         ShowMicOSD(state)
@@ -1636,19 +1632,19 @@ ForgetPositions() {
 #HotIf
 
 #HotIf QuickLookEnabled && WinActive("ahk_class CabinetWClass")
-^!i::ToggleQuickLook()
++!q::ToggleQuickLook()
 #HotIf
 
-; ----- Feature toggles: Win+Ctrl+Shift+<key> ---------------------------------
+; ----- Feature toggles: Shift+Alt+<key> ---------------------------------
 ; These seven flags already persist to settings.ini; before this the only way to
 ; change one was to open the settings window.
 +!c::ToggleHotCorners()
-+!a::ToggleActiveBorder()
-+!w::ToggleCursorWrap()
++!v::ToggleActiveBorder()
++!i::ToggleCursorWrap()
 +!d::ToggleDimmer()
 +!t::ToggleSmartTaskbar()
-+!g::ToggleMagneticGroups()
-+!p::ToggleGrabPan()
++!j::ToggleMagneticGroups()
++!Space::ToggleGrabPan()
 
 ; Helper function for modifier key double presses (ignores auto-repeat)
 IsDoublePress(Timeout := 400) {
@@ -3623,7 +3619,7 @@ ToggleGrabPan() {
     ToggleFeatureFlag("Grab & pan", GrabPanEnabled, "grabpan")
 }
 
-^!t:: {
++!o:: {
     hwnd := WinExist("A")
     if !hwnd
         return
