@@ -117,12 +117,25 @@ Step 2.5 "Applying ExplorerPatcher Settings"
 $regFiles = Get-ChildItem -Path "$repo\PatcherSettings\ExplorerPatcher*.reg" -ErrorAction SilentlyContinue
 if ($regFiles) {
     $regFile = $regFiles | Select-Object -First 1
-    Say "Applying settings from $($regFile.Name)..." 'Yellow'
-    $regProc = Start-Process reg.exe -ArgumentList "import `"$($regFile.FullName)`"" -Wait -WindowStyle Hidden -PassThru
-    if ($regProc.ExitCode -eq 0) {
-        Say "Settings applied." 'Green'
+    
+    $apply = $true
+    if (-not $Silent) {
+        $answer = Read-Host "Do you want to apply ExplorerPatcher settings from $($regFile.Name)? (Y/n)"
+        if ($answer -eq 'n' -or $answer -eq 'N') {
+            $apply = $false
+        }
+    }
+
+    if ($apply) {
+        Say "Applying settings from $($regFile.Name)..." 'Yellow'
+        $regProc = Start-Process reg.exe -ArgumentList "import `"$($regFile.FullName)`"" -Wait -WindowStyle Hidden -PassThru
+        if ($regProc.ExitCode -eq 0) {
+            Say "Settings applied." 'Green'
+        } else {
+            Say "Failed to apply settings." 'Red'
+        }
     } else {
-        Say "Failed to apply settings." 'Red'
+        Say "Skipping ExplorerPatcher settings." 'DarkGray'
     }
 } else {
     Say "No PatcherSettings\ExplorerPatcher*.reg found, skipping." 'DarkGray'
@@ -234,7 +247,7 @@ public class WtSpi {
 }
 
 $drag = (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -ErrorAction SilentlyContinue).DragFullWindows
-$applyTuning = $true
+$applyVisualEffects = $true
 
 if (-not $Tuning -and -not $Silent) {
     if ("$drag" -ne '1') {
@@ -242,14 +255,14 @@ if (-not $Tuning -and -not $Silent) {
     } else {
         Say "'Show window contents while dragging' is on - the required setting is fine" 'Green'
     }
-    Say "Optional: fluid animations, Fluent transparency, faster Explorer."
-    Say "All HKCU only and fully reversible. See docs\WINDOWS-TUNING.md."
-    $answer = Read-Host "  Apply the Windows tuning as well? (Y/n)"
-    $applyTuning = -not ($answer -match '^[Nn]')
+    Say "Window Tweaks can apply the recommended Visual Effects settings for you." 'Cyan'
+    $answer = Read-Host "  Apply the recommended Windows Visual Effects? (Y/n)"
+    $applyVisualEffects = -not ($answer -match '^[Nn]')
 }
 
-if ($applyTuning) {
-    & (Join-Path $dest 'scripts\Apply-Windows-Tuning.ps1')
+if ($applyVisualEffects) {
+    Say "Applying Windows Visual Effects tuning..." 'Cyan'
+    & (Join-Path $dest 'scripts\Apply-Windows-Tuning.ps1') -Animations
 } elseif ("$drag" -ne '1') {
     # Never leave the program in a state where its headline feature is invisible.
     $dragBackupDir = Join-Path $env:LOCALAPPDATA 'Window Tweaks Backup'
@@ -263,8 +276,26 @@ if ($applyTuning) {
     [WtSpi]::SystemParametersInfo(0x0025, 1, [IntPtr]::Zero, 3) | Out-Null
     Say "Turned on 'Show window contents while dragging' (required) - nothing else changed" 'Yellow'
 } else {
-    Say "Skipped - run scripts\Apply-Windows-Tuning.ps1 any time" 'DarkGray'
+    Say "Skipped Windows Visual Effects tuning." 'DarkGray'
 }
+
+$applyExplorerTuning = $true
+if (-not $Tuning -and -not $Silent) {
+    Say "Optional: Faster Explorer (Launch to This PC, run folder windows in a separate process)."
+    Say "All HKCU only and fully reversible. See docs\WINDOWS-TUNING.md."
+    $answer = Read-Host "  Apply the Explorer tuning as well? (Y/n)"
+    $applyExplorerTuning = -not ($answer -match '^[Nn]')
+}
+
+if ($applyExplorerTuning) {
+    & (Join-Path $dest 'scripts\Apply-Windows-Tuning.ps1') -Explorer
+} else {
+    Say "Skipped Explorer tuning - run scripts\Apply-Windows-Tuning.ps1 any time" 'DarkGray'
+}
+
+Say "Restarting Explorer to apply all settings..." 'Yellow'
+Stop-Process -Name explorer -Force
+Start-Sleep -Seconds 2
 
 # ------------------------------------------------------------ 7. launch ----
 Step 7 "Starting Window Tweaks"

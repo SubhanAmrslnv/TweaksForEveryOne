@@ -178,9 +178,9 @@ public class WtSpi {
 
     $ai = New-Object WtSpi+ANIMATIONINFO
     $ai.cbSize = 8
-    $ai.iMinAnimate = 1
+    $ai.iMinAnimate = 0
     $null = [WtSpi]::SystemParametersInfo(0x0049, 8, [ref]$ai, $SPIF)
-    Say "Animate windows when minimizing and maximizing"
+    Say "Disabled Animate windows when minimizing and maximizing" 'Yellow'
 
     if ($currentBlink -eq '-1') {
         $null = [WtSpi]::SystemParametersInfo(0x0201, 530, [IntPtr]::Zero, $SPIF)
@@ -189,31 +189,23 @@ public class WtSpi {
         $null = [WtSpi]::SystemParametersInfo(0x2007, 0, [IntPtr]1, $SPIF)
     }
 
-    # Every constant here is the SET half of its pair, checked against the
-    # documented SPI_* values. Three of these were previously wrong and silently
-    # flipped unrelated system flags:
-    #   0x1017 is SETTOOLTIPANIMATION,  not SETMENUFADE      (0x1013)
-    #   0x104B is SETSPEECHRECOGNITION, not SETDROPSHADOW    (0x1025)
-    #   0x101D is SETMOUSESONAR,        not SETCURSORSHADOW  (0x101B)
     $effectsOn = [ordered]@{
         'UI effects (master switch)'         = 0x103F   # SPI_SETUIEFFECTS
         'Fade or slide menus into view'      = 0x1003   # SPI_SETMENUANIMATION
-        'Slide open combo boxes'             = 0x1005   # SPI_SETCOMBOBOXANIMATION
         'Smooth-scroll list boxes'           = 0x1007   # SPI_SETLISTBOXSMOOTHSCROLLING
-        'Fade out menu items after clicking' = 0x1013   # SPI_SETMENUFADE
         'Selection fade'                     = 0x1015   # SPI_SETSELECTIONFADE
-        'Fade or slide ToolTips into view'   = 0x1019   # SPI_SETTOOLTIPFADE
-        'Show shadows under mouse pointer'   = 0x101B   # SPI_SETCURSORSHADOW
+        'Show shadows under windows'         = 0x1025   # SPI_SETDROPSHADOW
         'Animate controls inside windows'    = 0x1043   # SPI_SETCLIENTAREAANIMATION
     }
 
     $effectsOff = [ordered]@{
+        'Slide open combo boxes'             = 0x1005   # SPI_SETCOMBOBOXANIMATION
+        'Fade out menu items after clicking' = 0x1013   # SPI_SETMENUFADE
+        'Fade or slide ToolTips into view (1)' = 0x1017 # SPI_SETTOOLTIPANIMATION
+        'Fade or slide ToolTips into view (2)' = 0x1019 # SPI_SETTOOLTIPFADE
+        'Show shadows under mouse pointer'   = 0x101B   # SPI_SETCURSORSHADOW
     }
 
-    # -MinimalAnimations stops here: the glide dependency, the delay removals,
-    # the caret, and minimise/maximise animation. Everything past this point is
-    # decoration, which is exactly what "minimal" is asking to skip. (These two
-    # switches used to run identical code despite the docs promising otherwise.)
     if ($MinimalAnimations -and -not $Animations) {
         Say "Minimal: skipped the decorative effects" 'DarkGray'
         Update-Explorer
@@ -227,18 +219,16 @@ public class WtSpi {
             Say "Disabled $name" 'Yellow'
         }
 
-        Set-Tuning $PATH_ADVANCED 'TaskbarAnimations'   1 'DWord'
-        Say "Taskbar animations"
+        Set-Tuning $PATH_ADVANCED 'TaskbarAnimations'   0 'DWord'
+        Say "Disabled Taskbar animations" 'Yellow'
 
-        # The Performance Options checkboxes. All ON: this script is named for
-        # animations and its own help promises Fluent transparency.
-        # ListviewAlphaSelect is "Show translucent selection rectangle", the
-        # Explorer marquee. It must stay enabled.
         Set-Tuning $PATH_ADVANCED 'ListviewAlphaSelect' 1 'DWord'
-        Set-Tuning $PATH_ADVANCED 'ListviewShadow'      1 'DWord'
-        Set-Tuning $PATH_PERSONAL 'EnableTransparency'  1 'DWord'
-        Set-Tuning $PATH_DWM      'EnableAeroPeek'      1 'DWord'
-        Say "Translucent selection rectangle, icon label shadows, transparency, Aero Peek"
+        Set-Tuning $PATH_ADVANCED 'ListviewShadow'      0 'DWord'
+        Set-Tuning $PATH_PERSONAL 'EnableTransparency'  0 'DWord'
+        Set-Tuning $PATH_DWM      'EnableAeroPeek'      0 'DWord'
+        Set-Tuning $PATH_ADVANCED 'IconsOnly'           0 'DWord'
+        Set-Tuning $PATH_DESKTOP  'FontSmoothing'       '2' 'String'
+        Say "Translucent selection rectangle ON, icon label shadows OFF, transparency OFF, Aero Peek OFF, Thumbnails ON, Font Smoothing ON"
 
         Update-Explorer
         Write-Host "  Some of these settle fully only after an Explorer restart." -ForegroundColor DarkGray
