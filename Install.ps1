@@ -232,13 +232,11 @@ public class WtSpi {
 }
 '@
 }
-[WtSpi]::SystemParametersInfo(0x1025, 0, [IntPtr]::Zero, 3) | Out-Null
-Say "Disabled Windows shadow effects" 'Yellow'
 
 $drag = (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -ErrorAction SilentlyContinue).DragFullWindows
-$applyTuning = $Tuning
+$applyTuning = $true
 
-if (-not $applyTuning -and -not $Silent) {
+if (-not $Tuning -and -not $Silent) {
     if ("$drag" -ne '1') {
         Say "'Show window contents while dragging' is OFF - the ice glide needs it." 'Yellow'
     } else {
@@ -246,8 +244,8 @@ if (-not $applyTuning -and -not $Silent) {
     }
     Say "Optional: fluid animations, Fluent transparency, faster Explorer."
     Say "All HKCU only and fully reversible. See docs\WINDOWS-TUNING.md."
-    $answer = Read-Host "  Apply the Windows tuning as well? (y/N)"
-    $applyTuning = $answer -match '^[Yy]'
+    $answer = Read-Host "  Apply the Windows tuning as well? (Y/n)"
+    $applyTuning = -not ($answer -match '^[Nn]')
 }
 
 if ($applyTuning) {

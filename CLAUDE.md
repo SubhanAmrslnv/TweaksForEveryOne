@@ -10,43 +10,42 @@ A Windows 11 tray utility written in **AutoHotkey v2** (magnetic window snapping
 
 ## Features and hotkeys
 
-**Win + Ctrl** drives everything, in two tiers: `Win+Ctrl+<key>` *acts on the active window*, `Win+Ctrl+Shift+<key>` *toggles a feature flag*. Hotkeys are declared in one block (`src/WindowTweaks.ahk`, search `=== Hotkeys ===`) and each one delegates to a named function that the tray menu binds to as well — change behaviour in the function, never in the hotkey line, or the two drift apart.
+**Ctrl + Alt** and **Shift + Alt** drive everything, in two tiers: `Ctrl+Alt+<key>` *acts on the active window*, `Shift+Alt+<key>` *toggles a feature flag*. Hotkeys are declared in one block (`src/WindowTweaks.ahk`, search `=== Hotkeys ===`) and each one delegates to a named function that the tray menu binds to as well — change behaviour in the function, never in the hotkey line, or the two drift apart.
 
 | Hotkey | Action | Entry point |
 |---|---|---|
-| `Win+Ctrl+W` | Open the settings window | `ShowWin()` |
-| `Win+Ctrl+S` | Magnetic snapping on / off | `ToggleSnap()` |
-| `Win+Ctrl+M` | Position memory on / off | `ToggleMemory()` |
-| `Win+Ctrl+E` | Breathing windows on / off | `ToggleBreathing()` |
-| `Win+Ctrl+F` | Focus / cinema mode | `ToggleFocusMode()` |
-| `Win+Ctrl+T` | Always-on-top the active window | inline block |
-| `Win+Ctrl+B` | Always-on-bottom (desktop widget) | `ToggleAlwaysOnBottom()` |
-| `Win+Ctrl+G` | Proximity ghost window | `ToggleGhostMode()` |
-| `Win+Ctrl+P` | Live PiP thumbnail | `TogglePiP()` |
-| `Win+Ctrl+R` | Roll up / unroll | `ToggleRollUp()` |
-| `Win+Ctrl+H` | Minimize to tray | `HideToTray()` |
-| `Win+Ctrl+Esc` | Boss key | `ToggleBossKey()` |
-| `Win+Ctrl+Wheel` | Transparency of the active window | `ChangeTransparency()` |
-| `Win+Ctrl+K` | Centre the active window, keep its size | `CenterWindow()` |
-| `Win+Ctrl+U` | Cycle size 50 / 75 / 90 % of the work area, centred | `CycleWindowSize()` |
-| `Win+Ctrl+J` | Move to the next monitor, scaled to its work area | `MoveToNextMonitor()` |
-| `Win+Ctrl+Numpad1..9` | Tile to that cell of a 3×3 grid (keypad-shaped) | `TileWindow(cell)` |
-| `Win+Ctrl+Numpad0` | Maximize / restore | `ToggleMaximize()` |
-| `Win+Ctrl+Up/Down` | Top / bottom half (laptop alias for Numpad8/2) | `TileWindow(8/2)` |
-| `Win+Ctrl+Z` | Undo the last layout change to this window | `UndoLayout()` |
-| `Win+Ctrl+X` | Reset the active window to fully opaque | `ResetTransparency()` |
-| `Win+Ctrl+Y` | Restore all rolled-up / ghosted / tray-hidden windows | `RestoreAllWindows()` |
-| `Win+Ctrl+L` | Spotlight launcher (alias for double-tap Ctrl) | `ToggleSpotlight()` |
-| `Win+Ctrl+A` | Mic kill-switch (alias for double-tap Alt) | `ToggleDefaultMic()` |
-| `Win+Ctrl+I` | Quick Look preview (alias for Space in Explorer) | `ToggleQuickLook()` |
-| `Win+Ctrl+Shift+C` | Hot corners on / off | `ToggleHotCorners()` |
-| `Win+Ctrl+Shift+A` | Smart active border on / off | `ToggleActiveBorder()` |
-| `Win+Ctrl+Shift+W` | Infinite cursor wrap on / off | `ToggleCursorWrap()` |
-| `Win+Ctrl+Shift+D` | Multi-monitor dimmer on / off | `ToggleDimmer()` |
-| `Win+Ctrl+Shift+T` | Smart auto-hide taskbar on / off | `ToggleSmartTaskbar()` |
-| `Win+Ctrl+Shift+G` | Magnetic window groups on / off | `ToggleMagneticGroups()` |
-| `Win+Ctrl+Shift+P` | Universal grab & pan on / off | `ToggleGrabPan()` |
-| `Win+Ctrl+Shift+R` / `+Q` | Restart / Exit | `Reload()` / `ExitApp()` |
+| `Ctrl+Alt+W` | Open the settings window | `ShowWin()` |
+| `Shift+Alt+S` | Magnetic snapping on / off | `ToggleSnap()` |
+| `Shift+Alt+M` | Position memory on / off | `ToggleMemory()` |
+| `Shift+Alt+E` | Breathing windows on / off | `ToggleBreathing()` |
+| `Shift+Alt+F` | Focus / cinema mode | `ToggleFocusMode()` |
+| `Ctrl+Alt+T` | Always-on-top the active window | inline block |
+| `Ctrl+Alt+B` | Always-on-bottom (desktop widget) | `ToggleAlwaysOnBottom()` |
+| `Ctrl+Alt+G` | Proximity ghost window | `ToggleGhostMode()` |
+| `Ctrl+Alt+P` | Live PiP thumbnail | `TogglePiP()` |
+| `Ctrl+Alt+R` | Roll up / unroll | `ToggleRollUp()` |
+| `Ctrl+Alt+H` | Minimize to tray | `HideToTray()` |
+| `Ctrl+Alt+Esc` | Boss key | `ToggleBossKey()` |
+| `Ctrl+Alt+Wheel` | Transparency of the active window | `ChangeTransparency()` |
+| `Ctrl+Alt+C` | Centre the active window, keep its size | `CenterWindow()` |
+| `Ctrl+Alt+U` | Cycle size 50 / 75 / 90 % of the work area, centred | `CycleWindowSize()` |
+| `Ctrl+Alt+J` | Move to the next monitor, scaled to its work area | `MoveToNextMonitor()` |
+| `Ctrl+Alt+Numpad1..9` | Tile to that cell of a 3×3 grid (keypad-shaped) | `TileWindow(cell)` |
+| `Ctrl+Alt+Numpad0` | Maximize / restore | `ToggleMaximize()` |
+| `Ctrl+Alt+Z` | Undo the last layout change to this window | `UndoLayout()` |
+| `Ctrl+Alt+X` | Reset the active window to fully opaque | `ResetTransparency()` |
+| `Ctrl+Alt+Y` | Restore all rolled-up / ghosted / tray-hidden windows | `RestoreAllWindows()` |
+| `Ctrl+Alt+L` | Spotlight launcher (alias for double-tap Ctrl) | `ToggleSpotlight()` |
+| `Ctrl+Alt+A` | Mic kill-switch (alias for double-tap Alt) | `ToggleDefaultMic()` |
+| `Ctrl+Alt+I` | Quick Look preview (alias for Space in Explorer) | `ToggleQuickLook()` |
+| `Shift+Alt+C` | Hot corners on / off | `ToggleHotCorners()` |
+| `Shift+Alt+A` | Smart active border on / off | `ToggleActiveBorder()` |
+| `Shift+Alt+W` | Infinite cursor wrap on / off | `ToggleCursorWrap()` |
+| `Shift+Alt+D` | Multi-monitor dimmer on / off | `ToggleDimmer()` |
+| `Shift+Alt+T` | Smart auto-hide taskbar on / off | `ToggleSmartTaskbar()` |
+| `Shift+Alt+G` | Magnetic window groups on / off | `ToggleMagneticGroups()` |
+| `Shift+Alt+P` | Universal grab & pan on / off | `ToggleGrabPan()` |
+| `Shift+Alt+R` / `+Q` | Restart / Exit | `Reload()` / `ExitApp()` |
 | `Alt+F4` | Close with the gravity-drop animation | `GravityClose()` |
 | `Esc Esc Esc` | Stealth Panic Mode on / off (see its own section) | `ToggleStealthPanic()` |
 | `(Tray Menu)` | Restart / Exit | `Reload()` / `ExitApp()` |
@@ -96,16 +95,16 @@ Hot Corners uses the same dwell model (`[corners] size`, `[corners] delay`) for 
 - **Multi-Monitor Focus Dimmer**: Dims inactive monitors by 50% to reduce eye strain.
 - **macOS "Hot Corners"**: Throw your mouse to screen corners to trigger actions (e.g. Hide windows, Task View).
 - **Premium Volume OSD**: A sleek, blurred macOS-style volume indicator when scrolling the taskbar.
-- **Live Window PiP**: `Win+Ctrl+P` creates a live, always-on-top thumbnail of any background window.
+- **Live Window PiP**: `Ctrl+Alt+P` creates a live, always-on-top thumbnail of any background window.
 - **Universal Grab & Pan**: Hold Middle-Click to pan/scroll any window (like the Photoshop Hand Tool).
 - **Global Mic Kill-Switch**: Double-tap `Alt` to instantly mute/unmute your microphone system-wide.
 - **Infinite Cursor Wrap**: Teleport your cursor across screen edges for seamless multi-monitor navigation.
 - **Quick Spotlight Launcher**: Double-tap `Ctrl` for a minimalist, lightning-fast search and launch bar.
 - **Smart Active Border**: Draws a sleek, accent-colored border around the currently active window.
-- **Always on Bottom**: `Win+Ctrl+B` pins any window permanently to your desktop background as a widget.
+- **Always on Bottom**: `Ctrl+Alt+B` pins any window permanently to your desktop background as a widget.
 - **Global Text Expander**: Type `@@mail`, `@@date`, etc., to instantly expand snippets anywhere.
 - **Middle-Click to Close**: Middle-click any window's title bar to instantly close it.
-- **Proximity Ghost Window**: `Win+Ctrl+G` makes a window 80% transparent; it fades in and becomes clickable only when your mouse gets close.
+- **Proximity Ghost Window**: `Ctrl+Alt+G` makes a window 80% transparent; it fades in and becomes clickable only when your mouse gets close.
 
 **Performance & OS Tuning:**
 - **Zero-delay Menus (MenuShowDelay)**: Windows menus open instantly (0-50ms) just like macOS, eliminating the artificial 400ms delay.
@@ -149,12 +148,12 @@ Hot Corners uses the same dwell model (`[corners] size`, `[corners] delay`) for 
 - **Privacy Blur on Unfocus**: Mark a window as private (Win+Alt+B). When inactive, it gets a heavy frosted glass overlay.
 
 **Keyboard Window Layout:**
-- **Numpad Tiling**: `Win+Ctrl+Numpad1..9` tiles to a 3x3 grid of the work area, laid out like the keypad. Both the digit and navigation names of every keypad key are bound, so it works with NumLock either way.
-- **Centre / Cycle Size / Next Monitor / Maximize / Undo**: `Win+Ctrl+K` / `U` / `J` / `Numpad0` / `Z`. All except maximize go through `ApplyLayout()`.
-- **Restore Everything**: `Win+Ctrl+Y` unrolls, un-ghosts and un-hides every window the program is holding — the recovery path for state a user cannot see.
-- **Reset Transparency**: `Win+Ctrl+X`.
+- **Numpad Tiling**: `Ctrl+Alt+Numpad1..9` tiles to a 3x3 grid of the work area, laid out like the keypad. Both the digit and navigation names of every keypad key are bound, so it works with NumLock either way.
+- **Centre / Cycle Size / Next Monitor / Maximize / Undo**: `Ctrl+Alt+C` / `U` / `J` / `Numpad0` / `Z`. All except maximize go through `ApplyLayout()`.
+- **Restore Everything**: `Ctrl+Alt+Y` unrolls, un-ghosts and un-hides every window the program is holding — the recovery path for state a user cannot see.
+- **Reset Transparency**: `Ctrl+Alt+X`.
 
-**Feature Toggles (`Win+Ctrl+Shift+<key>`):** hot corners `C`, active border `A`, cursor wrap `W`, multi-monitor dimmer `D`, smart auto-hide taskbar `T`, magnetic groups `G`, grab & pan `P`. Each flips the flag, persists it, updates the settings checkbox if the window is open, notifies, and calls the feature's `Sync*` — that last step is what actually starts or stops the timer.
+**Feature Toggles (`Shift+Alt+<key>`):** hot corners `C`, active border `A`, cursor wrap `W`, multi-monitor dimmer `D`, smart auto-hide taskbar `T`, magnetic groups `G`, grab & pan `P`. Each flips the flag, persists it, updates the settings checkbox if the window is open, notifies, and calls the feature's `Sync*` — that last step is what actually starts or stops the timer.
 
 **Productivity & Window Management:**
 - **Transparency Control**: `Win + Ctrl + Wheel` to adjust the opacity of any active window.
@@ -213,17 +212,17 @@ Two settings are deliberately *not* in the registry because they are not numbers
 
 **A space followed by `;` starts a comment even inside a double-quoted string.** `x := "a ; b"` fails to load with `Missing """`; `x := "a; b"` is fine. This is why the shipped `media_fallback` default writes `"a.exe; b.exe"` and never `"a.exe ; b.exe"`. Verified against 2.0 in this repo — check any literal that contains a semicolon.
 
-**Enumerated settings must be validated by membership, not range.** Every setting that feeds a DropDownList (`OpenAnim`, `SmartCapsAction`, the four `HotCorner*`, `EP_Style`, `EP_IconSize`) goes through `IniPick(section, key, allowedList, default)` in `LoadSettings`, and the control is built from the *same* list with `IndexOf()` for its `Choose<n>`. The lists live in one place — `OPEN_ANIMS`, `CAPS_ACTIONS`, `CORNER_ACTIONS`, `EP_STYLES`, `EP_ICON_SIZES` near the top of the file. Two things break if you skip this: `DropDownList.Choose("not in the list")` throws *inside* `BuildWin`, which leaves `Win+Ctrl+W` permanently dead after one hand-edited `settings.ini`; and a value the dropdown cannot display leaves the GUI showing one thing while the engine uses another. Range-check the numeric settings; list-check these.
+**Enumerated settings must be validated by membership, not range.** Every setting that feeds a DropDownList (`OpenAnim`, `SmartCapsAction`, the four `HotCorner*`, `EP_Style`, `EP_IconSize`) goes through `IniPick(section, key, allowedList, default)` in `LoadSettings`, and the control is built from the *same* list with `IndexOf()` for its `Choose<n>`. The lists live in one place — `OPEN_ANIMS`, `CAPS_ACTIONS`, `CORNER_ACTIONS`, `EP_STYLES`, `EP_ICON_SIZES` near the top of the file. Two things break if you skip this: `DropDownList.Choose("not in the list")` throws *inside* `BuildWin`, which leaves `Ctrl+Alt+W` permanently dead after one hand-edited `settings.ini`; and a value the dropdown cannot display leaves the GUI showing one thing while the engine uses another. Range-check the numeric settings; list-check these.
 
 Tray menu labels embed their hotkey after a literal tab — `"Magnetic snap\tWin+Ctrl+S"` — and that **entire string is the lookup key** used by `SyncTray()` to set tick marks. Renaming a label without updating both places silently breaks the checkmarks, with no error.
 
 ### Windows shortcuts this claims
 
-AutoHotkey hooks the keyboard ahead of Windows, so while the program runs, `Win+Ctrl+S` no longer opens Speech Recognition. The rest are unclaimed by Windows.
+AutoHotkey hooks the keyboard ahead of Windows, so while the program runs, `Shift+Alt+S` no longer opens Speech Recognition. The rest are unclaimed by Windows.
 
 Deliberately **not** touched, and this is the constraint that dictated the whole key allocation: `Win+Ctrl+←/→` (virtual desktops), `Win+Ctrl+D` (new virtual desktop), `Win+Ctrl+Q` (Quick Assist), `Win+Ctrl+C` (colour filters), `Win+Ctrl+N` / `Win+Ctrl+Enter` (Narrator), `Win+Ctrl+O` (on-screen keyboard), `Win+Ctrl+Space` (previous input method), `Win+Ctrl+Shift+B` (reset the graphics driver), `Win+Ctrl+<digit>` (last active window of taskbar app N), `Win+↑/↓`, `Win+Tab`, `Win+D`, `Win+E`. Several of those are accessibility features; shadowing them is not a trade this program gets to make on the user's behalf. That is why "centre the window" is on `K` and not the obvious `C`, and why left/right halves have no arrow alias — `Win+←/→` already does that job.
 
-Before adding a hotkey, check this list. The free `Win+Ctrl` letters are now down to `V` (taken by `Ctrl+Win+V`) and nothing else; the second tier `Win+Ctrl+Shift+<key>` is where new bindings should go.
+Before adding a hotkey, check this list. The free `Win+Ctrl` letters are now down to `V` (taken by `Ctrl+Win+V`) and nothing else; the second tier `Shift+Alt+<key>` is where new bindings should go.
 
 ## Commands
 

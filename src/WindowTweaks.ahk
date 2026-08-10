@@ -1557,27 +1557,27 @@ ForgetPositions() {
 }
 
 ; =========================================================== Hotkeys ===========================================================
-#^w::ShowWin()
-#^s::ToggleSnap()
-#^m::ToggleMemory()
-#^f::ToggleFocusMode()
-#^h::HideToTray()
-#^r::ToggleRollUp()
-#^e::ToggleBreathing()
-#^Esc::ToggleBossKey()
+^!w::ShowWin()
++!s::ToggleSnap()
++!m::ToggleMemory()
++!f::ToggleFocusMode()
+^!h::HideToTray()
+^!r::ToggleRollUp()
++!e::ToggleBreathing()
+^!Esc::ToggleBossKey()
 
 #HotIf AlwaysOnBottomEnabled
-#^b::ToggleAlwaysOnBottom()
+^!b::ToggleAlwaysOnBottom()
 #HotIf
 
 #HotIf ProximityGhostEnabled
-#^g::ToggleGhostMode()
+^!g::ToggleGhostMode()
 #HotIf
-#^WheelUp::ChangeTransparency(1)
-#^WheelDown::ChangeTransparency(-1)
+^!WheelUp::ChangeTransparency(1)
+^!WheelDown::ChangeTransparency(-1)
 
 #HotIf LivePipEnabled
-#^p::TogglePiP()
+^!p::TogglePiP()
 #HotIf
 
 ; ----- Window layout ---------------------------------------------------------
@@ -1589,58 +1589,46 @@ ForgetPositions() {
 ; avoided across both tiers: Win+Ctrl+D/Q/C/N/O/Enter/Space and Win+Ctrl+Shift+B,
 ; all of which Windows 11 claims for the desktop switcher, Quick Assist, colour
 ; filters, Narrator, the on-screen keyboard and the graphics-driver reset.
-#^k::CenterWindow()
-#^u::CycleWindowSize()
-#^j::MoveToNextMonitor()
-#^z::UndoLayout()
+^!c::CenterWindow()
+^!u::CycleWindowSize()
+^!j::MoveToNextMonitor()
+^!z::UndoLayout()
 
 ; 3x3 grid tiling, laid out like the numeric keypad: corners are quarters, 8/2
 ; are the top and bottom halves, 4/6 the left and right halves, 5 a centred half.
 ; Both names of every keypad key are bound, because with NumLock OFF the keypad
 ; sends NumpadHome/NumpadUp/... instead of Numpad7/Numpad8/... - binding only the
 ; digit names would leave the whole gesture dead for anyone who keeps NumLock off.
-#^Numpad7::TileWindow(7)
-#^NumpadHome::TileWindow(7)
-#^Numpad8::TileWindow(8)
-#^NumpadUp::TileWindow(8)
-#^Numpad9::TileWindow(9)
-#^NumpadPgUp::TileWindow(9)
-#^Numpad4::TileWindow(4)
-#^NumpadLeft::TileWindow(4)
-#^Numpad5::TileWindow(5)
-#^NumpadClear::TileWindow(5)
-#^Numpad6::TileWindow(6)
-#^NumpadRight::TileWindow(6)
-#^Numpad1::TileWindow(1)
-#^NumpadEnd::TileWindow(1)
-#^Numpad2::TileWindow(2)
-#^NumpadDown::TileWindow(2)
-#^Numpad3::TileWindow(3)
-#^NumpadPgDn::TileWindow(3)
-#^Numpad0::ToggleMaximize()
-#^NumpadIns::ToggleMaximize()
+^!Numpad7::TileWindow(7)
+^!Numpad8::TileWindow(8)
+^!Numpad9::TileWindow(9)
+^!Numpad4::TileWindow(4)
+^!Numpad5::TileWindow(5)
+^!Numpad6::TileWindow(6)
+^!Numpad1::TileWindow(1)
+^!Numpad2::TileWindow(2)
+^!Numpad3::TileWindow(3)
+^!Numpad0::ToggleMaximize()
 
 ; Laptop aliases for the two halves that have no Windows equivalent. The arrow
 ; keys are only free vertically - Win+Ctrl+Left/Right switch virtual desktops.
-#^Up::TileWindow(8)
-#^Down::TileWindow(2)
 
 ; ----- Utility ---------------------------------------------------------------
-#^x::ResetTransparency()
-#^y::RestoreAllWindows()
-#^+r::Reload()
-#^+q::ExitApp()
+^!x::ResetTransparency()
+^!y::RestoreAllWindows()
++!r::Reload()
++!q::ExitApp()
 
 ; ----- Keyboard access to gesture-only features ------------------------------
 ; Each of these already has a gesture; the gesture stays. A double-tap has to be
 ; disambiguated from two ordinary shortcuts (see IsDoublePress below), so an
 ; unambiguous key for the same action is worth having.
 #HotIf SpotlightEnabled
-#^l::ToggleSpotlight()
+^!l::ToggleSpotlight()
 #HotIf
 
 #HotIf MicKillSwitchEnabled
-#^a:: {
+^!a:: {
     state := ToggleDefaultMic()
     if (state != -1)
         ShowMicOSD(state)
@@ -1648,19 +1636,19 @@ ForgetPositions() {
 #HotIf
 
 #HotIf QuickLookEnabled && WinActive("ahk_class CabinetWClass")
-#^i::ToggleQuickLook()
+^!i::ToggleQuickLook()
 #HotIf
 
 ; ----- Feature toggles: Win+Ctrl+Shift+<key> ---------------------------------
 ; These seven flags already persist to settings.ini; before this the only way to
 ; change one was to open the settings window.
-#^+c::ToggleHotCorners()
-#^+a::ToggleActiveBorder()
-#^+w::ToggleCursorWrap()
-#^+d::ToggleDimmer()
-#^+t::ToggleSmartTaskbar()
-#^+g::ToggleMagneticGroups()
-#^+p::ToggleGrabPan()
++!c::ToggleHotCorners()
++!a::ToggleActiveBorder()
++!w::ToggleCursorWrap()
++!d::ToggleDimmer()
++!t::ToggleSmartTaskbar()
++!g::ToggleMagneticGroups()
++!p::ToggleGrabPan()
 
 ; Helper function for modifier key double presses (ignores auto-repeat)
 IsDoublePress(Timeout := 400) {
@@ -1891,7 +1879,7 @@ GetActiveExplorerPath() {
 #HotIf
 
 #HotIf PlainPasteEnabled
-^#v:: {
+^!v:: {
     if (A_Clipboard == "")
         return
     ClipSaved := ClipboardAll()
@@ -3635,7 +3623,7 @@ ToggleGrabPan() {
     ToggleFeatureFlag("Grab & pan", GrabPanEnabled, "grabpan")
 }
 
-#^t:: {
+^!t:: {
     hwnd := WinExist("A")
     if !hwnd
         return
@@ -4662,13 +4650,21 @@ ShellEvent(wParam, lParam, *) {
     if ((wParam & 0x7FFF) = HSHELL_GETMINRECT) {
         global FlyMinimizeEnabled, BlackHoleMinimizeEnabled
         if (BlackHoleMinimizeEnabled) {
+            hwndToMin := NumGet(lParam, 0, "ptr")
+            TriggerBlackHoleMinimize(hwndToMin)
             rectOffset := A_PtrSize == 8 ? 8 : 4
-            cx := Round(A_ScreenWidth / 2)
-            cy := Round(A_ScreenHeight)
-            NumPut("int", cx - 1, lParam, rectOffset)
-            NumPut("int", cy - 1, lParam, rectOffset + 4)
-            NumPut("int", cx + 1, lParam, rectOffset + 8)
-            NumPut("int", cy + 1, lParam, rectOffset + 12)
+            try WinGetPos(&wx, &wy, &ww, &wh, hwndToMin)
+            if IsSet(wx) {
+                cx := wx + ww//2
+                cy := wy + wh//2
+            } else {
+                cx := Round(A_ScreenWidth / 2)
+                cy := Round(A_ScreenHeight / 2)
+            }
+            NumPut("int", cx, lParam, rectOffset)
+            NumPut("int", cy, lParam, rectOffset + 4)
+            NumPut("int", cx, lParam, rectOffset + 8)
+            NumPut("int", cy, lParam, rectOffset + 12)
             return 1
         } else if (FlyMinimizeEnabled) {
             MouseGetPos(&mx, &my)
@@ -5783,12 +5779,8 @@ ShowVolumeOSD(vol, isMuted) {
         }
     } else {
         try {
-            OsdGui := Gui("-Caption +ToolWindow +AlwaysOnTop +LastFound -DPIScale +E0x20")
+            OsdGui := Gui("-Caption +ToolWindow +AlwaysOnTop +LastFound -DPIScale")
             OsdGui.BackColor := "181818"
-            RS_SetAlpha(OsdGui.Hwnd, 0, RS_PRI_ANIM)
-            RS_Commit()
-
-
             OsdGui.SetFont("s24 cWhite", "Segoe UI Emoji")
             OsdGui.AddText("vIcon x15 y12 w40 h40 BackgroundTrans Center", GetSpeakerIcon(vol, isMuted))
             
@@ -5799,6 +5791,9 @@ ShowVolumeOSD(vol, isMuted) {
             OsdGui.AddText("x115 y29 w150 h6 Background333333")
             w := Max(1, Round(150 * (vol / 100)))
             OsdGui.AddText("vBar x115 y29 w" w " h6 BackgroundFFFFFF")
+
+            RS_SetAlpha(OsdGui.Hwnd, 0, RS_PRI_ANIM)
+            RS_Commit()
             
             OsdGui.Show("NoActivate w280 h64")
             try WinSetAlwaysOnTop(1, OsdGui.Hwnd)
@@ -5821,20 +5816,17 @@ ShowVolumeOSD(vol, isMuted) {
 
 UpdateOSD(vol, isMuted) {
     global OsdGui
+    OsdGui["Icon"].Text := GetSpeakerIcon(vol, isMuted)
+    OsdGui["Pct"].Text := (isMuted || vol == 0) ? "Muted" : Round(vol) "%"
+    w := Max(1, Round(150 * (vol / 100)))
+    OsdGui["Bar"].Move(,, w)
     try {
-        OsdGui["Icon"].Text := GetSpeakerIcon(vol, isMuted)
-        OsdGui["Pct"].Text := (isMuted || vol == 0) ? "Muted" : Round(vol) "%"
-        w := Max(1, Round(150 * (vol / 100)))
-        OsdGui["Bar"].Move(,, w)
         if (isMuted)
-            OsdGui["Bar"].Opt("+Background555555")
+            OsdGui["Bar"].Opt("Background555555")
         else
-            OsdGui["Bar"].Opt("+BackgroundFFFFFF")
-        OsdGui["Bar"].Redraw()
-    } catch {
-        try OsdGui.Destroy()
-        OsdGui := ""
+            OsdGui["Bar"].Opt("BackgroundFFFFFF")
     }
+    OsdGui["Bar"].Redraw()
 }
 
 GetSpeakerIcon(vol, isMuted) {
@@ -5867,6 +5859,16 @@ ClearVolumeOSD() {
 
 ; ====== Live Window PiP ======
 OnMessage(0x0084, WM_NCHITTEST_PiP)
+OnMessage(0x00A7, PiP_NCMouseEvents) ; WM_NCMBUTTONDOWN
+OnMessage(0x0201, PiP_MouseEvents) ; LBUTTONDOWN
+OnMessage(0x0202, PiP_MouseEvents) ; LBUTTONUP
+OnMessage(0x0204, PiP_MouseEvents) ; RBUTTONDOWN
+OnMessage(0x0205, PiP_MouseEvents) ; RBUTTONUP
+OnMessage(0x0207, PiP_MouseEvents) ; MBUTTONDOWN
+OnMessage(0x0208, PiP_MouseEvents) ; MBUTTONUP
+OnMessage(0x020A, PiP_MouseEvents) ; MOUSEWHEEL
+OnMessage(0x0200, PiP_MouseEvents) ; MOUSEMOVE
+
 
 WM_NCHITTEST_PiP(wParam, lParam, msg, hwnd) {
     global PipGuis
@@ -5883,9 +5885,71 @@ WM_NCHITTEST_PiP(wParam, lParam, msg, hwnd) {
                 return
             if (x < winX + 5 || x > winX + winW - 5 || y < winY + 5 || y > winY + winH - 5)
                 return
+            if (pip.HasProp("Interactive") && pip.Interactive)
+                return 1 ; HTCLIENT
             return 2 ; HTCAPTION
         }
     }
+}
+
+PiP_NCMouseEvents(wParam, lParam, msg, hwnd) {
+    global PipGuis
+    if (msg == 0x00A7 && wParam == 2) { ; WM_NCMBUTTONDOWN on HTCAPTION
+        for src, pip in PipGuis {
+            if (pip.Hwnd == hwnd) {
+                pip.Interactive := true
+                pip.Opt("+Border +Caption")
+                pip.Title := "PiP (Interactive) - MClick to exit"
+                return 0
+            }
+        }
+    }
+}
+
+PiP_MouseEvents(wParam, lParam, msg, hwnd) {
+    global PipGuis
+    isPip := false
+    sourceHwnd := 0
+    guiObj := 0
+    for src, pip in PipGuis {
+        if (pip.Hwnd == hwnd) {
+            isPip := true
+            sourceHwnd := src
+            guiObj := pip
+            break
+        }
+    }
+    if !isPip
+        return
+        
+    if (msg == 0x0207) { ; WM_MBUTTONDOWN
+        guiObj.Interactive := false
+        guiObj.Opt("-Caption -Border")
+        guiObj.Title := ""
+        return 0
+    }
+    
+    if (!guiObj.HasProp("Interactive") || !guiObj.Interactive)
+        return
+        
+    x := lParam << 48 >> 48
+    y := lParam << 32 >> 48
+    
+    WinGetClientPos(,, &pw, &ph, hwnd)
+    try WinGetClientPos(,, &sw, &sh, sourceHwnd)
+    catch
+        return
+        
+    if (pw > 0 && ph > 0) {
+        srcX := Round(x * (sw / pw))
+        srcY := Round(y * (sh / ph))
+        
+        newLParam := (srcY << 16) | (srcX & 0xFFFF)
+        PostMessage(msg, wParam, newLParam,, "ahk_id " sourceHwnd)
+    }
+    
+    if (msg != 0x0200)
+        return 0
 }
 
 WinGetPosSafe(hwnd, &x, &y, &w, &h) {
@@ -6070,7 +6134,7 @@ ShowMicOSD(isMuted) {
         }
     } else {
         try {
-            MicOsdGui := Gui("-Caption +ToolWindow +AlwaysOnTop +LastFound -DPIScale +E0x20")
+            MicOsdGui := Gui("-Caption +ToolWindow +AlwaysOnTop +LastFound -DPIScale")
             
             if (isMuted) {
                 MicOsdGui.BackColor := "8B0000" 
@@ -6080,12 +6144,11 @@ ShowMicOSD(isMuted) {
                 txt := "🎙️ Mic Active"
             }
             
-            RS_SetAlpha(MicOsdGui.Hwnd, 0, RS_PRI_ANIM)
-            RS_Commit()
-
-
             MicOsdGui.SetFont("s20 cWhite bold", "Segoe UI")
             MicOsdGui.AddText("vText x0 y15 w240 h40 BackgroundTrans Center", txt)
+
+            RS_SetAlpha(MicOsdGui.Hwnd, 0, RS_PRI_ANIM)
+            RS_Commit()
             
             MicOsdGui.Show("NoActivate w240 h70")
             RS_SetRegion(MicOsdGui.Hwnd, "0-0 w240 h70 r20-20", RS_PRI_ANIM)
@@ -6105,17 +6168,12 @@ ShowMicOSD(isMuted) {
 
 UpdateMicOSD(isMuted) {
     global MicOsdGui
-    try {
-        if (isMuted) {
-            MicOsdGui.BackColor := "8B0000"
-            MicOsdGui["Text"].Text := "🎙️ Mic Muted"
-        } else {
-            MicOsdGui.BackColor := "006400"
-            MicOsdGui["Text"].Text := "🎙️ Mic Active"
-        }
-    } catch {
-        try MicOsdGui.Destroy()
-        MicOsdGui := ""
+    if (isMuted) {
+        MicOsdGui.BackColor := "8B0000"
+        MicOsdGui["Text"].Text := "🎙️ Mic Muted"
+    } else {
+        MicOsdGui.BackColor := "006400"
+        MicOsdGui["Text"].Text := "🎙️ Mic Active"
     }
 }
 
@@ -7123,6 +7181,7 @@ TriggerCursorYawn() {
     guiObj := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
     guiObj.BackColor := "White"
     WinSetTransparent(220, guiObj.Hwnd)
+    guiObj.Show("NA Hide")
     
     animKey := "CursorYawn_" . guiObj.Hwnd
     start := QPC()
@@ -7643,6 +7702,7 @@ StartBreatheCursor() {
         RS_SetRegion(BreatheGui.Hwnd, "0-0 w40 h40 E", RS_PRI_ANIM)
         RS_SetAlpha(BreatheGui.Hwnd, 0, RS_PRI_ANIM)
         RS_Commit()
+        BreatheGui.Show("NA")
     }
     BreatheStart := QPC()
     RegisterAnimation("BreatheCursor", UpdateBreathe)
@@ -7703,6 +7763,7 @@ SpawnRipple(x, y) {
     r.Start := QPC()
     r.x := x
     r.y := y
+    r.Gui.Show("NA")
     
     RegisterAnimation("Ripple_" idx, RippleCallback.Bind(idx))
 }
@@ -7931,7 +7992,7 @@ NotchAnim(hwnd, startY, destY, fadeIn := true, onDone := "") {
         t := (now - start) / ms
         if (t >= 1) {
             RS_SetPos(hwnd, x, destY, -1, -1, RS_PRI_USER)
-            try RS_SetAlpha(hwnd, fadeIn ? 220 : "Off", RS_PRI_USER)
+            try RS_SetAlpha(hwnd, fadeIn ? 220 : 0, RS_PRI_USER)
             if onDone
                 onDone()
             return false
@@ -8060,7 +8121,7 @@ global CurtainWindows := Map()
 ; feature off the key is simply not claimed, so Windows' own show-desktop runs -
 ; CLAUDE.md lists Win+D as deliberately not touched.
 #HotIf CurtainDropEnabled
-#d:: {
+#!d:: {
     global CurtainDropped, CurtainWindows
 
     if (CurtainDropped) {
@@ -8789,11 +8850,10 @@ TriggerBlackHoleDelete(hwnd) {
     startX := mx - size/2
     startY := my - size/2
     
-    ; MonitorGetPrimary takes no parameters - it RETURNS the monitor number.
     prim := MonitorGetPrimary()
     MonitorGet(prim, &mL, &mT, &mR, &mB)
-    destX := mL + 50
-    destY := mT + 50
+    destX := mL + 40
+    destY := mT + 40
     
     distX := Abs(destX - startX)
     distY := Abs(destY - startY)
@@ -8868,8 +8928,82 @@ CleanDeleteGui(animKey) {
 }
 
 ; ----------------------------------------------------------------------------
-; 6. Shatter to Close
+; 6. Shatter to Close & Black Hole Minimize
 ; ----------------------------------------------------------------------------
+TriggerBlackHoleMinimize(hwnd) {
+    if !hwnd
+        return
+    try {
+        if (WinGetMinMax(hwnd) != 0)
+            return ; Don't animate maximized windows to save performance
+        WinGetPos(&x, &y, &w, &h, hwnd)
+    } catch {
+        return
+    }
+    if (w < 1 || h < 1)
+        return
+        
+    hbm := 0
+    hdcDest := DllCall("GetDC", "ptr", 0, "ptr")
+    if hdcDest {
+        hbm := DllCall("CreateCompatibleBitmap", "ptr", hdcDest, "int", w, "int", h, "ptr")
+        hdcMem := DllCall("CreateCompatibleDC", "ptr", hdcDest, "ptr")
+        if (hbm && hdcMem) {
+            oldObj := DllCall("SelectObject", "ptr", hdcMem, "ptr", hbm, "ptr")
+            DllCall("PrintWindow", "ptr", hwnd, "ptr", hdcMem, "uint", 2)
+            DllCall("SelectObject", "ptr", hdcMem, "ptr", oldObj)
+        }
+        if hdcMem
+            DllCall("DeleteDC", "ptr", hdcMem)
+        DllCall("ReleaseDC", "ptr", 0, "ptr", hdcDest)
+    }
+    if !hbm
+        return
+        
+    animGui := Gui("-Caption +ToolWindow +AlwaysOnTop -DPIScale +E0x20")
+    animGui.MarginX := 0, animGui.MarginY := 0
+    animGui.Add("Picture", "x0 y0 w" w " h" h, "HBITMAP:" hbm)
+    animGui.Show("NA x" x " y" y " w" w " h" h)
+    
+    animKey := "MinHole_" . animGui.Hwnd
+    start := QPC()
+    ms := 300
+    
+    startX := x
+    startY := y
+    destX := Round(A_ScreenWidth / 2)
+    destY := Round(A_ScreenHeight)
+    
+    Step(dt, now) {
+        t := (now - start) / ms
+        if (t >= 1) {
+            animGui.Destroy()
+            DllCall("DeleteObject", "ptr", hbm)
+            return false
+        }
+        
+        ease := t * t * t 
+        
+        curX := startX + (destX - startX - w/2) * ease
+        curY := startY + (destY - startY - h/2) * ease
+        
+        scaleDown := 1 - ease
+        curW := Round(w * scaleDown)
+        curH := Round(h * scaleDown)
+        
+        if (curW < 1)
+            curW := 1
+        if (curH < 1)
+            curH := 1
+            
+        DllCall("SetWindowPos", "ptr", animGui.Hwnd, "ptr", -1, "int", Round(curX), "int", Round(curY), "int", curW, "int", curH, "uint", 0x14)
+        
+        WinSetTransparent(Round(255 * scaleDown), animGui.Hwnd)
+        return true
+    }
+    RegisterAnimation(animKey, Step)
+}
+
 global ActiveShatters := Map()
 
 #HotIf ShatterEnabled
@@ -9052,6 +9186,7 @@ AddPrivacyBlur(hwnd) {
     guiObj.Opt("+Owner" hwnd)
     guiObj.BackColor := "222222"
     WinSetTransparent(0, guiObj.Hwnd)
+    guiObj.Show("NA Hide")
     
     accent := Buffer(16, 0)
     NumPut("int", 3, accent, 0) 

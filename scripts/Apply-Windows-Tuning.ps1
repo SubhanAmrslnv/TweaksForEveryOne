@@ -208,7 +208,6 @@ public class WtSpi {
     }
 
     $effectsOff = [ordered]@{
-        'Show shadows under windows'         = 0x1025   # SPI_SETDROPSHADOW
     }
 
     # -MinimalAnimations stops here: the glide dependency, the delay removals,
@@ -237,7 +236,7 @@ public class WtSpi {
         # Explorer marquee. It must stay enabled.
         Set-Tuning $PATH_ADVANCED 'ListviewAlphaSelect' 1 'DWord'
         Set-Tuning $PATH_ADVANCED 'ListviewShadow'      1 'DWord'
-        Set-Tuning $PATH_PERSONAL 'EnableTransparency'  0 'DWord'
+        Set-Tuning $PATH_PERSONAL 'EnableTransparency'  1 'DWord'
         Set-Tuning $PATH_DWM      'EnableAeroPeek'      1 'DWord'
         Say "Translucent selection rectangle, icon label shadows, transparency, Aero Peek"
 
