@@ -94,6 +94,9 @@ global SparkTypingEnabled := false        ; OFF-BY-DEFAULT: never rendered until
 global CarouselAltTabEnabled := false     ; OFF-BY-DEFAULT: never rendered until now
 global MotionBlurScrollEnabled := false   ; OFF-BY-DEFAULT: never rendered until now
 global TaskbarWaveEnabled := false        ; OFF-BY-DEFAULT: never rendered until now
+global CustomClockEnabled := false
+global CustomClockWeather := ""
+global LastWeatherFetch := 0
 global StartMenuBlurEnabled := true
 global ToastBounceEnabled := true
 global MonitorThrowEnabled := true
@@ -484,6 +487,7 @@ LoadSettings() {
     CarouselAltTabEnabled := IniStr("memory", "carousel", "0") = "1"
     MotionBlurScrollEnabled := IniStr("mouse", "motionblur", "0") = "1"
     TaskbarWaveEnabled := IniStr("taskbar", "wave", "0") = "1"
+    CustomClockEnabled := IniStr("taskbar", "customclock", "0") = "1"
     StartMenuBlurEnabled := IniStr("taskbar", "startblur", "1") = "1"
     ToastBounceEnabled := IniStr("taskbar", "toastbounce", "1") = "1"
     MonitorThrowEnabled := IniStr("mouse", "monthrow", "1") = "1"
@@ -607,6 +611,7 @@ WriteSettings() {
     PutIni(CarouselAltTabEnabled ? 1 : 0, "memory", "carousel")
     PutIni(MotionBlurScrollEnabled ? 1 : 0, "mouse", "motionblur")
     PutIni(TaskbarWaveEnabled ? 1 : 0, "taskbar", "wave")
+    PutIni(CustomClockEnabled ? 1 : 0, "taskbar", "customclock")
     PutIni(StartMenuBlurEnabled ? 1 : 0, "taskbar", "startblur")
     PutIni(ToastBounceEnabled ? 1 : 0, "taskbar", "toastbounce")
     PutIni(MonitorThrowEnabled ? 1 : 0, "mouse", "monthrow")
@@ -804,7 +809,7 @@ BuildWin() {
     global GlideEnabled, GLIDE_THROW, GLIDE_MS
     global BlackHoleMinimizeEnabled, MomentumTiltEnabled, FocusDepthEnabled
     global CurtainDropEnabled, SparkTypingEnabled, CarouselAltTabEnabled, MotionBlurScrollEnabled
-    global TaskbarWaveEnabled, StartMenuBlurEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled, CursorYawnEnabled, ShatterEnabled, LightsaberSeamEnabled
+    global TaskbarWaveEnabled, CustomClockEnabled, StartMenuBlurEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled, CursorYawnEnabled, ShatterEnabled, LightsaberSeamEnabled
     global RestoreEnabled, BreathingEnabled, PulseEnabled, OpenAnim, FlyMinimizeEnabled, RollUpEnabled, TrayMinimizeEnabled, BossKeyEnabled, AltDragEnabled, TaskbarScrollEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, SmartCapsEnabled, SmartCapsAction, ParallaxEnabled, EP_Style, EP_IconSize, PrivacyBlurEnabled
     global NAV, SEL, SELF, FG
 
@@ -1135,6 +1140,9 @@ BuildWin() {
     C["twave"] := Box(pg, CW, FG, "Taskbar Icon Wave", TaskbarWaveEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Hovering over the taskbar creates a magnifying glass bubble that tracks your mouse.", "xm y+8")
     
+    C["customclock"] := Box(pg, CW, FG, "Small Taskbar Custom Clock", CustomClockEnabled, "xm y+16")
+    Sub(pg, CW, cSub, "Overlays a custom clock with Date and Weather when using Small Icons.", "xm y+8")
+    
     C["startblur"] := Box(pg, CW, FG, "Start Menu Blur (Cinematic Focus)", StartMenuBlurEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Heavily blurs the background when the Start Menu is open.", "xm y+8")
     
@@ -1384,6 +1392,7 @@ ApplyUi(writeBack := false) {
         CarouselAltTabEnabled := C["carousel"].Value
         MotionBlurScrollEnabled := C["motionblur"].Value
         TaskbarWaveEnabled := C["twave"].Value
+        CustomClockEnabled := C["customclock"].Value
         StartMenuBlurEnabled := C["startblur"].Value
         ToastBounceEnabled := C["toast"].Value
         MonitorThrowEnabled := C["monthrow"].Value
@@ -1476,6 +1485,7 @@ ApplyUi(writeBack := false) {
     try SyncHotCornersTimer()
     try SyncCursorWrapTimer()
     try SyncActiveBorderTimer()
+    try SyncCustomClockTimer()
     try SyncTextExpander()
     try SyncShakeDetector()
     try SyncCursorFxTimer()
@@ -8803,6 +8813,122 @@ SyncTaskbarUiTimer() {
     }
     CheckTaskbarAndUI()            ; final pass: every sub-check cleans up
     SetTimer(CheckTaskbarAndUI, 0)
+}
+
+; ----------------------------------------------------------------------------
+; Custom Taskbar Clock Overlay
+; ----------------------------------------------------------------------------
+global CustomClockGui := 0
+global CustomClockText := 0
+global CustomClockReq := 0 ; Store COM object to prevent GC during async
+
+SyncCustomClockTimer() {
+    global CustomClockEnabled, LastWeatherFetch, CustomClockWeather
+    if (CustomClockEnabled) {
+        ; Force immediate fetch on enable
+        LastWeatherFetch := 0
+        CustomClockWeather := "Updating..."
+        SetTimer(UpdateCustomClock, 1000)
+        UpdateCustomClock()
+    } else {
+        SetTimer(UpdateCustomClock, 0)
+        HideCustomClock()
+    }
+}
+
+HideCustomClock() {
+    global CustomClockGui
+    if (CustomClockGui) {
+        CustomClockGui.Destroy()
+        CustomClockGui := 0
+    }
+}
+
+UpdateCustomClock() {
+    global CustomClockGui, CustomClockText, CustomClockWeather, LastWeatherFetch, EP_IconSize
+    
+    if (EP_IconSize != "Small") {
+        HideCustomClock()
+        return
+    }
+    
+    tbHwnd := WinExist("ahk_class Shell_TrayWnd")
+    if (!tbHwnd) {
+        HideCustomClock()
+        return
+    }
+
+    WinGetPos(&tx, &ty, &tw, &th, "ahk_id " tbHwnd)
+    if (ty >= A_ScreenHeight - 2) {
+        HideCustomClock()
+        return
+    }
+    
+    clockHwnd := ControlGetHwnd("TrayClockWClass", "ahk_id " tbHwnd)
+    if (!clockHwnd) {
+        HideCustomClock()
+        return
+    }
+    
+    if (!DllCall("IsWindowVisible", "Ptr", clockHwnd)) {
+        HideCustomClock()
+        return
+    }
+    
+    WinGetPos(&cx, &cy, &cw, &ch, "ahk_id " clockHwnd)
+    
+    if (!CustomClockGui) {
+        CustomClockGui := Gui("-Caption +AlwaysOnTop +ToolWindow +E0x20 -DPIScale")
+        CustomClockGui.MarginX := 0
+        CustomClockGui.MarginY := 0
+        CustomClockGui.BackColor := "111111"
+        CustomClockGui.SetFont("s6 cWhite q5", "Segoe UI")
+        CustomClockText := CustomClockGui.Add("Text", "x0 y0 w" cw " h" ch " Center", "Loading...")
+        CustomClockGui.Show("NA x" cx " y" cy " w" cw " h" ch)
+    } else {
+        CustomClockGui.Move(cx, cy, cw, ch)
+        CustomClockText.Move(0, 0, cw, ch)
+    }
+    
+    now := A_TickCount
+    ; Only fetch if 15 minutes have passed since last attempt (or 0)
+    if (LastWeatherFetch == 0 || (now - LastWeatherFetch > 15 * 60 * 1000)) {
+        LastWeatherFetch := now
+        FetchWeather()
+    }
+    
+    t := FormatTime(, "HH.mm.ss")
+    d := FormatTime(, "dd.MM.yyyy")
+    w := CustomClockWeather
+    
+    CustomClockText.Value := t "`n" d "`n" w
+}
+
+FetchWeather() {
+    global CustomClockReq, CustomClockWeather
+    try {
+        CustomClockReq := ComObject("Msxml2.XMLHTTP")
+        CustomClockReq.open("GET", "http://wttr.in/?format=%c+%t+%w", true)
+        CustomClockReq.onreadystatechange := WeatherCallback
+        CustomClockReq.send()
+    } catch {
+        CustomClockWeather := "Net Err"
+    }
+}
+
+WeatherCallback() {
+    global CustomClockReq, CustomClockWeather
+    try {
+        if (CustomClockReq.readyState == 4) {
+            if (CustomClockReq.status == 200) {
+                CustomClockWeather := StrReplace(CustomClockReq.responseText, "`n", "")
+                CustomClockWeather := StrReplace(CustomClockWeather, "`r", "")
+            } else {
+                CustomClockWeather := "API Err"
+            }
+            CustomClockReq := 0 ; Free the object
+        }
+    }
 }
 
 ; ----------------------------------------------------------------------------
