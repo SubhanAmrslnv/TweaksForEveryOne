@@ -3,7 +3,7 @@
                             return true
                             WinActivate("ahk_id " hwnd)
                             WinRestore("ahk_id " hwnd)
-                         : A_TrayMenu.Uncheck("Breathing windows`tWin+Ctrl+E")
+                         : A_TrayMenu.Uncheck(TRAY_BREATHING)
                         "AppsUseLightTheme") = 0)
                         , "int", it.x, "int", it.y, "int", it.w, "int", it.h
                         , "ptr", it.hwnd, "ptr", 0
@@ -39,11 +39,11 @@
                         touches := true
                         WinGetPos(&ox, &oy, &ow, &oh, other)
                         WinSetTransparent(255, obj.gui.Hwnd)
-                       : A_TrayMenu.Uncheck("Position memory`tWin+Ctrl+M")
+                       : A_TrayMenu.Uncheck(TRAY_MEMORY)
                      , right: vLeft + vWidth, bottom: vTop + vHeight, mons: mons}
                     , "int", it.x, "int", it.y, "int", it.w, "int", it.h
                     , "uint", it.flags)
-                    : A_TrayMenu.Uncheck("Magnetic snap`tWin+Ctrl+S")
+                    : A_TrayMenu.Uncheck(TRAY_SNAP)
                     }
                     }
                     }
@@ -1362,14 +1362,14 @@
             RS_SetPos(hwnd, x, destY, -1, -1, RS_PRI_USER)
             RS_SetPos(hwnd, x, y + shrink, w, h - shrink*2, RS_PRI_ANIM)
             RS_SetPos(hwnd, x, y, -1, -1, RS_PRI_USER)
-            RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
-            RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
             RS_SetPos(hwnd, X, Y, W, H, RS_PRI_ANIM)
+            RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
+            RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
             RS_SetRegion(ActiveBorderGui.Hwnd, rect1 "  " rect2 "  " rect3 "  " rect4, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "", RS_PRI_ANIM)
             RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
-            RS_SetRegion(hwnd, "0-0 w" w " h" curH, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
+            RS_SetRegion(hwnd, "0-0 w" w " h" curH, RS_PRI_ANIM)
             RS_SetRegion(MicOsdGui.Hwnd, "0-0 w240 h70 r20-20", RS_PRI_ANIM)
             RS_SetRegion(OsdGui.Hwnd, "0-0 w280 h64 r20-20", RS_PRI_ANIM)
             Run(appStr)
@@ -1532,8 +1532,8 @@
             try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
             try WinGetPos(&wx, &wy, &ww, &wh, hwndToMin)
             try WinGetPos(&x, &y, &w, &h, hwnd)
-            try WinGetPos(&x, &y, &w, &h, hwnd)
             try WinGetPos(&X, &Y, &W, &H, hwnd)
+            try WinGetPos(&x, &y, &w, &h, hwnd)
             try WinHide(hwnd)
             try WinMove(ElasticBaseX, ElasticBaseY,,, ElasticHwnd)
             try WinSetAlwaysOnTop(1, OsdGui.Hwnd)
@@ -2843,6 +2843,7 @@
         nid := Buffer(cbSize, 0)
         nid := Buffer(cbSize, 0)
         Notify("Cannot pin this window to the desktop")
+        Notify("Could not open Stealth Panic settings")
         Notify("Failed to set Always on top (Access Denied)")
         Notify("Focus Mode OFF")
         Notify("Focus Mode ON")
@@ -2852,6 +2853,7 @@
         Notify("Nothing to undo")
         Notify("Only one monitor")
         Notify("Saved window positions cleared")
+        Notify("StealthPanicUI.ahk not found")
         Notify(isTop ? "Always on top: ON" : "Always on top: OFF")
         Notify(name " not found")
         Notify(PendingTransMsg)
@@ -3019,6 +3021,8 @@
         RestoreFromBottom(hwnd)
         RestoreFromTray(hwnd)
         RestoreStealthPanic()
+        return
+        return
         return
         return
         return
@@ -3798,6 +3802,7 @@
         try SpotlightGui.Destroy()
         try StealthOriginalMute := SoundGetMute()
         try UnGhostWindow(hwnd)
+        try WinActivate("Stealth Panic Mode Settings")
         try WinActivate(hwnd)
         try WinActivate(hwnd)
         try WinActivate(hwnd)
@@ -3895,11 +3900,13 @@
         z := SmartGridZones[A_Index]
         ZOrderSpotlight()
         ZOrderSpotlight()
-    "SHIFT+ALT HOTKEYS:`n"
     "Window Tweaks - Hotkeys", "Iconi")
+    "WINDOWS AND MODES  (Shift+Alt)`n"
     , step: step, dec: dec, page: page, label: label, hint: hint}
     {
     {key: key, sec: sec, ini: ini, def: def, lo: lo, hi: hi
+    }
+    }
     }
     }
     }
@@ -4437,6 +4444,8 @@
     b4.OnEvent("Click", (*) => ShowHotkeys())
     b5 := pg.AddButton("x+12 yp w150 h30", "Guide")
     b5.OnEvent("Click", (*) => OpenDoc("GUIDE.md"))
+    b6 := pg.AddButton("xm y+12 w312 h30", "Stealth Panic Mode settings (Esc Esc Esc)")
+    b6.OnEvent("Click", (*) => OpenStealthPanicSettings())
     back := ""
     bestD := threshold + 1
     bestDist := 999999
@@ -4473,10 +4482,10 @@
     C["altdrag"] := Box(pg, CW, FG, "Linux-Style Alt-Drag (Move & Resize)", AltDragEnabled, "xm y+12")
     C["auto"] := Box(pg, CW, FG, "Start with Windows", IsAutoStart(), "xm y+16")
     C["blackhole"] := Box(pg, CW, FG, "Black Hole Minimize (Taskbar suck effect)", BlackHoleMinimizeEnabled, "xm y+16")
-    C["border"] := Box(pg, CW, FG, "Smart Active Border (Win+Ctrl+Shift+A)", ActiveBorderEnabled, "xm y+16")
+    C["border"] := Box(pg, CW, FG, "Smart Active Border (Shift+Alt+V)", ActiveBorderEnabled, "xm y+16")
     C["bordercolor"] := pg.AddEdit("x196 yp-3 w70", BorderColor)
-    C["bosskey"] := Box(pg, CW, FG, "Boss Key (Win+Ctrl+Esc)", BossKeyEnabled, "xm y+16")
-    C["bottom"] := Box(pg, CW, FG, "Always on Bottom / Widget (Win+Ctrl+B)", AlwaysOnBottomEnabled, "xm y+16")
+    C["bosskey"] := Box(pg, CW, FG, "Boss Key (Shift+Alt+Esc)", BossKeyEnabled, "xm y+16")
+    C["bottom"] := Box(pg, CW, FG, "Always on Bottom / Widget (Shift+Alt+B)", AlwaysOnBottomEnabled, "xm y+16")
     C["breath"] := Box(pg, CW, FG, "Breathing (dim inactive windows)", BreathingEnabled, "xm y+16")
     C["breathe"] := Box(pg, CW, FG, "Breathe Cursor (Idle glow effect)", BreatheCursorEnabled, "xm y+16")
     C["carousel"] := Box(pg, CW, FG, "3D Carousel Alt-Tab", CarouselAltTabEnabled, "xm y+16")
@@ -4485,9 +4494,9 @@
     C["corner_br"] := pg.AddDropDownList("x+10 yp-3 w130 Choose" IndexOf(CORNER_ACTIONS, HotCornerBR), CORNER_ACTIONS)
     C["corner_tl"] := pg.AddDropDownList("x140 yp-3 w130 Choose" IndexOf(CORNER_ACTIONS, HotCornerTL), CORNER_ACTIONS)
     C["corner_tr"] := pg.AddDropDownList("x+10 yp-3 w130 Choose" IndexOf(CORNER_ACTIONS, HotCornerTR), CORNER_ACTIONS)
-    C["corners_en"] := Box(pg, CW, FG, "Enable Hot Corners (Win+Ctrl+Shift+C)", HotCornersEnabled, "xm y+16")
+    C["corners_en"] := Box(pg, CW, FG, "Enable Hot Corners (Shift+Alt+C)", HotCornersEnabled, "xm y+16")
     C["cursoryawn"] := Box(pg, CW, FG, "Cursor Yawn (Wakes up after idle)", CursorYawnEnabled, "xm y+16")
-    C["curtain"] := Box(pg, CW, FG, "Curtain Drop (Win+D)", CurtainDropEnabled, "xm y+16")
+    C["curtain"] := Box(pg, CW, FG, "Curtain Drop (Win+Alt+D)", CurtainDropEnabled, "xm y+16")
     C["customclock"] := Box(pg, CW, FG, "Small Taskbar Custom Clock", CustomClockEnabled, "xm y+16")
     C["debuglog"] := Box(pg, CW, FG, "Write a debug log (snap.log)", DEBUG, "xm y+16")
     C["deletehole"] := Box(pg, CW, FG, "Recycle Bin Black Hole (Delete Animation)", BlackHoleDeleteEnabled, "xm y+16")
@@ -4499,12 +4508,12 @@
     C["flash"] := Box(pg, CW, FG, "Magnetic Seam Flash (neon spark on snap)", SeamFlashEnabled, "xm y+16")
     C["fly"] := Box(pg, CW, FG, "Fly-to-Mouse Minimize (vacuum effect)", FlyMinimizeEnabled, "xm y+16")
     C["focusdepth"] := Box(pg, CW, FG, "Focus Depth of Field (3D background scale)", FocusDepthEnabled, "xm y+16")
-    C["ghost"] := Box(pg, CW, FG, "Proximity Ghost Window (Win+Ctrl+G)", ProximityGhostEnabled, "xm y+16")
+    C["ghost"] := Box(pg, CW, FG, "Proximity Ghost Window (Shift+Alt+G)", ProximityGhostEnabled, "xm y+16")
     C["glide"] := Box(pg, CW, FG, "Enable ice glide (Physics-based throwing)", GlideEnabled, "xm y+16")
-    C["grabpan"] := Box(pg, CW, FG, "Universal Grab && Pan (Win+Ctrl+Shift+P)", GrabPanEnabled, "xm y+12")
+    C["grabpan"] := Box(pg, CW, FG, "Universal Grab && Pan (Shift+Alt+Space)", GrabPanEnabled, "xm y+12")
     C["gravityclose"] := Box(pg, CW, FG, "Gravity Drop on Close (Alt+F4)", GravityCloseEnabled, "xm y+16")
     C["lightsaber"] := Box(pg, CW, FG, "Lightsaber Seam Glow", LightsaberSeamEnabled, "xm y+16")
-    C["magnetic"] := Box(pg, CW, FG, "Magnetic Window Groups (Win+Ctrl+Shift+G)", MagneticGroupsEnabled, "xm y+16")
+    C["magnetic"] := Box(pg, CW, FG, "Magnetic Window Groups (Shift+Alt+J)", MagneticGroupsEnabled, "xm y+16")
     C["mediafallback"] := pg.AddEdit("xm y+6 w" CW, MediaFallbackList)
     C["mem"] := Box(pg, CW, FG, "Remember window positions", RestoreEnabled, "xm y+16")
     C["mickill"] := Box(pg, CW, FG, "Global Mic Kill-Switch (Double-tap Alt)", MicKillSwitchEnabled, "xm y+16")
@@ -4512,12 +4521,12 @@
     C["momentum"] := Box(pg, CW, FG, "Momentum Tilt (Jello bounce on drag stop)", MomentumTiltEnabled, "xm y+16")
     C["monthrow"] := Box(pg, CW, FG, "Window Throw & Catch (Monitor to Monitor)", MonitorThrowEnabled, "xm y+16")
     C["motionblur"] := Box(pg, CW, FG, "Motion Blur Scroll (Vertical speed blur)", MotionBlurScrollEnabled, "xm y+16")
-    C["multidimmer"] := Box(pg, CW, FG, "Multi-Monitor Focus Dimmer (Win+Ctrl+Shift+D)", MultiMonitorDimmerEnabled, "xm y+16")
+    C["multidimmer"] := Box(pg, CW, FG, "Multi-Monitor Focus Dimmer (Shift+Alt+D)", MultiMonitorDimmerEnabled, "xm y+16")
     C["openanim"] := pg.AddDropDownList("x160 yp-3 w160 Choose" IndexOf(OPEN_ANIMS, OpenAnim), OPEN_ANIMS)
     C["osd"] := Box(pg, CW, FG, "Premium Volume OSD", PremiumVolumeOSDEnabled, "xm y+16")
     C["parallax"] := Box(pg, CW, FG, "Parallax Dragging (Velocity Transparency)", ParallaxEnabled, "xm y+16")
-    C["pip"] := Box(pg, CW, FG, "Live Window PiP (Win+Ctrl+P)", LivePipEnabled, "xm y+16")
-    C["plainpaste"] := Box(pg, CW, FG, "Plain-Text Paste (Ctrl+Win+V)", PlainPasteEnabled, "xm y+16")
+    C["pip"] := Box(pg, CW, FG, "Live Window PiP (Shift+Alt+P)", LivePipEnabled, "xm y+16")
+    C["plainpaste"] := Box(pg, CW, FG, "Plain-Text Paste (Ctrl+Alt+V)", PlainPasteEnabled, "xm y+16")
     C["privacyblur"] := Box(pg, CW, FG, "Privacy Blur on Unfocus (Win+Alt+B)", PrivacyBlurEnabled, "xm y+16")
     C["pulse"] := Box(pg, CW, FG, "Focus Pulse (Heartbeat on active)", PulseEnabled, "xm y+16")
     C["quickfolder"] := Box(pg, CW, FG, "Quick Folder Jump (Ctrl+G in dialogs)", QuickFolderJumpEnabled, "xm y+16")
@@ -4526,7 +4535,7 @@
     C["rollup"] := Box(pg, CW, FG, "Middle-click title bar to roll up", RollUpEnabled, "xm y+12")
     C["shakefind"] := Box(pg, CW, FG, "Shake to Find Cursor (macOS style)", ShakeFindEnabled, "xm y+16")
     C["shatter"] := Box(pg, CW, FG, "Shatter to Close (Shift+Alt+F4)", ShatterEnabled, "xm y+16")
-    C["smart_tb"] := Box(pg, CW, FG, "Smart Auto-Hide Taskbar (Win+Ctrl+Shift+T)", SmartTaskbarEnabled, "xm y+16")
+    C["smart_tb"] := Box(pg, CW, FG, "Smart Auto-Hide Taskbar (Shift+Alt+T)", SmartTaskbarEnabled, "xm y+16")
     C["smartcaps"] := Box(pg, CW, FG, "Smart Caps Lock (Hold for Caps, Tap for action)", SmartCapsEnabled, "xm y+16")
     C["smartcaps_act"] := pg.AddDropDownList("x320 yp-3 w90 Choose" IndexOf(CAPS_ACTIONS, SmartCapsAction), CAPS_ACTIONS)
     C["smartgrid"] := Box(pg, CW, FG, "Smart Tiling Grid (Hold Shift while dragging)", SmartGridEnabled, "xm y+16")
@@ -4537,9 +4546,9 @@
     C["taskbarscroll"] := Box(pg, CW, FG, "Taskbar Volume Scroll", TaskbarScrollEnabled, "xm y+16")
     C["textmag"] := Box(pg, CW, FG, "Text Selection Magnifier (iOS style)", TextMagnifierEnabled, "xm y+16")
     C["toast"] := Box(pg, CW, FG, "Elastic Toast Notifications", ToastBounceEnabled, "xm y+16")
-    C["traymin"] := Box(pg, CW, FG, "Minimize to Tray (Win+Ctrl+H)", TrayMinimizeEnabled, "xm y+16")
+    C["traymin"] := Box(pg, CW, FG, "Minimize to Tray (Shift+Alt+H)", TrayMinimizeEnabled, "xm y+16")
     C["twave"] := Box(pg, CW, FG, "Taskbar Icon Wave", TaskbarWaveEnabled, "xm y+16")
-    C["wrap"] := Box(pg, CW, FG, "Infinite Cursor Wrap (Win+Ctrl+Shift+W)", InfiniteWrapEnabled, "xm y+16")
+    C["wrap"] := Box(pg, CW, FG, "Infinite Cursor Wrap (Shift+Alt+I)", InfiniteWrapEnabled, "xm y+16")
     C[key] := pg.AddEdit("x196 yp-3 w70" (s.dec > 0 ? "" : " Number"), TuneText(key))
     cache[guid] := buf
     CancelAnimation("Bounce_" hwnd)
@@ -4591,6 +4600,7 @@
     CarouselIndex := 1
     CarouselIndex++
     CarouselWindows := []
+    catch
     catch
     catch
     catch
@@ -4909,7 +4919,7 @@
     g.AddText("x21 y50 w160 c" cSub " Background" NAV, "version " VERSION)
     g.BackColor := "111111"
     g.BackColor := BG
-    g.HintLbl := g.AddText("x20 y" (H - 40) " w160 c" cSub " Background" NAV, "Win+Ctrl+W  opens this")
+    g.HintLbl := g.AddText("x20 y" (H - 40) " w160 c" cSub " Background" NAV, "Shift+Alt+W  opens this")
     g.MarginX := 0, g.MarginY := 0
     g.MarginX := 20
     g.MarginY := 20
@@ -5204,6 +5214,7 @@
     global StealthPanicActive, StealthHiddenWindows
     global StealthPanicActive, StealthHiddenWindows, StealthOriginalMute, StealthOriginalMic
     global StealthPanicActive, StealthHiddenWindows, StealthOriginalMute, StealthOriginalMic
+    global StealthPanicIniPath
     global StealthPanicIniPath, StealthPanicTimeout, StealthLaunchSafeApps
     global StealthRestoreWorkspace, StealthMuteAudio, StealthMuteMic
     global StealthSafeAppList, StealthAppCache
@@ -5219,6 +5230,8 @@
     global TextExpanderEnabled
     global TextMagnifierEnabled, RippleClickEnabled, ElasticDragEnabled
     global TextMagnifierEnabled, SmartGridEnabled
+    global TRAY_SETTINGS, TRAY_SNAP, TRAY_MEMORY, TRAY_BREATHING, TRAY_STEALTH
+    global TRAY_SNAP, TRAY_MEMORY, TRAY_BREATHING
     global TrayIcons, BossKeyActive, BossKeyWindows, BossKeyMuteState
     global TrayMinimizeEnabled
     global TUNE_INDEX
@@ -5357,6 +5370,7 @@
     if !DllCall("SetParent", "ptr", hwnd, "ptr", desktop, "ptr") {
     if !DragHwnd {
     if !ElasticEdgeStates.Has(hwnd) {
+    if !FileExist(ui) {
     if !FocusModeEnabled
     if !FocusModeEnabled || !FocusGuis.Length
     if !FocusTargetHwnd || !DllCall("IsWindow", "ptr", FocusTargetHwnd)
@@ -5900,11 +5914,13 @@
     if wanted
     if wanted {
     if WindowCmdLineCache.Has(hwnd)
+    if WinExist("Stealth Panic Mode Settings") {
     InfiniteWrapEnabled := !InfiniteWrapEnabled
     InfiniteWrapEnabled := IniStr("memory", "wrap", "0") = "1"
     info := {pid: pid, exe: exe}
     info := BottomWindows[hwnd]
     info := MC_InfoFor(hwnd)
+    ini := IsSet(StealthPanicIniPath) ? StealthPanicIniPath : A_ScriptDir "\StealthPanic.ini"
     IniCache[section "`n" key] := v
     inset := tol + 8
     inside := false
@@ -5940,7 +5956,7 @@
     Lbl(pg, FG, "Border colour", "xm y+12", 190)
     Lbl(pg, FG, "Bottom Left:", "xm y+20")
     Lbl(pg, FG, "Bottom Right:", "x+30 yp+3")
-    Lbl(pg, FG, "Focus mode (Win+Ctrl+F)", "xm y+20")
+    Lbl(pg, FG, "Focus mode (Shift+Alt+F)", "xm y+20")
     Lbl(pg, FG, "Icon Size", "xm y+16")
     Lbl(pg, FG, "Never dim these apps", "xm y+20", 190)
     Lbl(pg, FG, "New window animation", "xm y+16")
@@ -5948,7 +5964,7 @@
     Lbl(pg, FG, "Taskbar Style", "xm y+16")
     Lbl(pg, FG, "Top Left:", "xm y+20")
     Lbl(pg, FG, "Top Right:", "x+30 yp+3")
-    Lbl(pg, FG, "Transparency wheel (Win+Ctrl+wheel)", "xm y+20", 300)
+    Lbl(pg, FG, "Transparency wheel (Shift+Alt+Wheel)", "xm y+20", 300)
     Lbl(pg, FG, "Window animations", "xm y+16")
     leftDist := mX - wX
     LightsaberSeamEnabled := IniStr("mouse", "lightsaber", "1") = "1"
@@ -5986,15 +6002,17 @@
     lowerName := StrLower(exeName)
     LS_Gui := 0, LS_Hwnd := 0
     m := A_TrayMenu
-    m.Add("Breathing windows`tWin+Ctrl+E", (*) => ToggleBreathing())
     m.Add("Exit", (*) => ExitApp())
-    m.Add("Magnetic snap`tWin+Ctrl+S", (*) => ToggleSnap())
-    m.Add("Position memory`tWin+Ctrl+M", (*) => ToggleMemory())
     m.Add("Restart", (*) => Reload())
-    m.Add("Settings`tWin+Ctrl+W", (*) => ShowWin())
     m.Add()
     m.Add()
-    m.Default := "Settings`tWin+Ctrl+W"
+    m.Add()
+    m.Add(TRAY_BREATHING, (*) => ToggleBreathing())
+    m.Add(TRAY_MEMORY, (*) => ToggleMemory())
+    m.Add(TRAY_SETTINGS, (*) => ShowWin())
+    m.Add(TRAY_SNAP, (*) => ToggleSnap())
+    m.Add(TRAY_STEALTH, (*) => OpenStealthPanicSettings())
+    m.Default := TRAY_SETTINGS
     m.Delete()
     MagGroups.Delete(h)
     MagneticGroupsEnabled := !MagneticGroupsEnabled
@@ -6776,8 +6794,8 @@
     Sub(pg, CW, cSub, "Overrides Roll-Up. Middle-click any window's title bar to close it.", "xm y+8")
     Sub(pg, CW, cSub, "Pins any window permanently to your desktop background, transforming it into a widget.", "xm y+8")
     Sub(pg, CW, cSub, "Press Ctrl+G in any File Dialog to jump to the last active Explorer folder.", "xm y+8")
+    Sub(pg, CW, cSub, "Press Shift+Alt+P on any window to create a live, always-on-top thumbnail.", "xm y+8")
     Sub(pg, CW, cSub, "Press Space on any file in Explorer to preview files instantly.", "xm y+8")
-    Sub(pg, CW, cSub, "Press Win+Ctrl+P on any window to create a live, always-on-top thumbnail.", "xm y+8")
     Sub(pg, CW, cSub, "Push the cursor into the left/right edge of the desktop and hold to teleport to the other side.", "xm y+8")
     Sub(pg, CW, cSub, "Pushes inactive windows back slightly and dims them.", "xm y+8")
     Sub(pg, CW, cSub, "Quickly double-tap the Alt key to instantly mute or unmute your microphone system-wide.", "xm y+8")
@@ -6785,6 +6803,7 @@
     Sub(pg, CW, cSub, "Scroll over the taskbar to adjust volume. Middle-click to mute.", "xm y+8")
     Sub(pg, CW, cSub, "Scrolling forcefully pulls the entire window elastically, springing back when stopped.", "xm y+8")
     Sub(pg, CW, cSub, "Shake your mouse left and right rapidly to make the cursor temporarily grow.", "xm y+8")
+    Sub(pg, CW, cSub, "Shift+Alt+R rolls a window up whether this is on or off - this is the mouse gesture.", "xm y+8")
     Sub(pg, CW, cSub, "Show a sleek, macOS-style volume indicator when scrolling the taskbar.", "xm y+8")
     Sub(pg, CW, cSub, "Shows a 2x zoom loupe when selecting text.", "xm y+8")
     Sub(pg, CW, cSub, "Shows a visual 3-zone layout grid. Drop the window into a zone to snap it.", "xm y+8")
@@ -6794,7 +6813,6 @@
     Sub(pg, CW, cSub, "Throw your mouse into the corners of the screen to trigger actions.", "xm y+10")
     Sub(pg, CW, cSub, "Turns active window into an interactive ghost overlay that fades in as your mouse approaches.", "xm y+8")
     Sub(pg, CW, cSub, "Type @@mail, @@tel, @@date to auto-expand. Edit snippets in WindowTweaks.ini", "xm y+8")
-    Sub(pg, CW, cSub, "Win+Ctrl+R rolls a window up whether this is on or off - this is the mouse gesture.", "xm y+8")
     Sub(pg, CW, cSub, "Window jiggles elastically when you suddenly stop moving it.", "xm y+8")
     Sub(pg, CW, cSub, "Windows fade out once you have not touched them for a while.", "xm y+8")
     success := false
@@ -6946,7 +6964,7 @@
     try {
     try {
     try back := FileRead(appsPath, "UTF-8")
-    try BreathingEnabled ? A_TrayMenu.Check("Breathing windows`tWin+Ctrl+E")
+    try BreathingEnabled ? A_TrayMenu.Check(TRAY_BREATHING)
     try ClosePiP(guiObj.SourceHwnd)
     try cls := WinGetClass(hwnd)
     try cls := WinGetClass(hwnd)
@@ -6985,7 +7003,7 @@
     try ok := StealthPanicConfig_MigrateToSidecar(iniFile, list)
     try pip.Destroy()
     try RestoreCurtain()
-    try RestoreEnabled ? A_TrayMenu.Check("Position memory`tWin+Ctrl+M")
+    try RestoreEnabled ? A_TrayMenu.Check(TRAY_MEMORY)
     try RestoreFocusDepth()
     try RestoreShatters()
     try RestoreShatters()
@@ -6998,6 +7016,7 @@
     try RS_SetAlpha(hwnd, 0, RS_PRI_ANIM)
     try RS_SetAlpha(hwnd, 0, RS_PRI_ANIM)
     try RS_SetPos(ElasticHwnd, ElasticBaseX, ElasticBaseY + Round(ElasticOffsetY), -1, -1, RS_PRI_ANIM)
+    try Run('"' A_AhkPath '" "' ui '" "' ini '"')
     try SaveSettings()
     try section := IniRead(iniFile, "SafeApps", , "")
     try SetTimer(ActiveBorderMonitorStep, 0)
@@ -7017,7 +7036,7 @@
     try SetTimer(RenderShakeFind, 0)
     try SetTimer(ShakeDetector, 0)
     try SetTimer(SmartTaskbarMonitorStep, 0)
-    try SnapEnabled ? A_TrayMenu.Check("Magnetic snap`tWin+Ctrl+S")
+    try SnapEnabled ? A_TrayMenu.Check(TRAY_SNAP)
     try StealthLaunchDelay := Number(IniRead(StealthPanicIniPath, "stealth", "delay", StealthLaunchDelay))
     try StealthLaunchSafeApps := IniRead(StealthPanicIniPath, "stealth", "launchapps", StealthLaunchSafeApps ? "1" : "0") == "1"
     try StealthMuteAudio := IniRead(StealthPanicIniPath, "stealth", "muteaudio", StealthMuteAudio ? "1" : "0") == "1"
@@ -7061,11 +7080,11 @@
     try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
     try WinGetPos(&x, &cy, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&X, &Y, &W, &H, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(, , &bounceW, &bounceH, hwnd)
     try WinGetPos(, , &winW, &winH, hwnd)
     try WinGetPos(,, &rawW, &rawH, hwnd)
@@ -7131,6 +7150,7 @@
     tx := wl + ((wr - wl) - tw) // 2, ty := wt + ((wb - wt) - th) // 2
     ty := dt + Round((fT - st) * dh / sh)
     ty := my
+    ui := A_ScriptDir "\StealthPanicUI.ahk"
     uiAutoStart := "", uiOldSmartTb := ""
     uiOldBottom := AlwaysOnBottomEnabled
     uiOldFocusDepth := FocusDepthEnabled
@@ -7204,37 +7224,67 @@
     years := ["2026", "2022", "2019", "2017"]
     z := SmartGridZones[zoneIndex]
     zoom := 1.3
+  . "(the keypad keys need NumLock ON - Up/Down do not)`n`n"
   . "@@date / @@time`tText Expander snippets`n"
-  . "Alt+F4`t`tClose with the gravity-drop animation`n`n"
+  . "Alt+F4`t`tClose with the gravity-drop animation`n"
   . "Alt+LeftDrag`tMove a window from anywhere`n"
   . "Alt+RightDrag`tResize a window from the nearest edge`n"
+  . "Alt+Tab`t`tCarousel Alt-Tab`n"
+  . "C`t`tHot corners`n"
   . "CapsLock`ttap = Escape or Backspace, hold = Caps`n`n"
+  . "Ctrl+Alt+V`tPaste as plain text`n"
   . "Ctrl+G`t`tIn a Save/Open dialog: jump to the last Explorer folder`n"
-  . "Ctrl+Win+V`tPaste as plain text`n"
+  . "D`t`tMulti-monitor dimmer`n"
+  . "Delete`t`tBlack-hole delete (in Explorer)`n"
   . "Double-tap Alt`tGlobal Mic Kill-Switch`n"
-  . "Double-tap Ctrl`tQuick Spotlight Launcher`n`n"
+  . "Double-tap Ctrl`tQuick Spotlight Launcher`n"
+  . "E`t`tBreathing windows`n"
+  . "Esc Esc Esc`tStealth Panic Mode on / off`n`n"
+  . "Esc`t`tBoss key - hide everything and mute`n`n"
+  . "F`t`tFocus mode (cinema) on / off`n"
+  . "F5 / F6`tRestart / Exit`n`n"
+  . "FEATURE TOGGLES  (Shift+Alt)`n"
+  . "H`t`tMinimize the active window to the tray`n"
   . "HOTKEYS.md explains conflicts and how to change these.",
-  . "Middle-click`tHold to Universal Grab & Pan`n"
+  . "I`t`tInfinite cursor wrap`n"
+  . "J`t`tMagnetic window groups`n"
+  . "K`t`tCentre the window, keep its size`n"
+  . "LAYOUT  (Shift+Alt)`n"
+  . "M`t`tPosition memory`n"
+  . "Middle-click`tHold to grab and pan`n"
   . "Middle-click`tMute`n`n"
-  . "Middle-click`tTitle bar: Close or Roll-up`n"
-  . "OVER THE TASKBAR:`n"
-  . "Shift+Alt+B`tAlways on bottom (Desktop Widget)`n"
-  . "Shift+Alt+E`tBreathing windows on / off`n"
-  . "Shift+Alt+Esc`tBoss key - hide everything and mute`n"
-  . "Shift+Alt+F`tFocus mode (cinema) on / off`n"
-  . "Shift+Alt+G`tProximity Ghost Window mode`n"
-  . "Shift+Alt+H`tMinimize the active window to the tray`n"
-  . "Shift+Alt+M`tPosition memory on / off`n"
-  . "Shift+Alt+O`tAlways on top (active window)`n"
+  . "Middle-click`tTitle bar: close, or roll up`n"
+  . "N`t`tMove to the next monitor`n"
+  . "Numpad 0`tMaximize / restore`n"
+  . "Numpad 1-9`tTile to that cell of a 3x3 grid`n"
+  . "O`t`tAlways on top (active window)`n"
+  . "OVER THE TASKBAR`n"
+  . "R`t`tRoll up / unroll the active window`n"
+  . "RECOVERY  (Shift+Alt)`n"
+  . "S`t`tMagnetic snapping`n"
+  . "Shift+Alt+A`tMic kill-switch`n"
+  . "Shift+Alt+B`tAlways on bottom (desktop widget)`n"
+  . "Shift+Alt+F4`tShatter to close`n"
+  . "Shift+Alt+G`tProximity Ghost Window`n"
+  . "Shift+Alt+L`tQuick Spotlight Launcher`n"
   . "Shift+Alt+P`tLive Window Picture-in-Picture`n"
-  . "Shift+Alt+R`tRoll up / unroll the active window`n"
-  . "Shift+Alt+S`tMagnetic snapping on / off`n"
-  . "Shift+Alt+W`tSettings menu`n"
-  . "Shift+Alt+Wheel`tTransparency of the active window`n"
+  . "Shift+Alt+Q`tQuick Look (in Explorer)`n"
+  . "Space`t`tUniversal grab and pan`n`n"
   . "Spacebar`t`tIn Explorer: Quick Look preview`n"
-  . "SYSTEM & MEDIA:`n"
+  . "SYSTEM AND MEDIA`n"
+  . "T`t`tSmart auto-hide taskbar`n"
+  . "U`t`tCycle size 50 / 75 / 90 percent, centred`n"
+  . "Up / Down`tTop half / bottom half`n"
+  . "V`t`tSmart active border`n"
+  . "W`t`tSettings window`n"
+  . "Wheel`t`tTransparency of the active window`n"
   . "Wheel`t`tVolume up / down`n"
-  . "WHEN A FEATURE IS ENABLED:`n"
+  . "WHEN A FEATURE IS ENABLED`n"
+  . "Win+Alt+B`tMark the window private (blur when inactive)`n"
+  . "Win+Alt+D`tCurtain drop (show the desktop)`n"
+  . "X`t`tReset the active window to fully opaque`n"
+  . "Y`t`tRestore every rolled-up, ghosted or hidden window`n"
+  . "Z`t`tUndo the last layout change`n"
   TS("snapDist"     , "snap"     , "distance"    ,     30,     4,    120,     1, 0, "win"    , "Snap distance"          , "px from an edge")
 !LButton::AltDragMove()
 !RButton::AltDragResize()
@@ -7292,7 +7342,7 @@ $!F4::GravityClose()
 , TS("snapBoost"    , "snap"     , "cornerBoost" ,    2.2,     1,      5,   0.1, 1, "win"    , "Corner boost"           , "x stronger at corners")
 , TS("snapProx"     , "snap"     , "neighbour"   ,     90,     0,    400,    10, 0, "win"    , "Neighbour reach"        , "px to nearby windows, 0 = edges only")
 , TS("transMin"     , "trans"    , "min"         ,     20,     5,     90,     5, 0, "anim"   , "Transparency floor"     , "% the wheel will not go below")
-, TS("transStep"    , "trans"    , "step"        ,     25,     5,     64,     1, 0, "anim"   , "Transparency step"      , "alpha per Win+Ctrl+wheel notch")
+, TS("transStep"    , "trans"    , "step"        ,     25,     5,     64,     1, 0, "anim"   , "Transparency step"      , "alpha per Shift+Alt+wheel notch")
 , TS("wrapCool"     , "wrap"     , "cooldown"    ,    700,   100,   5000,    50, 0, "multi"  , "Cooldown"               , "ms before it can wrap again")
 , TS("wrapDelay"    , "wrap"     , "delay"       ,    250,     0,   2000,    25, 0, "multi"  , "Hold time"              , "ms against the edge, 0 = no wait")
 , TS("wrapSpeed"    , "wrap"     , "speed"       ,    250,     0,   3000,    50, 0, "multi"  , "Approach speed"         , "px/s minimum, 0 = any speed")
@@ -7301,6 +7351,7 @@ $!F4::GravityClose()
 ]
 ^!v:: {
 ^g:: {
+}
 }
 }
 }
@@ -8081,6 +8132,11 @@ global TextExpanderEnabled := true
 global TextMagnifierEnabled := true
 global Thumbnails := []
 global ToastBounceEnabled := true
+global TRAY_BREATHING := "Breathing windows`tShift+Alt+E"
+global TRAY_MEMORY    := "Position memory`tShift+Alt+M"
+global TRAY_SETTINGS  := "Settings`tShift+Alt+W"
+global TRAY_SNAP      := "Magnetic snap`tShift+Alt+S"
+global TRAY_STEALTH   := "Stealth Panic settings`tEsc Esc Esc"
 global TrayIcons := Map()
 global TrayMinimizeEnabled := true
 global TUNE_INDEX := Map()      ; key -> spec row, built once by TuneInit()
@@ -8199,6 +8255,7 @@ OnSnapLanded(hwnd, destX, destY, crashX, crashY, seams) {
 OnTypingSpark(ih, vk, sc) {
 OpenDoc(name) {
 OpenLog() {
+OpenStealthPanicSettings() {
 Persistent
 PiP_MouseEvents(wParam, lParam, msg, hwnd) {
 PiP_NCMouseEvents(wParam, lParam, msg, hwnd) {
