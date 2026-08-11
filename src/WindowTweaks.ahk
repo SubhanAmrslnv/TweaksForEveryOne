@@ -88,10 +88,29 @@ global BreatheCursorEnabled := true
 global RestoreEnabled := true
 global BlackHoleMinimizeEnabled := true
 global MomentumTiltEnabled := true
+; Feature state lives next to its flag, never next to the function that uses it.
+; Hotkeys are live from load time and #HotIf expressions are evaluated against
+; these globals from the first keypress, while a top-level "global X := ..."
+; only runs when the auto-execute thread reaches that line. State declared
+; thousands of lines down is therefore unassigned for the whole of startup:
+; #HotIf CarouselActive threw "This global variable has not been assigned a
+; value" on any Alt/Tab/Esc press, and ShellEvent's HSHELL_WINDOWDESTROYED
+; cleanup threw the same on PushedBackWindows. See the deferred-init block at
+; the bottom of the file for the other half of this rule.
 global FocusDepthEnabled := false
+global LastActiveHwnd := 0
+global PushedBackWindows := Map()
 global CurtainDropEnabled := true
+global CurtainDropped := false
+global CurtainWindows := Map()
 global SparkTypingEnabled := false        ; OFF-BY-DEFAULT: never rendered until now
 global CarouselAltTabEnabled := false     ; OFF-BY-DEFAULT: never rendered until now
+global CarouselActive := false
+global CarouselGui := ""
+global CarouselIndex := 1
+global CarouselWindows := []
+global Thumbnails := []
+global CarouselAngleOffset := 0
 global MotionBlurScrollEnabled := false   ; OFF-BY-DEFAULT: never rendered until now
 global TaskbarWaveEnabled := false        ; OFF-BY-DEFAULT: never rendered until now
 global CustomClockEnabled := false
@@ -105,6 +124,7 @@ global CursorYawnEnabled := true
 global CursorYawnActive := false
 global CursorYawnIdleTime := 900000
 global ShatterEnabled := false            ; OFF-BY-DEFAULT: never rendered until now
+global ActiveShatters := Map()
 global LightsaberSeamEnabled := true
 global PrivacyBlurEnabled := true
 global PrivacyBlurWindows := Map()
@@ -148,6 +168,7 @@ global SpotlightEnabled := true
 global SpotlightGui := "", SpotlightInput := "", SpotlightResult := ""
 global ActiveBorderEnabled := false
 global ActiveBorderGui := ""
+global ActiveBorderShown := false
 global LastBorderHwnd := 0, LastBorderX := "", LastBorderY := "", LastBorderW := "", LastBorderH := ""
 global AlwaysOnBottomEnabled := true
 global BottomWindows := Map()
@@ -272,6 +293,14 @@ BuildTray()
 ; the overlay GUIs and then had SF_Hwnd/LS_Gui/LS_Hwnd reset to 0 underneath
 ; them, and armed ShakeDetector's 40 ms timer before the variables it reads
 ; existed. They are called at the very bottom of the file instead.
+;
+; These four are the ONLY top-level calls allowed above the deferred-init block,
+; because each one touches only globals declared above this line. Anything that
+; arms a timer or registers a hook - every Sync*() call, RegisterShellHook() -
+; goes in the deferred-init block at the bottom, however far that is from the
+; function it calls. Read the banner there for what went wrong when they did not,
+; and note that these four are also the allowlist scripts\Check-Split.ps1
+; check 8b compares against.
 
 
 WriteLog("=== Window Tweaks " VERSION " started ===")
@@ -2957,7 +2986,6 @@ SyncBreathingTimers() {
     ; SyncDimmerTimer, which already ends with this call.
     SyncMediaCore()
 }
-SyncBreathingTimers()
 
 
 
@@ -4631,7 +4659,13 @@ OnMessage(DllCall("RegisterWindowMessage", "str", "SHELLHOOK", "uint"), ShellEve
 ; pulse, breathing seeding, fly-to-mouse minimize and per-window cleanup for the
 ; rest of the session, with no error anywhere.
 OnMessage(DllCall("RegisterWindowMessage", "str", "TaskbarCreated", "uint"), TaskbarCreated)
-RegisterShellHook()
+; RegisterShellHook() itself is called from the deferred-init block at the bottom
+; of the file, NOT here. Registering it at this point armed ShellEvent ~3,200
+; lines before the state it cleans up existed, and every top-level call between
+; the two pumps the message queue, so a window closing during startup reached the
+; HSHELL_WINDOWDESTROYED branch and threw on PushedBackWindows. Only the
+; registration has to wait - no SHELLHOOK message is delivered until then, so
+; OnMessage above can stay where it is documented.
 
 RegisterShellHook() {
     DllCall("DeregisterShellHookWindow", "ptr", A_ScriptHwnd)
@@ -5172,7 +5206,6 @@ SyncDimmerTimer() {
     }
     SyncMediaCore()
 }
-SyncDimmerTimer()
 
 MonitorDimmerTickStep(dt:=0, now:=0) {
     global MultiMonitorDimmerEnabled, DimmerGuis
@@ -5327,7 +5360,6 @@ SyncSmartTaskbar() {
     else
         SetTimer(SmartTaskbarMonitorStep, 0)
 }
-SyncSmartTaskbar()
 
 SmartTaskbarMonitorStep() {
     global SmartTaskbarEnabled, SmartTaskbarLastState
@@ -5427,7 +5459,6 @@ SyncHotCornersTimer() {
     else
         SetTimer(HotCornersMonitorStep, 0)
 }
-SyncHotCornersTimer()
 
 SyncCursorWrapTimer() {
     global InfiniteWrapEnabled
@@ -5436,7 +5467,6 @@ SyncCursorWrapTimer() {
     else
         SetTimer(CursorWrapMonitorStep, 0)
 }
-SyncCursorWrapTimer()
 
 ; Virtual-screen metrics, cached. This runs 50 times a second; four SysGet calls
 ; plus a monitor enumeration per tick bought nothing, because the answer only
@@ -6346,7 +6376,6 @@ SyncActiveBorderTimer() {
         DestroyActiveBorder()
     }
 }
-SyncActiveBorderTimer()
 
 ActiveBorderMonitorStep() {
     global ActiveBorderEnabled, LastBorderHwnd, LastBorderX, LastBorderY, LastBorderW, LastBorderH
@@ -6428,8 +6457,6 @@ ActiveBorderMonitorStep() {
     
     DrawActiveBorder(X, Y, W, H, SizeChanged)
 }
-
-global ActiveBorderShown := false
 
 DrawActiveBorder(X, Y, W, H, SizeChanged:=true) {
     global ActiveBorderGui, ActiveBorderShown
@@ -6652,7 +6679,6 @@ SyncTextExpander() {
     
     HotIf()
 }
-SyncTextExpander()
 
 ; ====== Proximity Ghost Window ======
 GetDistToRect(px, py, rx, ry, rw, rh) {
@@ -7851,9 +7877,6 @@ DragTrailCallback(dt, now) {
     return true
 }
 
-global LastActiveHwnd := 0
-global PushedBackWindows := Map()
-
 ; ApplyUi (when the checkbox is cleared) and Bye() both call this. PushBackWindow
 ; pins a window at 98% size and alpha 210, and BringForwardWindow was the only
 ; reversal - reachable only from ApplyFocusDepth, which only runs while the
@@ -8120,9 +8143,6 @@ SparkCallback(idx, dt, now) {
     return true
 }
 
-global CurtainDropped := false
-global CurtainWindows := Map()
-
 ; Gated in the hotkey criteria rather than re-sending #d from the body. With the
 ; feature off the key is simply not claimed, so Windows' own show-desktop runs -
 ; CLAUDE.md lists Win+D as deliberately not touched.
@@ -8230,13 +8250,6 @@ CurtainBounceUp(hwnd, x, y, w, h) {
     }
     RegisterAnimation(animKey, UpStep)
 }
-
-global CarouselActive := false
-global CarouselGui := ""
-global CarouselIndex := 1
-global CarouselWindows := []
-global Thumbnails := []
-global CarouselAngleOffset := 0
 
 #HotIf CarouselAltTabEnabled && !CarouselActive
 *!Tab:: {
@@ -9126,8 +9139,6 @@ TriggerBlackHoleMinimize(hwnd) {
     RegisterAnimation(animKey, Step)
 }
 
-global ActiveShatters := Map()
-
 #HotIf ShatterEnabled
 +!F4:: {
     hwnd := WinExist("A")
@@ -9434,12 +9445,38 @@ CheckPrivacyBlur() {
 ; three used to be called next to LoadSettings() near the top, which reset
 ; SF_Hwnd / LS_Gui / LS_Hwnd to 0 immediately after they were assigned and armed
 ; ShakeDetector's 40 ms timer before the variables it reads existed. Anything
-; that touches a global declared below line ~150 belongs here, not up there.
+; that touches a global declared below line ~200 belongs here, not up there.
 ; InitShakeFind() and InitLightsaber() are NOT called here any more - both build
 ; their overlay lazily, on first use, so a feature nobody enabled costs nothing.
+;
+; The rule covers ANYTHING THAT CAN FIRE, not just globals: every Sync*() call
+; that arms a polling timer, and every hook registration. Seven Sync*() calls and
+; RegisterShellHook() used to sit next to the function they call, scattered from
+; line ~2900 to ~6700, which armed each feature while thousands of lines of
+; initialisers still had not run. That is not theoretical - several of those calls
+; build a Gui or talk to COM, and both pump the message queue, so a shell event
+; queued during startup got dispatched right there. A window closing at that
+; moment reached ShellEvent's HSHELL_WINDOWDESTROYED cleanup and threw "This
+; global variable has not been assigned a value" on PushedBackWindows, which is
+; declared ~3,200 lines below where the hook used to be registered. It reproduced
+; on a fresh install (the setup window closes as the app starts) and almost never
+; when running from src\ on a quiet desktop.
+;
+; scripts\Check-Split.ps1 check 8 enforces both halves of this.
 SyncShakeDetector()
 SyncCursorFxTimer()
 SyncTaskbarUiTimer()
+SyncBreathingTimers()
+SyncDimmerTimer()
+SyncSmartTaskbar()
+SyncHotCornersTimer()
+SyncCursorWrapTimer()
+SyncActiveBorderTimer()
+SyncTextExpander()
 UpdateKeyboardHook()
+; Last of all. ShellEvent is the widest-reaching callback in the file - window
+; created, destroyed, activated and minimised - so nothing else may still be
+; uninitialised when the shell starts delivering to it.
+RegisterShellHook()
 
 

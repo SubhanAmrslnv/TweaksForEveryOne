@@ -23,6 +23,7 @@
       5  HotIf bracket every #HotIf a module opens, it closes
       6  Case clash    no two globals/functions differ only by case
       7  Hotkey clash  no hotkey is bound twice in the same #HotIf context
+      8  Init order    nothing is armed before the state it reads is assigned
 
     Check 3 actually launches the program, so it is opt-in: #SingleInstance
     Force means running it would kill the copy you have open. Pass -IniCheck.
@@ -392,6 +393,106 @@ if (-not $dupes) {
 } else {
     Bad 'hotkey-dupe' "$($dupes.Count) hotkey(s) bound more than once in the same context"
     $dupes | ForEach-Object { Note "$($_.Key)   ->   $($_.Value -join ', ')" }
+}
+
+# ===========================================================================
+# 8. Init order
+# ===========================================================================
+# One bug class, INVISIBLE when running from src\ and reproducible on end-user
+# machines. A top-level "global X := ..." only runs when the auto-execute thread
+# reaches that line - but hotkeys are live from load time, and a registered hook
+# fires the moment the OS has something to deliver. State declared thousands of
+# lines further down is therefore unassigned for the whole of startup.
+#
+# Both halves of it shipped: "This global variable has not been assigned a
+# value" on PushedBackWindows (read by ShellEvent's HSHELL_WINDOWDESTROYED
+# cleanup, which RegisterShellHook() armed ~3,200 lines above the declaration)
+# and on CarouselActive (read by a #HotIf, evaluated on any Alt/Tab/Esc press).
+# It reproduced on a fresh install, where the setup window closes as the app
+# starts, and almost never on a quiet desktop - which is exactly why it needs a
+# checker rather than testing.
+#
+#   8a  every global named in a #HotIf must be initialised before the first
+#       top-level call in the entry file, i.e. up in the flag/state block
+#   8b  no top-level call may sit between the first and last top-level global
+#       initialiser. Anything that arms a timer or registers a hook belongs in
+#       the deferred-init block at the bottom of WindowTweaks.ahk
+#
+# The allowlist is the four calls the entry file documents as safe above the
+# deferred block (each touches only globals declared above it) plus the pure
+# registrations, which run nothing at the point they are reached.
+$allowedTopCalls = @('LoadSettings', 'RotateLog', 'SyncTray', 'BuildTray',
+                     'WriteLog', 'OnMessage', 'OnExit')
+$entryName = Split-Path $entry -Leaf
+
+# A top-level CALL, not a definition: "Name(args)" at column 0 with nothing
+# after the closing paren. "Name(a, b) => expr" is a fat-arrow definition and
+# "Name(a, b) {" opens a body - neither may match.
+$globalInit  = @{}
+$topCalls    = New-Object System.Collections.Generic.List[object]
+$firstGlobal = 0
+$lastGlobal  = 0
+$idx = 0
+foreach ($e in $stream) {
+    $idx++
+    $t = $e.Text
+    if ($t -match '^global\s') {
+        # "global HotCornerTL := "None", HotCornerTR := "Task View"" -> two names
+        foreach ($m in [regex]::Matches($t, '([A-Za-z_]\w*)\s*:=')) {
+            if ($firstGlobal -eq 0) { $firstGlobal = $idx }
+            $lastGlobal = $idx
+            $k = $m.Groups[1].Value.ToLowerInvariant()
+            if (-not $globalInit.ContainsKey($k)) {
+                $globalInit[$k] = [pscustomobject]@{
+                    Name = $m.Groups[1].Value; Idx = $idx; Where = "$($e.File):$($e.Line)" }
+            }
+        }
+    } elseif ($t -match '^([A-Za-z_]\w*)\s*\(.*\)\s*(;.*)?$' -and $t -notmatch '=>') {
+        $topCalls.Add([pscustomobject]@{
+            Name = $matches[1]; Idx = $idx; File = $e.File; Where = "$($e.File):$($e.Line)" })
+    }
+}
+
+# 8a. The boundary is the first top-level call in the ENTRY file - startup work
+# begins there. Module-level registrations sort ahead of the entry file's own
+# globals (an #Include splices the module in above them), so they cannot be it.
+$entryCalls = @($topCalls | Where-Object { $_.File -eq $entryName } | Sort-Object Idx)
+$firstEntryCall = if ($entryCalls.Count) { $entryCalls[0].Idx } else { [int]::MaxValue }
+
+# -match, not -notmatch: only -match populates $Matches.
+$initBad = @()
+foreach ($e in $stream) {
+    if ($e.Text -match '^\s*#HotIf\s+(\S.*)$') {
+        foreach ($m in [regex]::Matches($matches[1], '[A-Za-z_]\w*')) {
+            $k = $m.Value.ToLowerInvariant()
+            if (-not $globalInit.ContainsKey($k)) { continue }  # a function, or a built-in
+            $g = $globalInit[$k]
+            if ($g.Idx -gt $firstEntryCall) {
+                $initBad += ("{0} is read by #HotIf at {1}:{2} but assigned at {3}, after startup begins - move the declaration up to the flag/state block" -f `
+                             $g.Name, $e.File, $e.Line, $g.Where)
+            }
+        }
+    }
+}
+$initBad = @($initBad | Sort-Object -Unique)
+
+# 8b. Anything not on the allowlist, sitting between the first and last
+# top-level global initialiser, is armed while later initialisers have not run.
+$orderBad = @()
+foreach ($c in $topCalls) {
+    if ($allowedTopCalls -contains $c.Name) { continue }
+    if ($c.Idx -gt $firstGlobal -and $c.Idx -lt $lastGlobal) {
+        $orderBad += ("{0}() at {1} runs while later 'global X := ...' initialisers have not - move it to the deferred-init block at the bottom of {2}, or add it to `$allowedTopCalls in this check with a reason" -f `
+                      $c.Name, $c.Where, $entryName)
+    }
+}
+
+if (-not $initBad -and -not $orderBad) {
+    Ok 'init-order' "$($globalInit.Count) top-level globals, $($topCalls.Count) top-level calls, nothing armed early"
+} else {
+    Bad 'init-order' "$($initBad.Count + $orderBad.Count) init-order violation(s)"
+    $initBad  | ForEach-Object { Note $_ }
+    $orderBad | ForEach-Object { Note $_ }
 }
 
 # ===========================================================================
