@@ -8,8 +8,14 @@
 # while every other .ahk was CRLF - and the hash then differs for reasons that
 # have nothing to do with the code. Pinning makes checkout deterministic.
 #
-# Everything here is a Windows-only project (AutoHotkey v2, PowerShell, WinForms
-# setup), so CRLF is the native choice and nothing reads these on a Unix host.
+# This repository holds two independent implementations. The Windows one
+# (AutoHotkey v2, PowerShell, WinForms setup) is native CRLF. The Linux port in
+# linux/ is read by bash, cmake and g++ on a Unix host, so it is native LF and
+# is overridden at the bottom of this file. That override is not cosmetic:
+# install.sh checked out with CRLF fails on Linux with
+#   bad interpreter: /usr/bin/env bash^M
+# and it fails only when someone actually runs it on Linux, never on the
+# machine that committed it.
 
 *.ahk   text eol=crlf
 *.ps1   text eol=crlf
@@ -18,7 +24,19 @@
 *.json  text eol=crlf
 *.rsp   text eol=crlf
 
+# Unix-native regardless of where they live.
+*.sh    text eol=lf
+
 # Binary - never touch, never diff.
 *.ico   binary
 *.exe   binary
 *.png   binary
+
+# ---------------------------------------------------------------------------
+# Linux port - everything under linux/ is LF. These rules come last so they
+# win over the CRLF defaults above for *.md and *.json.
+# ---------------------------------------------------------------------------
+linux/**            text eol=lf
+linux/**/*.md       text eol=lf
+linux/**/*.json     text eol=lf
+linux/CMakeLists.txt text eol=lf

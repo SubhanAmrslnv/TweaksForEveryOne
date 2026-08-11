@@ -2,7 +2,7 @@
 
 ## Context
 
-`src/WindowTweaks.ahk` is **9,281 lines** — 33 sections, ~230 functions, ~140 top-level globals — in a repo of 13,955 total. That is rule 14's "architectural problem" band, and the duplication it hides is measurable, not theoretical:
+`src/WindowTweaks.ahk` is **9,445 lines** — 33 sections, ~230 functions, ~140 top-level globals. (The line ranges quoted throughout this document were captured at 9,281 lines and drift as the file grows; treat them as approximate anchors, not exact offsets.) That is rule 14's "architectural problem" band, and the duplication it hides is measurable, not theoretical:
 
 | Symptom | Evidence |
 |---|---|
@@ -66,7 +66,7 @@ Existing `SnapCore.ahk`, `RenderCore.ahk`, `AnimationScheduler.ahk`, `MediaCore.
 
 | File | Responsibility | From lines |
 |---|---|---|
-| `WindowCommands.ahk` | What `Win+Ctrl+<key>` does to the active window: place, tile, cycle, monitor-hop, opacity, roll-up, tray-hide, boss key | 2090-2904 |
+| `WindowCommands.ahk` | What `Shift+Alt+<key>` does to the active window: place, tile, cycle, monitor-hop, opacity, roll-up, tray-hide, boss key | 2090-2904 |
 | `AmbientDimming.ahk` | Breathing windows + monitor dimmer + the MediaCore bridge that suspends them | 2905-3126, 5159-5218, 6917-6958 |
 | `FocusEmphasis.ahk` | Three ways to emphasise the active window: cinema dim, focus depth, active border | 3286-3484, 6254-6436, 7819-7944 |
 | `DragPipeline.ahk` | MOVESIZE/menu hooks, velocity sampling, drag end, magnetic groups | 3658-3918, 7184-7237 |
@@ -152,7 +152,7 @@ FS(key, get, set, sec, ini, def, kind, page, label, hint := "", sync := "", rele
 global FEATURE_SPEC := [
   FS("snap"      , () => SnapEnabled          , (v) => SnapEnabled := v          , "snap"   , "enabled", true , "bool", "win"    , "Enable magnetic snapping")
 , FS("corners_en", () => HotCornersEnabled    , (v) => HotCornersEnabled := v    , "corners", "enabled", false, "bool", "corners", "Enable hot corners", "", SyncHotCornersTimer)
-, FS("ghost"     , () => ProximityGhostEnabled, (v) => ProximityGhostEnabled := v, "memory" , "ghost"  , true , "bool", "power"  , "Proximity Ghost Window (Win+Ctrl+G)"
+, FS("ghost"     , () => ProximityGhostEnabled, (v) => ProximityGhostEnabled := v, "memory" , "ghost"  , true , "bool", "power"  , "Proximity Ghost Window (Shift+Alt+G)"
                  , "Fades a window out until the mouse comes near it.", SyncMediaCore, UnGhostAllWindows)
 , FS("openanim"  , () => OpenAnim             , (v) => OpenAnim := v             , "memory" , "openanim", "Ghost Slide-In", "enum", "anim", "New window animation", "", "", "", OPEN_ANIMS)
 ; ... ~70 rows
@@ -220,8 +220,8 @@ Risk rises monotonically. The two phases that are not pure motion (0 and 1) come
 | **2** | `MonitorGeometry`, `OverlayGui`, `DiagnosticsLog` | Smallest, most-depended-on, no hotkeys, no `#HotIf` — proves the include+encoding+installer pipeline at minimum blast radius. Layout op; volume OSD + dimmer fade; `DEBUG` on → log grows and rotates past 256 KB. |
 | **3** | `FeatureFlags`, `TuningRegistry`, `SettingsStore`, `ProcessLifecycle` (+ `TEARDOWN_SPEC` transcribed 1:1) | **Delete settings.ini, cold start, diff the regenerated ini against one captured pre-split — must be byte-identical.** Then change 5 values across 3 pages, restart, confirm persistence. |
 | **4** | `SettingsWindow`, `FeatureToggles`, `SettingsControlSet()` | All 17 non-ASCII lines that double as `Pages` map keys live here — concentrating the encoding hazard in one commit is deliberate. Click all 7 nav pages (mojibake shows as a page that never appears); resize; wheel-scroll; type `330` into a max-120 field and tab away (write-back); then fire all 11 toggle hotkeys **with the window open** and confirm each checkbox follows. |
-| **5** | `InputBindings` | First file containing `#HotIf` — establish the bracket rule here once. Flag-context hotkeys (Win+Ctrl+B/G/P) with flags on *and* off; function-context ones (taskbar wheel, Explorer Quick Look, file-dialog jump, Spotlight-active); double-press; a hotstring. **And confirm Win+D still does Windows' own show-desktop when Curtain Drop is off** — that binding is in another module and must not inherit a leaked context. |
-| **6** | `WindowCommands` | All 9 keypad tiles **with NumLock on and off**; centre; cycle (3 sizes); next-monitor; undo; Win+Ctrl+wheel both directions and the floor; roll-up; hide-to-tray then restore via the injected icon; boss key on/off. |
+| **5** | `InputBindings` | First file containing `#HotIf` — establish the bracket rule here once. Flag-context hotkeys (Shift+Alt+B/G/P) with flags on *and* off; function-context ones (taskbar wheel, Explorer Quick Look, file-dialog jump, Spotlight-active); double-press; a hotstring. **And confirm Win+D still does Windows' own show-desktop when Curtain Drop is off** — that binding is in another module and must not inherit a leaked context. |
+| **6** | `WindowCommands` | All 9 keypad tiles **with NumLock on and off**; centre; cycle (3 sizes); next-monitor; undo; Shift+Alt+wheel both directions and the floor; roll-up; hide-to-tray then restore via the injected icon; boss key on/off. |
 | **7** | `DragPipeline`, `DropPlacement` | Highest-risk runtime code (`SetWinEventHook` callbacks, RS_* pipeline) — its own phase, nothing else in flight. Drag-snap each edge and corner; throw + glide; throw across a monitor boundary; tiling grid; magnetic-group drag; seam flash; **parallax opacity returns to 255 after release**; exit mid-drag leaves nothing transparent. |
 | **8** | `WindowLifecycle` | Open Notepad / Explorer / a browser, confirm restore; all four `OpenAnim` values; focus pulse; "Forget positions"; inspect `window-positions.ini`. |
 | **9** | One commit each: `AmbientDimming`, `ScreenEdgeGestures`, `AudioOsd`, `OnDemandOverlays`, `FocusEmphasis`, `PinnedWindowModes` — least to most entangled; each carries its own `TEARDOWN_SPEC` re-homing | Per module: enable, use, disable via checkbox (the release path), disable via hotkey, exit while active and confirm nothing left behind. `PinnedWindowModes` last because it owns four of `ApplyUi`'s `uiOld*` release paths — ghost a window then clear the checkbox: it must become clickable and non-topmost again. |

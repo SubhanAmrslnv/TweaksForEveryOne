@@ -13,7 +13,7 @@
 > `SHAppBarMessage`) and volume on the wheel while the pointer is over it. Taskbar
 > style and small icons are handed to ExplorerPatcher.
 
-**Win + Ctrl + W** opens the settings window. All hotkeys are in `HOTKEYS.md`,
+**Shift + Alt + W** opens the settings window. All hotkeys are in `HOTKEYS.md`,
 setup is in the repository `README.md`.
 
 | Tweak | What it does |
@@ -54,7 +54,7 @@ from the tools window if something looks wrong.
 
 ## Always on top
 
-**Win + Ctrl + T** pins or unpins the active window. A tray notification
+**Shift + Alt + O** pins or unpins the active window. A tray notification
 confirms which state it went to.
 
 ## Position memory
@@ -68,7 +68,7 @@ shares a window class with the main Chrome window, so restoring by class alone
 would fling popups to the main window's geometry.
 
 Because the key is per-app, *every* new window of that app opens where you last
-put one. If that's not what you want, turn it off with **Win + Ctrl + M**.
+put one. If that's not what you want, turn it off with **Shift + Alt + M**.
 
 ---
 
@@ -82,7 +82,8 @@ Once installed, Window Tweaks provides a UI to switch between the Windows 10 sty
 
 The old method of manually cropping the taskbar (using `TaskbarCore.ahk`) has been completely removed as it was fundamentally broken on modern builds of Windows 11.
 
----|---|
+| Dead end | Why it does not work |
+|---|---|
 | `TaskbarSi` registry value | Dead since KB5022913; ignored on 24H2/25H2 |
 | `TaskbarSmallIcons` | Present in the registry but inert on the Win11 shell |
 | Feature flag `29785184` | Is `TaskbarDynamicIconScaling`, already on by default; only shrinks icons when the bar is crowded |
@@ -95,8 +96,10 @@ your exact build as tested, run `ep_setup.exe` elevated, then right-click the
 taskbar → Properties → Taskbar → style **Windows 10** + **small taskbar
 buttons** for roughly 30px.
 
-This project does not bundle, install or recommend it — read these cautions
-first:
+The installer offers to fetch and install ExplorerPatcher for you
+(`Install.ps1`, step 2). It is opt-in and skipped when already present, but it is
+a real trade-off rather than a neutral one, so read these cautions before
+accepting:
 
 - It installs `C:\Windows\dxgi.dll`, the textbook DLL-hijack path. Corporate
   EDR (Bitdefender, SentinelOne, CrowdStrike) commonly quarantines it, and per
