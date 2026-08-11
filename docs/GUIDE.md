@@ -3,7 +3,7 @@
 A small program that makes windows behave better. It sits in the tray, uses about
 18 MB, and does nothing to your system outside its own folder.
 
-**Press `Win + Ctrl + W` to open settings.**
+**Press `Shift + Alt + W` to open settings.**
 
 ---
 
@@ -31,16 +31,16 @@ To remove it: run **`Uninstall.ps1`**.
 - **Multi-Monitor Focus Dimmer**: Dims inactive monitors by 50% to reduce eye strain.
 - **macOS "Hot Corners"**: Throw your mouse to screen corners to trigger actions (e.g. Hide windows, Task View).
 - **Premium Volume OSD**: A sleek, blurred macOS-style volume indicator when scrolling the taskbar.
-- **Live Window PiP**: `Win+Ctrl+P` creates a live, always-on-top thumbnail of any background window.
+- **Live Window PiP**: `Shift+Alt+P` creates a live, always-on-top thumbnail of any background window.
 - **Universal Grab & Pan**: Hold Middle-Click to pan/scroll any window (like the Photoshop Hand Tool).
 - **Global Mic Kill-Switch**: Double-tap `Alt` to instantly mute/unmute your microphone system-wide.
 - **Infinite Cursor Wrap**: Teleport your cursor across screen edges for seamless multi-monitor navigation.
 - **Quick Spotlight Launcher**: Double-tap `Ctrl` for a minimalist, lightning-fast search and launch bar.
 - **Smart Active Border**: Draws a sleek, accent-colored border around the currently active window.
-- **Always on Bottom**: `Win+Ctrl+B` pins any window permanently to your desktop background as a widget.
+- **Always on Bottom**: `Shift+Alt+B` pins any window permanently to your desktop background as a widget.
 - **Global Text Expander**: Type `@@mail`, `@@date`, etc., to instantly expand snippets anywhere.
 - **Middle-Click to Close**: Middle-click any window's title bar to instantly close it.
-- **Proximity Ghost Window**: `Win+Ctrl+G` makes a window 80% transparent; it fades in and becomes clickable only when your mouse gets close.
+- **Proximity Ghost Window**: `Shift+Alt+G` makes a window 80% transparent; it fades in and becomes clickable only when your mouse gets close.
 
 ### 1. Magnetic snapping
 
@@ -75,7 +75,7 @@ long the longest slide may take).
 
 ### 3. Always on top
 
-**`Win + Ctrl + T`** pins the window you're using above all others. Press again
+**`Shift + Alt + O`** pins the window you're using above all others. Press again
 to unpin. A tray message tells you which way it went.
 
 ### 4. Position memory
@@ -87,7 +87,7 @@ Dialogs, popups, tool windows and Picture-in-Picture (PiP) windows are skipped o
 shares an identity with the main Chrome window, so remembering them by that alone
 would fling popups to your main window's size and place.
 
-Turn it off with **`Win + Ctrl + M`**, or clear what it has learned with
+Turn it off with **`Shift + Alt + M`**, or clear what it has learned with
 *Forget saved positions* in settings.
 
 ### Also: the taskbar
@@ -104,7 +104,7 @@ the taskbar only when a window is maximized or reaches the bottom edge, and
 **Taskbar Volume Scroll** (System & Media) puts volume on the wheel while your
 mouse is over it.
 
-### The Full Feature Suite (25+ Tweaks & Animations)
+### The Full Feature Suite (40+ Tweaks & Animations)
 
 **Performance & OS Tuning:**
 - **Zero-delay Menus (MenuShowDelay)**: Windows menus open instantly (0-50ms) just like macOS, eliminating the artificial 400ms delay.
@@ -126,15 +126,15 @@ mouse is over it.
 - **Window Unrolling**: New windows unroll from top to bottom like a window blind in 0.2 seconds.
 
 **Productivity & Window Management:**
-- **Transparency Control**: `Win + Ctrl + Wheel` to adjust the opacity of any active window.
-- **Cinema / Focus Mode**: `Win + Ctrl + F` to black out the entire background, keeping only the active window visible.
+- **Transparency Control**: `Shift + Alt + Wheel` to adjust the opacity of any active window.
+- **Cinema / Focus Mode**: `Shift + Alt + F` to black out the entire background, keeping only the active window visible.
 - **Window Shade / Roll-Up**: Middle-click a window to roll it up (collapse to just the title bar), middle-click to restore.
 - **Minimize to Tray**: Add a tray icon for any active window to declutter your taskbar.
-- **Boss Key**: `Win + Ctrl + Esc` to instantly hide all windows and mute system audio. Press again to restore.
+- **Boss Key**: `Shift + Alt + Esc` to instantly hide all windows and mute system audio. Press again to restore.
 - **Linux-Style Alt-Drag**: Hold `Alt + LeftClick` anywhere on a window to move it, or `Alt + RightClick` anywhere to resize it from the nearest edge.
 - **Taskbar Volume Scroll**: Hover over the taskbar and scroll the mouse wheel to adjust volume, or middle-click to mute.
 - **Quick Folder Jump**: Press `Ctrl + G` in any File Save/Open dialog to instantly jump to the folder of your most recently active Explorer window.
-- **Global Plain-Text Paste**: `Ctrl + Win + V` strips all formatting, colors, and fonts from your clipboard and pastes as pure plain text anywhere.
+- **Global Plain-Text Paste**: `Ctrl + Alt + V` strips all formatting, colors, and fonts from your clipboard and pastes as pure plain text anywhere.
 - **Smart Caps Lock**: Tap CapsLock to send `Escape` (or `Backspace`), hold it for 0.4 seconds to actually toggle CapsLock on/off.
 
 ---
@@ -143,33 +143,35 @@ mouse is over it.
 
 | Key | Does |
 |---|---|
-| `Win + Ctrl + W` | Open settings |
-| `Win + Ctrl + S` | Magnetic snapping, on/off |
-| `Win + Ctrl + M` | Position memory, on/off |
-| `Win + Ctrl + E` | Breathing windows, on/off |
-| `Win + Ctrl + F` | Focus mode, on/off |
-| `Win + Ctrl + T` | Always on top, on/off |
-| `Win + Ctrl + R` | Roll up / unroll |
-| `Win + Ctrl + H` | Minimize to tray |
-| `Win + Ctrl + Esc` | Boss key |
-| `Win + Ctrl + Wheel` | Transparency |
+| `Shift + Alt + W` | Open settings |
+| `Shift + Alt + S` | Magnetic snapping, on/off |
+| `Shift + Alt + M` | Position memory, on/off |
+| `Shift + Alt + E` | Breathing windows, on/off |
+| `Shift + Alt + F` | Focus mode, on/off |
+| `Shift + Alt + O` | Always on top, on/off |
+| `Shift + Alt + R` | Roll up / unroll |
+| `Shift + Alt + H` | Minimize to tray |
+| `Shift + Alt + Esc` | Boss key |
+| `Shift + Alt + Wheel` | Transparency |
 | `Alt + F4` | Close, with the gravity animation |
 
 ### Moving windows from the keyboard
 
 | Key | Does |
 |---|---|
-| `Win + Ctrl + Numpad 1`–`9` | Tile to a 3×3 grid, laid out like the keypad |
-| `Win + Ctrl + Numpad 0` | Maximize / restore |
-| `Win + Ctrl + K` | Centre the window, keeping its size |
-| `Win + Ctrl + U` | Cycle its size: 50% → 75% → 90%, centred |
-| `Win + Ctrl + J` | Move it to the next monitor |
-| `Win + Ctrl + ↑` / `↓` | Top half / bottom half |
-| `Win + Ctrl + Z` | Undo the last one of these |
+| `Shift + Alt + Numpad 1`–`9` | Tile to a 3×3 grid, laid out like the keypad |
+| `Shift + Alt + Numpad 0` | Maximize / restore |
+| `Shift + Alt + K` | Centre the window, keeping its size |
+| `Shift + Alt + U` | Cycle its size: 50% → 75% → 90%, centred |
+| `Shift + Alt + N` | Move it to the next monitor |
+| `Shift + Alt + ↑` / `↓` | Top half / bottom half |
+| `Shift + Alt + Z` | Undo the last one of these |
 
 The grid follows the shape of the numeric keypad, so the key you press is where
 the window ends up — `7` is the top-left quarter, `4` the left half, `2` the
-bottom half. NumLock does not have to be on.
+bottom half. **NumLock must be on** — only the digit names of the keypad keys
+are bound, so with NumLock off the keypad sends navigation keys and nothing
+happens. `Shift + Alt + Up/Down` works either way.
 
 Left and right halves are the two the keypad covers but the arrow keys don't:
 Windows' own `Win + ←/→` already does those.
@@ -178,19 +180,19 @@ Windows' own `Win + ←/→` already does those.
 
 | Key | Does |
 |---|---|
-| `Win + Ctrl + Y` | Restore **everything** — unroll, un-ghost and un-hide every window |
-| `Win + Ctrl + X` | Make the active window fully opaque again |
-| `Win + Ctrl + Shift + R` | Restart the program |
-| `Win + Ctrl + Shift + Q` | Quit |
+| `Shift + Alt + Y` | Restore **everything** — unroll, un-ghost and un-hide every window |
+| `Shift + Alt + X` | Make the active window fully opaque again |
+| `Shift + Alt + F5` | Restart the program |
+| `Shift + Alt + F6` | Quit |
 
-`Win + Ctrl + Y` is the one to remember. If a window has vanished to its title
+`Shift + Alt + Y` is the one to remember. If a window has vanished to its title
 bar, gone see-through, or disappeared into the tray, this brings it back.
 
 ### Switching a feature on or off
 
-`Win + Ctrl + Shift +` … `C` hot corners, `A` active border, `W` cursor wrap,
-`D` multi-monitor dimmer, `T` smart auto-hide taskbar, `G` magnetic groups,
-`P` grab & pan. Each shows a tray notification and remembers the new state.
+`Shift + Alt +` … `C` hot corners, `V` active border, `I` cursor wrap,
+`D` multi-monitor dimmer, `T` smart auto-hide taskbar, `J` magnetic groups,
+`Space` grab & pan. Each shows a tray notification and remembers the new state.
 
 Several more hotkeys appear only when their feature is switched on.
 `HOTKEYS.md` has the full list, the conflicts with Windows' own shortcuts, and
@@ -240,7 +242,7 @@ opt in:
 | Setting | Why it's off |
 |---|---|
 | **Rubber-Band Scroll** | Physically nudges whatever window is under the pointer on every wheel notch. |
-| **Middle-click title bar to roll up** | Puts this app in front of every middle click in the system. `Win+Ctrl+R` rolls a window up whether this is on or not. |
+| **Middle-click title bar to roll up** | Puts this app in front of every middle click in the system. `Shift+Alt+R` rolls a window up whether this is on or not. |
 | **Middle-Click to Close** | Same, and a stray middle click closes a window. |
 | **Context Menu Unfold** | Animates every right-click menu in Windows. |
 
@@ -271,8 +273,8 @@ Run **`scripts\Apply-Windows-Tuning.ps1`** for the optional polish, and
 | Hotkeys dead in one app | That app is running as administrator. Run Window Tweaks as admin too, or click a normal window first. |
 | A window keeps jumping somewhere | Position memory learned a bad spot. Settings → Window Management → **Forget saved positions**. |
 | Taskbar looks odd, or auto-hide is stuck | Settings → General → **Restart Explorer**. That's a guaranteed reset — and the program notices Explorer coming back and re-attaches itself. |
-| A window is stuck transparent or click-through | Ghost mode. Press `Win + Ctrl + G` on it again. Exiting the program also restores every window it changed. |
-| A window won't come back from the desktop | Always-on-bottom. Press `Win + Ctrl + B` on it, or exit the program. |
+| A window is stuck transparent or click-through | Ghost mode. Press `Shift + Alt + G` on it again. Exiting the program also restores every window it changed. |
+| A window won't come back from the desktop | Always-on-bottom. Press `Shift + Alt + B` on it, or exit the program. |
 | Position memory / new-window animations stopped working | Explorer restarted and the program lost its connection to it. This now repairs itself; if it doesn't, restart from the tray. |
 | Won't start at all | AutoHotkey **v2** must be installed. v1 can't run it. |
 

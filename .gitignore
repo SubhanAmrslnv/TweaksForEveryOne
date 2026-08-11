@@ -30,3 +30,18 @@ desktop.ini
 .idea/
 build/obj/
 **/.claude
+
+# Linux port build output. CMake is run out-of-source as linux/build, but an
+# in-source configure scatters CMakeCache.txt / CMakeFiles/ next to the sources,
+# so both shapes are covered.
+linux/build/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+compile_commands.json
+*.o
+*.so
+*.so.*
+*.a
+tweaksd

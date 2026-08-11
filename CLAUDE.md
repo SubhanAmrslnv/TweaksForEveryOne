@@ -6,55 +6,57 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Windows 11 tray utility written in **AutoHotkey v2** (magnetic window snapping, inertial "ice glide", window animations, ~40 power-user tweaks), plus a reversible HKCU tuning pass. Shipped two ways: a PowerShell installer and a single-file setup `.exe` compiled from C#.
 
+**This repository now holds two independent implementations.** Everything in this file describes the Windows one (`src/`, `scripts/`, `build/`, `docs/`). A separate C++20/Qt6/CMake port for Linux lives in **`linux/`** and has its own **`linux/CLAUDE.md`** — read that before touching anything under `linux/`. The two share **no code**, only design: the render-arbitration and animation-scheduler concepts were ported deliberately, so if you change an invariant on one side, check the other. The Linux port is an early scaffold that does not build; do not treat its docs as a description of working software.
+
 **There is no taskbar-height engine any more.** `TaskbarCore.ahk`, the `TB_*` globals, `TB_HEIGHTS`, `IsHeight()` and the `Win+Alt+Up/Down/0` hotkeys were removed. What remains taskbar-related is Smart Auto-Hide (`SHAppBarMessage`, `[taskbar] smart`) and taskbar volume scroll. `docs\TASKBAR-AND-INTERNALS.md` keeps the measured findings from that work because the Win32 research is still valuable — but treat it as history, not as a description of the code.
 
 ## Features and hotkeys
 
-**Ctrl + Alt** and **Shift + Alt** drive everything, in two tiers: `Ctrl+Alt+<key>` *acts on the active window*, `Shift+Alt+<key>` *toggles a feature flag*. Hotkeys are declared in one block (`src/WindowTweaks.ahk`, search `=== Hotkeys ===`) and each one delegates to a named function that the tray menu binds to as well — change behaviour in the function, never in the hotkey line, or the two drift apart.
+**Every global hotkey is `Shift+Alt+<key>` — there is no second tier.** Commit `3dadac4` collapsed the old `Win+Ctrl` scheme into one chord, and the source binds `+!` and nothing else (the sole exception is `Ctrl+Alt+V` for plain-text paste, which shadows the paste it replaces). Hotkeys are declared in one block (`src/WindowTweaks.ahk`, search `=== Hotkeys ===`) and each one delegates to a named function that the tray menu binds to as well — change behaviour in the function, never in the hotkey line, or the two drift apart.
+
+**`docs\HOTKEYS.md` is the source of truth for this table.** Do not re-derive it from memory; several documents and the tray labels still carry the pre-`3dadac4` chords.
 
 | Hotkey | Action | Entry point |
 |---|---|---|
-| `Ctrl+Alt+W` | Open the settings window | `ShowWin()` |
+| `Shift+Alt+W` | Open the settings window | `ShowWin()` |
 | `Shift+Alt+S` | Magnetic snapping on / off | `ToggleSnap()` |
 | `Shift+Alt+M` | Position memory on / off | `ToggleMemory()` |
 | `Shift+Alt+E` | Breathing windows on / off | `ToggleBreathing()` |
 | `Shift+Alt+F` | Focus / cinema mode | `ToggleFocusMode()` |
-| `Ctrl+Alt+T` | Always-on-top the active window | inline block |
-| `Ctrl+Alt+B` | Always-on-bottom (desktop widget) | `ToggleAlwaysOnBottom()` |
-| `Ctrl+Alt+G` | Proximity ghost window | `ToggleGhostMode()` |
-| `Ctrl+Alt+P` | Live PiP thumbnail | `TogglePiP()` |
-| `Ctrl+Alt+R` | Roll up / unroll | `ToggleRollUp()` |
-| `Ctrl+Alt+H` | Minimize to tray | `HideToTray()` |
-| `Ctrl+Alt+Esc` | Boss key | `ToggleBossKey()` |
-| `Ctrl+Alt+Wheel` | Transparency of the active window | `ChangeTransparency()` |
-| `Ctrl+Alt+C` | Centre the active window, keep its size | `CenterWindow()` |
-| `Ctrl+Alt+U` | Cycle size 50 / 75 / 90 % of the work area, centred | `CycleWindowSize()` |
-| `Ctrl+Alt+J` | Move to the next monitor, scaled to its work area | `MoveToNextMonitor()` |
-| `Ctrl+Alt+Numpad1..9` | Tile to that cell of a 3×3 grid (keypad-shaped) | `TileWindow(cell)` |
-| `Ctrl+Alt+Numpad0` | Maximize / restore | `ToggleMaximize()` |
-| `Ctrl+Alt+Z` | Undo the last layout change to this window | `UndoLayout()` |
-| `Ctrl+Alt+X` | Reset the active window to fully opaque | `ResetTransparency()` |
-| `Ctrl+Alt+Y` | Restore all rolled-up / ghosted / tray-hidden windows | `RestoreAllWindows()` |
-| `Ctrl+Alt+L` | Spotlight launcher (alias for double-tap Ctrl) | `ToggleSpotlight()` |
-| `Ctrl+Alt+A` | Mic kill-switch (alias for double-tap Alt) | `ToggleDefaultMic()` |
-| `Ctrl+Alt+I` | Quick Look preview (alias for Space in Explorer) | `ToggleQuickLook()` |
+| `Shift+Alt+O` | Always-on-top the active window | inline block, `:3632` |
+| `Shift+Alt+R` | Roll up / unroll | `ToggleRollUp()` |
+| `Shift+Alt+H` | Minimize to tray | `HideToTray()` |
+| `Shift+Alt+Esc` | Boss key | `ToggleBossKey()` |
+| `Shift+Alt+Wheel` | Transparency of the active window | `ChangeTransparency()` |
+| `Shift+Alt+K` | Centre the active window, keep its size | `CenterWindow()` |
+| `Shift+Alt+U` | Cycle size 50 / 75 / 90 % of the work area, centred | `CycleWindowSize()` |
+| `Shift+Alt+N` | Move to the next monitor, scaled to its work area | `MoveToNextMonitor()` |
+| `Shift+Alt+Numpad1..9` | Tile to that cell of a 3×3 grid (keypad-shaped) | `TileWindow(cell)` |
+| `Shift+Alt+Numpad0` | Maximize / restore | `ToggleMaximize()` |
+| `Shift+Alt+Up` / `Down` | Top half / bottom half (laptop alias) | `TileWindow(8)` / `(2)` |
+| `Shift+Alt+Z` | Undo the last layout change to this window | `UndoLayout()` |
+| `Shift+Alt+X` | Reset the active window to fully opaque | `ResetTransparency()` |
+| `Shift+Alt+Y` | Restore all rolled-up / ghosted / tray-hidden windows | `RestoreAllWindows()` |
+| `Shift+Alt+F5` / `F6` | Restart / Exit | `Reload()` / `ExitApp()` |
 | `Shift+Alt+C` | Hot corners on / off | `ToggleHotCorners()` |
-| `Shift+Alt+A` | Smart active border on / off | `ToggleActiveBorder()` |
-| `Shift+Alt+W` | Infinite cursor wrap on / off | `ToggleCursorWrap()` |
+| `Shift+Alt+V` | Smart active border on / off | `ToggleActiveBorder()` |
+| `Shift+Alt+I` | Infinite cursor wrap on / off | `ToggleCursorWrap()` |
 | `Shift+Alt+D` | Multi-monitor dimmer on / off | `ToggleDimmer()` |
 | `Shift+Alt+T` | Smart auto-hide taskbar on / off | `ToggleSmartTaskbar()` |
-| `Shift+Alt+G` | Magnetic window groups on / off | `ToggleMagneticGroups()` |
-| `Shift+Alt+P` | Universal grab & pan on / off | `ToggleGrabPan()` |
-| `Shift+Alt+R` / `+Q` | Restart / Exit | `Reload()` / `ExitApp()` |
-| `Alt+F4` | Close with the gravity-drop animation | `GravityClose()` |
+| `Shift+Alt+J` | Magnetic window groups on / off | `ToggleMagneticGroups()` |
+| `Shift+Alt+Space` | Universal grab & pan on / off | `ToggleGrabPan()` |
 | `Esc Esc Esc` | Stealth Panic Mode on / off (see its own section) | `ToggleStealthPanic()` |
 | `(Tray Menu)` | Restart / Exit | `Reload()` / `ExitApp()` |
 
-The triple-`Esc` binding is `~Esc`, so Escape still reaches the focused window — it does not go through `IsDoublePress` and it lives in `src\StealthPanic.ahk`, not the hotkey block. Note `Escape` is already claimed behind two other `#HotIf` contexts (`WindowTweaks.ahk:1725` Spotlight, `:1737` Quick Look).
+Behind a `#HotIf` on their feature flag, so the key stays free until the feature is on: `Shift+Alt+B` (always-on-bottom), `Shift+Alt+G` (proximity ghost), `Shift+Alt+P` (live PiP), `Shift+Alt+L` (spotlight), `Shift+Alt+A` (mic kill-switch), `Shift+Alt+Q` (Quick Look, and only in Explorer), `Shift+Alt+F4` (shatter close, `:9131`), `Alt+F4` (gravity close, `$!F4` at `:3122`), `Ctrl+Alt+V` (plain paste).
 
-Every keypad tile hotkey is declared **twice** — `Numpad7` *and* `NumpadHome`, and so on. With NumLock off the keypad sends the navigation names, so binding only the digit names leaves the whole gesture dead for anyone who keeps NumLock off.
+The triple-`Esc` binding is `~Esc`, so Escape still reaches the focused window — it does not go through `IsDoublePress` and it lives in `src\StealthPanic.ahk`, not the hotkey block. Note `Escape` is already claimed behind two other `#HotIf` contexts (Spotlight and Quick Look) and by `CloseCarousel`.
 
-Conditional on their feature flag: `Alt+LButton` / `Alt+RButton` (alt-drag), `*MButton` (grab-pan / roll-up / close), wheel and middle-click over the taskbar, `Ctrl+G` in file dialogs, `Ctrl+Win+V`, `CapsLock`, `Space` in Explorer, double-tap `LAlt` (mic), double-tap `Ctrl` (spotlight).
+**Three hotkeys are declared inline, far from the hotkey block** — always-on-top (`+!o`, `:3632`), gravity close (`$!F4`, `:3122`) and shatter close (`+!F4`, `:9131`). A grep of the `=== Hotkeys ===` block alone will miss them.
+
+**The keypad tiles are bound only under their digit names.** A comment above the block claims both names are bound — `Numpad7` *and* `NumpadHome` — but only `Numpad7`..`Numpad0` exist in the source. With NumLock **off** the keypad sends the navigation names and the whole tiling gesture is dead. Either bind the second set or fix the comment; `Shift+Alt+Up/Down` is currently the only NumLock-independent layout key.
+
+Conditional on their feature flag: `Alt+LButton` / `Alt+RButton` (alt-drag), `*MButton` (grab-pan / roll-up / close), wheel and middle-click over the taskbar, `Ctrl+G` in file dialogs, `CapsLock`, `Space` in Explorer, double-tap `LAlt` (mic), double-tap `Ctrl` (spotlight).
 
 Every toggle fires `Notify()` → `TrayTip`, so state changes are always visible. The one exception is `ChangeTransparency`, which debounces its notification through `FlushTransNotify` — a wheel gesture is many hotkey firings and used to produce one toast per notch.
 
@@ -95,16 +97,16 @@ Hot Corners uses the same dwell model (`[corners] size`, `[corners] delay`) for 
 - **Multi-Monitor Focus Dimmer**: Dims inactive monitors by 50% to reduce eye strain.
 - **macOS "Hot Corners"**: Throw your mouse to screen corners to trigger actions (e.g. Hide windows, Task View).
 - **Premium Volume OSD**: A sleek, blurred macOS-style volume indicator when scrolling the taskbar.
-- **Live Window PiP**: `Ctrl+Alt+P` creates a live, always-on-top thumbnail of any background window.
+- **Live Window PiP**: `Shift+Alt+P` creates a live, always-on-top thumbnail of any background window.
 - **Universal Grab & Pan**: Hold Middle-Click to pan/scroll any window (like the Photoshop Hand Tool).
 - **Global Mic Kill-Switch**: Double-tap `Alt` to instantly mute/unmute your microphone system-wide.
 - **Infinite Cursor Wrap**: Teleport your cursor across screen edges for seamless multi-monitor navigation.
 - **Quick Spotlight Launcher**: Double-tap `Ctrl` for a minimalist, lightning-fast search and launch bar.
 - **Smart Active Border**: Draws a sleek, accent-colored border around the currently active window.
-- **Always on Bottom**: `Ctrl+Alt+B` pins any window permanently to your desktop background as a widget.
+- **Always on Bottom**: `Shift+Alt+B` pins any window permanently to your desktop background as a widget.
 - **Global Text Expander**: Type `@@mail`, `@@date`, etc., to instantly expand snippets anywhere.
 - **Middle-Click to Close**: Middle-click any window's title bar to instantly close it.
-- **Proximity Ghost Window**: `Ctrl+Alt+G` makes a window 80% transparent; it fades in and becomes clickable only when your mouse gets close.
+- **Proximity Ghost Window**: `Shift+Alt+G` makes a window 80% transparent; it fades in and becomes clickable only when your mouse gets close.
 
 **Performance & OS Tuning:**
 - **Zero-delay Menus (MenuShowDelay)**: Windows menus open instantly (0-50ms) just like macOS, eliminating the artificial 400ms delay.
@@ -148,19 +150,19 @@ Hot Corners uses the same dwell model (`[corners] size`, `[corners] delay`) for 
 - **Privacy Blur on Unfocus**: Mark a window as private (Win+Alt+B). When inactive, it gets a heavy frosted glass overlay.
 
 **Keyboard Window Layout:**
-- **Numpad Tiling**: `Ctrl+Alt+Numpad1..9` tiles to a 3x3 grid of the work area, laid out like the keypad. Both the digit and navigation names of every keypad key are bound, so it works with NumLock either way.
-- **Centre / Cycle Size / Next Monitor / Maximize / Undo**: `Ctrl+Alt+C` / `U` / `J` / `Numpad0` / `Z`. All except maximize go through `ApplyLayout()`.
-- **Restore Everything**: `Ctrl+Alt+Y` unrolls, un-ghosts and un-hides every window the program is holding — the recovery path for state a user cannot see.
-- **Reset Transparency**: `Ctrl+Alt+X`.
+- **Numpad Tiling**: `Shift+Alt+Numpad1..9` tiles to a 3x3 grid of the work area, laid out like the keypad. **Only the digit names are bound**, so this is dead with NumLock off; `Shift+Alt+Up/Down` are the NumLock-independent halves.
+- **Centre / Cycle Size / Next Monitor / Maximize / Undo**: `Shift+Alt+K` / `U` / `N` / `Numpad0` / `Z`. All except maximize go through `ApplyLayout()`.
+- **Restore Everything**: `Shift+Alt+Y` unrolls, un-ghosts and un-hides every window the program is holding — the recovery path for state a user cannot see.
+- **Reset Transparency**: `Shift+Alt+X`.
 
-**Feature Toggles (`Shift+Alt+<key>`):** hot corners `C`, active border `A`, cursor wrap `W`, multi-monitor dimmer `D`, smart auto-hide taskbar `T`, magnetic groups `G`, grab & pan `P`. Each flips the flag, persists it, updates the settings checkbox if the window is open, notifies, and calls the feature's `Sync*` — that last step is what actually starts or stops the timer.
+**Feature Toggles (`Shift+Alt+<key>`):** hot corners `C`, active border `V`, cursor wrap `I`, multi-monitor dimmer `D`, smart auto-hide taskbar `T`, magnetic groups `J`, grab & pan `Space`. Each flips the flag, persists it, updates the settings checkbox if the window is open, notifies, and calls the feature's `Sync*` — that last step is what actually starts or stops the timer.
 
 **Productivity & Window Management:**
-- **Transparency Control**: `Win + Ctrl + Wheel` to adjust the opacity of any active window.
-- **Cinema / Focus Mode**: `Win + Ctrl + F` to black out the entire background, keeping only the active window visible.
+- **Transparency Control**: `Shift + Alt + Wheel` to adjust the opacity of any active window.
+- **Cinema / Focus Mode**: `Shift + Alt + F` to black out the entire background, keeping only the active window visible.
 - **Window Shade / Roll-Up**: Middle-click a window to roll it up (collapse to just the title bar), middle-click to restore.
 - **Minimize to Tray**: Add a tray icon for any active window to declutter your taskbar.
-- **Boss Key**: `Win + Ctrl + Esc` to instantly hide all windows and mute system audio. Press again to restore.
+- **Boss Key**: `Shift + Alt + Esc` to instantly hide all windows and mute system audio. Press again to restore.
 - **Linux-Style Alt-Drag**: Hold `Alt + LeftClick` anywhere on a window to move it, or `Alt + RightClick` anywhere to resize it from the nearest edge.
 - **Taskbar Volume Scroll**: Hover over the taskbar and scroll the mouse wheel to adjust volume, or middle-click to mute.
 - **Quick Folder Jump**: Press `Ctrl + G` in any File Save/Open dialog to instantly jump to the folder of your most recently active Explorer window.
@@ -214,15 +216,19 @@ Two settings are deliberately *not* in the registry because they are not numbers
 
 **Enumerated settings must be validated by membership, not range.** Every setting that feeds a DropDownList (`OpenAnim`, `SmartCapsAction`, the four `HotCorner*`, `EP_Style`, `EP_IconSize`) goes through `IniPick(section, key, allowedList, default)` in `LoadSettings`, and the control is built from the *same* list with `IndexOf()` for its `Choose<n>`. The lists live in one place — `OPEN_ANIMS`, `CAPS_ACTIONS`, `CORNER_ACTIONS`, `EP_STYLES`, `EP_ICON_SIZES` near the top of the file. Two things break if you skip this: `DropDownList.Choose("not in the list")` throws *inside* `BuildWin`, which leaves `Ctrl+Alt+W` permanently dead after one hand-edited `settings.ini`; and a value the dropdown cannot display leaves the GUI showing one thing while the engine uses another. Range-check the numeric settings; list-check these.
 
-Tray menu labels embed their hotkey after a literal tab — `"Magnetic snap\tWin+Ctrl+S"` — and that **entire string is the lookup key** used by `SyncTray()` to set tick marks. Renaming a label without updating both places silently breaks the checkmarks, with no error.
+Tray menu labels embed their hotkey after a literal tab — `"Magnetic snap\tWin+Ctrl+S"` (the source writes the tab as an AHK escape) — and that **entire string is the lookup key** used by `SyncTray()` to set tick marks. Renaming a label without updating both places silently breaks the checkmarks, with no error.
+
+**Those labels are stale and currently lie to the user.** Commit `3dadac4` moved every binding to `Shift+Alt`, but the display strings were not updated: `WindowTweaks.ahk:765`/`777-782` still say `Win+Ctrl+S` / `Win+Ctrl+M` / `Win+Ctrl+E` when the real hotkeys are `Shift+Alt+S` / `Shift+Alt+M` / `Shift+Alt+E`, and settings checkboxes such as `:953` ("Minimize to Tray (Win+Ctrl+H)") have the same problem against the real `Shift+Alt+H`. Fixing this means changing the label at **every** site that uses it as a lookup key — the `m.Add` call and both `Check`/`Uncheck` arms — in one commit, or the tick marks break. The authoritative list of real bindings is the `; ====== Hotkeys ======` block and `docs\HOTKEYS.md`.
 
 ### Windows shortcuts this claims
 
 AutoHotkey hooks the keyboard ahead of Windows, so while the program runs, `Shift+Alt+S` no longer opens Speech Recognition. The rest are unclaimed by Windows.
 
-Deliberately **not** touched, and this is the constraint that dictated the whole key allocation: `Win+Ctrl+←/→` (virtual desktops), `Win+Ctrl+D` (new virtual desktop), `Win+Ctrl+Q` (Quick Assist), `Win+Ctrl+C` (colour filters), `Win+Ctrl+N` / `Win+Ctrl+Enter` (Narrator), `Win+Ctrl+O` (on-screen keyboard), `Win+Ctrl+Space` (previous input method), `Win+Ctrl+Shift+B` (reset the graphics driver), `Win+Ctrl+<digit>` (last active window of taskbar app N), `Win+↑/↓`, `Win+Tab`, `Win+D`, `Win+E`. Several of those are accessibility features; shadowing them is not a trade this program gets to make on the user's behalf. That is why "centre the window" is on `K` and not the obvious `C`, and why left/right halves have no arrow alias — `Win+←/→` already does that job.
+Deliberately **not** touched: `Win+Ctrl+←/→` (virtual desktops), `Win+Ctrl+D` (new virtual desktop), `Win+Ctrl+Q` (Quick Assist), `Win+Ctrl+C` (colour filters), `Win+Ctrl+N` / `Win+Ctrl+Enter` (Narrator), `Win+Ctrl+O` (on-screen keyboard), `Win+Ctrl+Space` (previous input method), `Win+Ctrl+Shift+B` (reset the graphics driver), `Win+Ctrl+<digit>` (last active window of taskbar app N), `Win+↑/↓`, `Win+Tab`, `Win+D`, `Win+E`. Several of those are accessibility features; shadowing them is not a trade this program gets to make on the user's behalf.
 
-Before adding a hotkey, check this list. The free `Win+Ctrl` letters are now down to `V` (taken by `Ctrl+Win+V`) and nothing else; the second tier `Shift+Alt+<key>` is where new bindings should go.
+**The `Win+Ctrl` tier is gone.** That list of Windows-reserved chords is exactly *why*: the program originally lived on `Win+Ctrl+<key>` and kept colliding with it, so commit `3dadac4` moved everything onto the single `Shift+Alt` chord. Nothing here binds a `Win` chord any more. The historical consequences of the old scheme are still visible — "centre the window" is on `K` rather than the obvious `C`, because `C` was once needed to dodge `Win+Ctrl+C` and is now taken by hot corners; and left/right halves still have no arrow alias because `Win+←/→` already does that job.
+
+Before adding a hotkey: everything global is `Shift+Alt+<key>`, so the free letters are the constraint. Check the table at the top of this file (and `docs\HOTKEYS.md`) for what is taken — the chord space is nearly full, which is why `Space`, the arrows and `F5`/`F6` are already in use. Note that AutoHotkey wins against Windows for `Shift+Alt+S`, so Speech Recognition does not open while this runs.
 
 ## Commands
 
@@ -275,7 +281,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build\Build-Installer.ps1 
 
 SOLID, DRY, separation of concerns and single-source-of-truth are **requirements** for this repo, adapted to AHK v2. The goal is not more files; it is clear ownership. Optimise for that, never for file count.
 
-**Ownership.** One file, one responsibility. A file approaching ~1000 lines gets reviewed for natural boundaries; ~2000+ is an architectural problem unless there is a documented reason. `src\WindowTweaks.ahk` is currently **9,281 lines** and is being split — the phased plan, the 23 target module boundaries with their source line ranges, and the per-phase smoke tests are in **`docs\MODULARIZATION.md`**. Read it before moving any code. Do not append a new feature to `WindowTweaks.ahk`; find or create the module that owns the responsibility.
+**Ownership.** One file, one responsibility. A file approaching ~1000 lines gets reviewed for natural boundaries; ~2000+ is an architectural problem unless there is a documented reason. `src\WindowTweaks.ahk` is currently **9,445 lines** and is being split — the phased plan, the 23 target module boundaries with their source line ranges, and the per-phase smoke tests are in **`docs\MODULARIZATION.md`**. Read it before moving any code. Do not append a new feature to `WindowTweaks.ahk`; find or create the module that owns the responsibility.
 
 **Single source of truth.** A value, rule, mapping or validation gets one authoritative definition. `TUNE_SPEC` is the worked example: one row per tunable number, and load/clamp/persist/UI are all generated from it. Adding a setting must not mean editing five unrelated functions. Where a mirror is required for performance (`SyncTuningGlobals`), say explicitly which copy is authoritative and which is derived.
 
@@ -499,6 +505,17 @@ Two rules for that module: nothing in it may throw (it runs from a top-level ini
 
 `settings.ini`, `window-positions.ini`, `snap.log` (+ `.old`, rotated at 256 KB) are written to `A_ScriptDir` — so running from source writes into `src\`, not the installed copy at `%LOCALAPPDATA%\Window Tweaks`. Stealth Panic adds `StealthPanic.ini` and `StealthPanicApps.txt` next to whichever copy is running. All gitignored. Nothing is written outside the program folder except a Startup `.lnk`; the registry is read-only (`AppsUseLightTheme`) — there is no `Run` key, service, or scheduled task.
 
+### Custom Taskbar Clock — uncommitted, and the first network egress
+
+`src\WindowTweaks.ahk` carries an **uncommitted** feature (~127 lines) adding a clock overlay: `CustomClockEnabled`, ini key `[taskbar] customclock`, wired through `LoadSettings` / `WriteSettings` / `BuildWin` / `ApplyUi` and driven by `SyncCustomClockTimer()` → `UpdateCustomClock()`. It parents a borderless `+E0x20` (click-through) GUI over the `TrayClockWClass` control and rewrites it as time / date / weather.
+
+Two things about it contradict statements elsewhere in this file, so they are called out rather than buried:
+
+- **`FetchWeather()` performs an outbound HTTP request** — `ComObject("Msxml2.XMLHTTP")` against `http://wttr.in`, async, refreshed every 15 minutes, with the response written into `CustomClockWeather` by `WeatherCallback`. This is the **only** network call in the program, and the paragraph above ("nothing is written outside the program folder") was written when none existed. It is plain HTTP, not HTTPS, and there is no opt-out beyond the feature's own checkbox. If privacy or offline behaviour matters, this is the one place to look.
+- **It is invisible in the default configuration.** `UpdateCustomClock` returns early unless `EP_IconSize = "Small"` *and* the taskbar is not at the bottom of the screen, so with stock settings the feature can be switched on and appear to do nothing.
+
+The COM request object is held in the global `CustomClockReq` specifically so it is not garbage-collected mid-flight, and cleared in the callback — do not "tidy" that into a local.
+
 ## Packaging
 
 Two independent installers that must be kept in sync: `Install.ps1` (6 steps) and `build\Setup.cs` (5 steps, WinForms). They already diverge — `Setup.cs` `StopRunning()` kills *every* process named `AutoHotkey*`, while `Install.ps1` filters by command line matching `*WindowTweaks.ahk*`. Change install behaviour in both.
@@ -555,3 +572,9 @@ When adding new features or modifying the code, AI agents must strictly adhere t
 `docs\GUIDE.md` (user-facing), `docs\HOTKEYS.md`, `docs\ANIMATIONS.md` (which Windows settings the glide needs and why), `docs\WINDOWS-TUNING.md` (a worked example from one machine — the reasoning transfers, the readings don't), `docs\TASKBAR-AND-INTERNALS.md` (the measured taskbar research and the snapping design — the taskbar-height engine it describes has been removed, so read the first half as history and the snapping half as current).
 
 `docs\MODULARIZATION.md` is the live plan for splitting `WindowTweaks.ahk` — phase order, module boundaries, the `FEATURE_SPEC` / `TEARDOWN_SPEC` designs, and the AHK v2 traps the split hits. It is a working document, not user-facing, and is **not** shipped by the installer. Keep it current as phases land.
+
+**`docs\HOTKEYS.md` is the single source of truth for key bindings.** It is the only document that was updated for the `Ctrl+Alt` / `Shift+Alt` migration in commit `3dadac4`. When a hotkey changes, change it there and in the `; ====== Hotkeys ======` block, and make every other document defer rather than re-listing — three near-identical copies of the feature list already exist across `README.md`, this file and `docs\GUIDE.md`, and they drift.
+
+Two strays: `docs\FUTURE-ANIMATIONS.md` is a roadmap written mostly in Azerbaijani whose contents have largely shipped, and `docs\claude.md` is a one-line note (lowercase filename, distinct from this file on a case-sensitive host).
+
+**Linux port docs** live under `linux\docs\` and are governed by `linux\CLAUDE.md`: `IMPLEMENTATION-AUDIT.md` (what actually exists — read first), `ARCHITECTURE.md`, `FEATURE-MATRIX.md`, `WAYLAND-LIMITATIONS.md`, `INSTALLATION.md`. None of them are shipped by the Windows installer, whose payload is the five documents hardcoded in `Install.ps1` and `build\Build-Installer.ps1`.

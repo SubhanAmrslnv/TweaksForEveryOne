@@ -1,0 +1,12 @@
+{
+  "name": "TweakForEveryone",
+  "description": "Wayland rendering and input frontend for the tweaksd daemon.",
+  "uuid": "tweakforeveryone@linux.local",
+  "shell-version": [
+    "42",
+    "43",
+    "44",
+    "45",
+    "46"
+  ]
+}

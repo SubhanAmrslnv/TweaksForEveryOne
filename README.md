@@ -8,13 +8,13 @@ One tray program, about 18 MB, near-zero CPU when idle. Nothing is installed
 outside your user profile.
 
 ```
-Win + Ctrl + W          settings
-Win + Ctrl + T          pin a window on top
-Win + Ctrl + S          magnetic snapping on / off
-Win + Ctrl + K          centre the active window
-Win + Ctrl + Numpad1-9  tile it to a 3x3 grid, laid out like the keypad
-Win + Ctrl + J          send it to the next monitor
-Win + Ctrl + Z          undo that
+Shift + Alt + W          settings
+Shift + Alt + O          pin a window on top
+Shift + Alt + S          magnetic snapping on / off
+Shift + Alt + K          centre the active window
+Shift + Alt + Numpad1-9  tile it to a 3x3 grid, laid out like the keypad
+Shift + Alt + N          send it to the next monitor
+Shift + Alt + Z          undo that
 ```
 
 Full list: [docs/HOTKEYS.md](docs/HOTKEYS.md).
@@ -61,7 +61,7 @@ ease-out, then settles onto whatever edge it drifts near. Flick harder and it
 travels further. It never flies off-screen.
 
 ### Always on top
-`Win + Ctrl + T` pins the active window above everything else.
+`Shift + Alt + O` pins the active window above everything else.
 
 ### Position memory
 Each app reopens at the size and position you last left it. Dialogs, popups,
@@ -101,16 +101,16 @@ Context Menu Unfold. Turn on whichever you want in the settings window.
 - **Multi-Monitor Focus Dimmer**: Dims inactive monitors by 50% to reduce eye strain.
 - **macOS "Hot Corners"**: Throw your mouse to screen corners to trigger actions (e.g. Hide windows, Task View).
 - **Premium Volume OSD**: A sleek, blurred macOS-style volume indicator when scrolling the taskbar.
-- **Live Window PiP**: `Win+Ctrl+P` creates a live, always-on-top thumbnail of any background window.
+- **Live Window PiP**: `Shift+Alt+P` creates a live, always-on-top thumbnail of any background window.
 - **Universal Grab & Pan**: Hold Middle-Click to pan/scroll any window (like the Photoshop Hand Tool).
 - **Global Mic Kill-Switch**: Double-tap `Alt` to instantly mute/unmute your microphone system-wide.
 - **Infinite Cursor Wrap**: Push the cursor into the left or right edge of the desktop and hold to teleport to the other side. Needs a deliberate push - approach speed, hold time, cooldown and edge tolerance are all configurable - so reaching for something at the screen edge never triggers it, and it never fires mid-drag.
 - **Quick Spotlight Launcher**: Double-tap `Ctrl` for a minimalist, lightning-fast search and launch bar.
 - **Smart Active Border**: Draws a sleek, accent-colored border around the currently active window.
-- **Always on Bottom**: `Win+Ctrl+B` pins any window permanently to your desktop background as a widget.
+- **Always on Bottom**: `Shift+Alt+B` pins any window permanently to your desktop background as a widget.
 - **Global Text Expander**: Type `@@mail`, `@@date`, etc., to instantly expand snippets anywhere.
 - **Middle-Click to Close**: Middle-click any window's title bar to instantly close it.
-- **Proximity Ghost Window**: `Win+Ctrl+G` makes a window 80% transparent; it fades in and becomes clickable only when your mouse gets close.
+- **Proximity Ghost Window**: `Shift+Alt+G` makes a window 80% transparent; it fades in and becomes clickable only when your mouse gets close.
 
 **Performance & OS Tuning:**
 - **Zero-delay Menus (MenuShowDelay)**: Windows menus open instantly (0-50ms) just like macOS, eliminating the artificial 400ms delay.
@@ -156,27 +156,28 @@ Context Menu Unfold. Turn on whichever you want in the settings window.
 > **Note:** Some features might be annoying, such as **Focus Depth of Field** (3d background scale), **Focus Pulse** (HeartBeat Active), and **Motion Blur Scroll** (Vertical speed blur). If you don't like windows jumping up and down, you can turn them off! :)
 
 **Keyboard Window Layout:**
-- **Numpad Tiling**: `Win + Ctrl + Numpad 1-9` tiles the active window to a 3x3 grid laid out exactly like the keypad — `7` is the top-left quarter, `4` the left half, `2` the bottom half. Works with NumLock on or off.
-- **Centre & Resize**: `Win + Ctrl + K` centres a window without resizing it; `Win + Ctrl + U` cycles it through 50% / 75% / 90% of the work area, centred.
-- **Next Monitor**: `Win + Ctrl + J` sends a window to the next display, scaling it so a half-width window stays half-width on a screen of a different resolution.
-- **Maximize Toggle**: `Win + Ctrl + Numpad 0`.
-- **Undo Layout**: `Win + Ctrl + Z` puts the window back where it was before the last layout key.
-- **Restore Everything**: `Win + Ctrl + Y` is the panic key — it unrolls, un-ghosts and un-hides every window the program is holding, in one press.
-- **Reset Transparency**: `Win + Ctrl + X` returns the active window to fully opaque.
+- **Numpad Tiling**: `Shift + Alt + Numpad 1-9` tiles the active window to a 3x3 grid laid out exactly like the keypad — `7` is the top-left quarter, `4` the left half, `2` the bottom half. **Requires NumLock on** — only the digit names are bound.
+  `Shift + Alt + Up/Down` gives the top and bottom halves either way.
+- **Centre & Resize**: `Shift + Alt + K` centres a window without resizing it; `Shift + Alt + U` cycles it through 50% / 75% / 90% of the work area, centred.
+- **Next Monitor**: `Shift + Alt + N` sends a window to the next display, scaling it so a half-width window stays half-width on a screen of a different resolution.
+- **Maximize Toggle**: `Shift + Alt + Numpad 0`.
+- **Undo Layout**: `Shift + Alt + Z` puts the window back where it was before the last layout key.
+- **Restore Everything**: `Shift + Alt + Y` is the panic key — it unrolls, un-ghosts and un-hides every window the program is holding, in one press.
+- **Reset Transparency**: `Shift + Alt + X` returns the active window to fully opaque.
 
-**Feature Toggles (`Win + Ctrl + Shift + key`):**
-- Hot corners (`C`), smart active border (`A`), infinite cursor wrap (`W`), multi-monitor dimmer (`D`), smart auto-hide taskbar (`T`), magnetic window groups (`G`), grab & pan (`P`) — each toggles instantly, shows a tray notification, and saves the new state.
+**Feature Toggles (`Shift + Alt + key`):**
+- Hot corners (`C`), smart active border (`V`), infinite cursor wrap (`I`), multi-monitor dimmer (`D`), smart auto-hide taskbar (`T`), magnetic window groups (`J`), grab & pan (`Space`) — each toggles instantly, shows a tray notification, and saves the new state.
 
 **Productivity & Window Management:**
-- **Transparency Control**: `Win + Ctrl + Wheel` to adjust the opacity of any active window.
-- **Cinema / Focus Mode**: `Win + Ctrl + F` to black out the entire background, keeping only the active window visible.
+- **Transparency Control**: `Shift + Alt + Wheel` to adjust the opacity of any active window.
+- **Cinema / Focus Mode**: `Shift + Alt + F` to black out the entire background, keeping only the active window visible.
 - **Window Shade / Roll-Up**: Middle-click a window to roll it up (collapse to just the title bar), middle-click to restore.
 - **Minimize to Tray**: Add a tray icon for any active window to declutter your taskbar.
-- **Boss Key**: `Win + Ctrl + Esc` to instantly hide all windows and mute system audio. Press again to restore.
+- **Boss Key**: `Shift + Alt + Esc` to instantly hide all windows and mute system audio. Press again to restore.
 - **Linux-Style Alt-Drag**: Hold `Alt + LeftClick` anywhere on a window to move it, or `Alt + RightClick` anywhere to resize it from the nearest edge.
 - **Taskbar Volume Scroll**: Hover over the taskbar and scroll the mouse wheel to adjust volume, or middle-click to mute.
 - **Quick Folder Jump**: Press `Ctrl + G` in any File Save/Open dialog to instantly jump to the folder of your most recently active Explorer window.
-- **Global Plain-Text Paste**: `Ctrl + Win + V` strips all formatting, colors, and fonts from your clipboard and pastes as pure plain text anywhere.
+- **Global Plain-Text Paste**: `Ctrl + Alt + V` strips all formatting, colors, and fonts from your clipboard and pastes as pure plain text anywhere.
 - **Smart Caps Lock**: Tap CapsLock to send `Escape` (or `Backspace`), hold it for 0.4 seconds to actually toggle CapsLock on/off.
 
 ---
@@ -208,10 +209,10 @@ Detail in [docs/WINDOWS-TUNING.md](docs/WINDOWS-TUNING.md) and
 ## Repository layout
 
 ```
-src/          the program - WindowTweaks.ahk plus two required includes
+src/          the program - WindowTweaks.ahk plus its required includes
+linux/        C++/Qt6 Linux port (early scaffold; see linux/CLAUDE.md)
 scripts/      Windows tuning: apply and restore
 docs/         guide, hotkeys, animation notes, technical findings
-tests/        automated geometry tests + a guided live test
 build/        installer build script
 Install.bat   double-click entry point
 ```
@@ -223,6 +224,7 @@ Install.bat   double-click entry point
 | [docs/ANIMATIONS.md](docs/ANIMATIONS.md) | Which Windows animation settings this needs and why |
 | [docs/WINDOWS-TUNING.md](docs/WINDOWS-TUNING.md) | What the tuning changes, and what it deliberately won't |
 | [docs/TASKBAR-AND-INTERNALS.md](docs/TASKBAR-AND-INTERNALS.md) | Why the taskbar can't be shrunk, and how the snapping works |
+| [linux/docs/](linux/docs/) | The Linux port: architecture, feature matrix, Wayland limits, install |
 
 ---
 
@@ -266,6 +268,13 @@ UI on other machines.
 
 - Windows 11 (developed and tested on 25H2, build 26200)
 - AutoHotkey v2 — installed automatically by `Install.bat` if missing
+
+### Linux
+
+An independent C++20/Qt6 port for X11 and Wayland (Linux Mint/Cinnamon, GNOME,
+KDE Plasma) lives in [`linux/`](linux/). It is an **early scaffold** — it does not
+build yet and manages no windows. See [linux/docs/IMPLEMENTATION-AUDIT.md](linux/docs/IMPLEMENTATION-AUDIT.md)
+for exactly what exists. The Windows program is unaffected by it.
 
 ## License
 
