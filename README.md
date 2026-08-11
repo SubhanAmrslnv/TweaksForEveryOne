@@ -1,11 +1,20 @@
-# Tweaks For Everyone
+# Tweaks For Everyone — Window Manager & Snapping Tool for Windows 11
 
-Windows 11 window management that Windows doesn't give you, plus an honest,
-fully reversible pass over the Windows settings that actually affect how smooth
-the desktop feels.
+**Free, open-source window manager for Windows 11: magnetic window snapping,
+inertial drag physics, 3×3 keyboard tiling, always-on-top, per-window
+transparency, hot corners and 40+ power-user tweaks — in one tray app.**
 
-One tray program, about 18 MB, near-zero CPU when idle. Nothing is installed
-outside your user profile.
+Think *Magnet* or *Rectangle* on macOS, or *PowerToys FancyZones*, but with
+window-to-window magnetism and physics-based glide. Written in
+[AutoHotkey v2](https://www.autohotkey.com/). No admin rights, no telemetry,
+nothing installed outside your user profile.
+
+![Platform](https://img.shields.io/badge/platform-Windows%2011-0078D6)
+![AutoHotkey](https://img.shields.io/badge/AutoHotkey-v2-334455)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Admin](https://img.shields.io/badge/admin%20rights-not%20required-brightgreen)
+
+One tray program, about 18 MB, near-zero CPU when idle.
 
 ```
 Shift + Alt + W          settings
@@ -275,6 +284,78 @@ An independent C++20/Qt6 port for X11 and Wayland (Linux Mint/Cinnamon, GNOME,
 KDE Plasma) lives in [`linux/`](linux/). It is an **early scaffold** — it does not
 build yet and manages no windows. See [linux/docs/IMPLEMENTATION-AUDIT.md](linux/docs/IMPLEMENTATION-AUDIT.md)
 for exactly what exists. The Windows program is unaffected by it.
+
+---
+
+## FAQ
+
+### How do I snap windows to each other on Windows 11?
+
+Windows' own Snap Assist only snaps to *screen* edges. Tweaks For Everyone adds
+**window-to-window magnetism**: drag a window near another window's edge and it
+jumps flush against it. Each axis resolves independently, so one window can stick
+to a screen edge sideways and to another window vertically in the same motion.
+
+### Is there a free Magnet alternative for Windows?
+
+Yes — this is one. *Magnet* and *Rectangle* are macOS window managers; this gives
+Windows 11 the same keyboard tiling (`Shift + Alt + Numpad 1-9` for a 3×3 grid,
+centre, half-screen, cycle-size, next-monitor) plus magnetic snapping and glide
+physics that neither of them has. It is MIT-licensed and free.
+
+### How is this different from PowerToys FancyZones?
+
+FancyZones is a zone-based layout manager: you define zones and windows land in
+them. This is physics-based: windows snap to each other and to real edges as you
+drag, keep sliding when you release, and bounce on landing. The two can be used
+together — they don't conflict.
+
+### Can I make a window always on top in Windows 11?
+
+Yes. `Shift + Alt + O` pins the active window above everything else, and press
+again to unpin. There is also **always on bottom** (`Shift + Alt + B`) to park a
+window on the desktop as a widget.
+
+### How do I make a window transparent on Windows 11?
+
+Hold `Shift + Alt` and scroll the mouse wheel over any window to change its
+opacity. `Shift + Alt + X` resets it to fully opaque.
+
+### Does Windows 11 have hot corners?
+
+Not natively. This adds macOS-style **hot corners** — throw the pointer into a
+screen corner to trigger an action such as show-desktop or Task View — with a
+dwell delay so reaching for a close button never triggers them by accident.
+
+### How do I get picture-in-picture for any window?
+
+`Shift + Alt + P` creates a live, always-on-top thumbnail of any background
+window, using DWM thumbnails rather than screen capture.
+
+### Does it need administrator rights?
+
+No. Nothing is installed outside your user profile, there is no service, no
+scheduled task and no `Run` registry key — only a Startup shortcut. The optional
+Windows tuning writes to `HKCU` only and is fully reversible.
+
+### Will it slow my PC down?
+
+It idles at near-zero CPU. Polling timers only run for features you have switched
+on, and the animation scheduler stops entirely when nothing is animating.
+
+### Does it work on Windows 10?
+
+It is developed and tested on Windows 11 (25H2, build 26200). Much of it will run
+on Windows 10, but the taskbar and DWM behaviour it depends on is Windows 11
+specific and is not tested there.
+
+### Is there a Linux version?
+
+An early C++/Qt6 scaffold for X11 and Wayland exists in [`linux/`](linux/), but it
+does not build yet and manages no windows. See the
+[implementation audit](linux/docs/IMPLEMENTATION-AUDIT.md).
+
+---
 
 ## License
 
