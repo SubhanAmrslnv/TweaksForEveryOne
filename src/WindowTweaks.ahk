@@ -1192,8 +1192,12 @@ BuildWin() {
     C["twave"] := Box(pg, CW, FG, "Taskbar Icon Wave", TaskbarWaveEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Hovering over the taskbar creates a magnifying glass bubble that tracks your mouse.", "xm y+8")
     
-    C["customclock"] := Box(pg, CW, FG, "Small Taskbar Custom Clock", CustomClockEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Overlays a custom clock with Date and Weather when using Small Icons.", "xm y+8")
+    ; Label and hint used to promise "Small" only, from back when the overlay
+    ; refused to draw unless EP_IconSize was "Small" - which is "Large" on a stock
+    ; Win11, so the feature appeared to do nothing. It measures the bar now and
+    ; adapts, so both strings were simply false.
+    C["customclock"] := Box(pg, CW, FG, "Taskbar Custom Clock", CustomClockEnabled, "xm y+16")
+    Sub(pg, CW, cSub, "Overlays the taskbar clock with Time, Date and Weather. Fetches weather over HTTPS.", "xm y+8")
     
     C["startblur"] := Box(pg, CW, FG, "Start Menu Blur (Cinematic Focus)", StartMenuBlurEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Heavily blurs the background when the Start Menu is open.", "xm y+8")
@@ -2162,6 +2166,29 @@ MonitorIndexAt(px, py) {
     ; is off every screen the primary is the only defensible answer.
     try return MonitorGetPrimary()
     return 1
+}
+
+; Full monitor rect - NOT the work area - of the monitor containing (px, py).
+; Use this, never A_ScreenWidth/A_ScreenHeight, for any "is this rect still on a
+; screen?" test: A_Screen* describes the primary monitor only, so a window on a
+; secondary monitor to the left sits at negative x and reads as off-screen.
+;
+; ScreenMetrics().mons is 1-based and is empty if the enumeration inside
+; ScreenMetrics failed, so the index is range-checked rather than trusted.
+MonitorRectAt(px, py, &ml, &mt, &mr, &mb) {
+    g := ScreenMetrics()
+    idx := MonitorIndexAt(px, py)
+    if (idx >= 1 && idx <= g.mons.Length) {
+        m := g.mons[idx]
+        ml := m.l, mt := m.t, mr := m.r, mb := m.b
+        return true
+    }
+    try {
+        MonitorGet(MonitorGetPrimary(), &ml, &mt, &mr, &mb)
+        return true
+    }
+    ml := 0, mt := 0, mr := A_ScreenWidth, mb := A_ScreenHeight
+    return true
 }
 
 ; Which monitor should a transient overlay appear on? The one holding the
@@ -5540,6 +5567,110 @@ SetTaskbarAutoHide(hide) {
     }
 }
 
+; ABM_GETTASKBARPOS (5). Same APPBARDATA layout as the two wrappers above, which
+; only ever filled in cbSize and hWnd: uEdge is at 20 (x64) / 12 (x86) and rc at
+; 24 / 16, so those two fields come back filled here.
+;
+; The rect it reports is where the bar sits when it is VISIBLE, and it keeps
+; reporting that while the bar is auto-hidden off screen. That is exactly why edge
+; and thickness are read from here and the separate "is it on screen right now?"
+; test is not - the two questions have different answers at the same moment.
+;
+; Primary taskbar only, like GetTaskbarState and SetTaskbarAutoHide.
+; edge: 0 = ABE_LEFT, 1 = ABE_TOP, 2 = ABE_RIGHT, 3 = ABE_BOTTOM.
+GetTaskbarPos(&edge, &l, &t, &r, &b) {
+    try {
+        cbSize := A_PtrSize == 8 ? 48 : 36
+        abd := Buffer(cbSize, 0)
+        NumPut("uint", cbSize, abd, 0)
+        hwnd := WinExist("ahk_class Shell_TrayWnd")
+        if !hwnd
+            return false
+        NumPut("ptr", hwnd, abd, A_PtrSize == 8 ? 8 : 4)
+        if !DllCall("Shell32\SHAppBarMessage", "uint", 5, "ptr", abd)
+            return false
+        oEdge := A_PtrSize == 8 ? 20 : 12
+        oRc   := A_PtrSize == 8 ? 24 : 16
+        edge := NumGet(abd, oEdge, "uint")
+        l := NumGet(abd, oRc,      "int")
+        t := NumGet(abd, oRc +  4, "int")
+        r := NumGet(abd, oRc +  8, "int")
+        b := NumGet(abd, oRc + 12, "int")
+        ; A zero-area rect means the shell answered but told us nothing usable.
+        return (r > l && b > t)
+    }
+    return false
+}
+
+; Logical (96-dpi) pixels per physical pixel, for a measurement taken on this
+; window's monitor. Any threshold applied to a measured window size has to go
+; through this or it is simply wrong at 125% and 150% scaling.
+;
+; GetDpiForWindow is Win10 1607+; Shcore\GetDpiForMonitor is the same fallback
+; GetVolumeOSDPos already uses. A DPI below 48 is not a real answer, so both
+; readings are sanity-checked before being believed.
+DpiForWindow(hwnd) {
+    dpi := 0
+    try dpi := DllCall("User32\GetDpiForWindow", "ptr", hwnd, "uint")
+    if (dpi >= 48)
+        return dpi
+    try {
+        if hMon := DllCall("MonitorFromWindow", "ptr", hwnd, "uint", 2, "ptr") {
+            DllCall("Shcore\GetDpiForMonitor", "Ptr", hMon, "Int", 0, "UInt*", &dpiX:=0, "UInt*", &dpiY:=0)
+            if (dpiY >= 48)
+                return dpiY
+        }
+    }
+    return 96
+}
+
+; Everything an overlay needs to know about the taskbar's shape, MEASURED rather
+; than read out of the registry.
+;
+; The clock overlay used to decide "is this a small taskbar?" with
+; RegRead(ADVANCED_KEY, "TaskbarSmallIcons"), which threw whenever the value was
+; absent and said nothing at all about a third-party taskbar mod that is not
+; ExplorerPatcher. The bar's own thickness answers the question for every one of
+; them, and needs no registry read.
+;
+; Returns {edge, thick, logical, small}: edge is "L"/"T"/"R"/"B", thick is
+; physical px across the bar, logical is that in 96-dpi px.
+;
+; Measured logical thicknesses on 26200: Win11 native 48, Win10-style large icons
+; 40, Win10-style small icons 30-32. 36 splits them with room on both sides.
+; Build-specific, like everything in docs\TASKBAR-AND-INTERNALS.md.
+TaskbarMetrics(tbHwnd) {
+    ; ABM_GETTASKBARPOS only ever describes the PRIMARY bar, so asking it about a
+    ; Shell_SecondaryTrayWnd hands back the primary's edge and thickness - which on
+    ; a mixed-DPI or differently-docked setup is the wrong answer for the bar we are
+    ; actually measuring. Secondary bars take the geometric path.
+    isPrimary := false
+    try isPrimary := (WinGetClass(tbHwnd) = "Shell_TrayWnd")
+
+    edge := 3, tl := 0, tt := 0, tr := 0, tb := 0
+    if (isPrimary && GetTaskbarPos(&edge, &tl, &tt, &tr, &tb)) {
+        side  := (edge == 0) ? "L" : (edge == 1) ? "T" : (edge == 2) ? "R" : "B"
+        thick := (side == "L" || side == "R") ? (tr - tl) : (tb - tt)
+    } else {
+        ; A secondary bar, or the shell refused. Both facts are still derivable from
+        ; the window rect: the short axis is the thickness, and the half of its own
+        ; monitor that the bar's centre falls in is the edge.
+        WinGetPos(&tx, &ty, &tw, &th, tbHwnd)
+        MonitorRectAt(tx + tw // 2, ty + th // 2, &ml, &mt, &mr, &mb)
+        if (tw >= th) {
+            side  := (ty + th // 2 < (mt + mb) // 2) ? "T" : "B"
+            thick := th
+        } else {
+            side  := (tx + tw // 2 < (ml + mr) // 2) ? "L" : "R"
+            thick := tw
+        }
+    }
+    if (thick < 1)
+        thick := 1
+    logical := (thick * 96) // DpiForWindow(tbHwnd)
+    return {edge: side, thick: thick, logical: logical, small: (logical <= 36)}
+}
+
 ; ====== macOS Hot Corners ======
 SyncHotCornersTimer() {
     global HotCornersEnabled
@@ -6960,6 +7091,10 @@ Bye(*) {
     ; full-screen Start-menu blur AFTER RS_Shutdown() has run. Bye() is also the
     ; tray -> Restart path, so this is not academic.
     try SetTimer(CheckTaskbarAndUI, 0)
+    ; Same reason as CheckTaskbarAndUI: this one rebuilds its overlay on every
+    ; tick, so left running it can put a fresh clock over the taskbar AFTER
+    ; RS_Shutdown() has cleared the state that tracks it.
+    try SetTimer(UpdateCustomClock, 0)
     try SetTimer(ShakeDetector, 0)
     try SetTimer(RenderShakeFind, 0)
     try SetTimer(CheckMouseIdle, 0)
@@ -6976,6 +7111,8 @@ Bye(*) {
     try MC_Shutdown()
 
     try DestroyActiveBorder()
+
+    try HideCustomClock()
 
     for layer in FocusGuis
         try GuiDestroy(layer.gui)
@@ -8920,9 +9057,72 @@ SyncTaskbarUiTimer() {
 ; ----------------------------------------------------------------------------
 ; Custom Taskbar Clock Overlay
 ; ----------------------------------------------------------------------------
-global CustomClockGui := 0
-global CustomClockText := 0
-global CustomClockReq := 0 ; Store COM object to prevent GC during async
+global CustomClockReq := 0      ; Store COM object to prevent GC during async
+global CustomClockReqAt := 0    ; when that request started, so a dead one is abandoned
+
+; One overlay PER TASKBAR, keyed by the taskbar's HWND. Every monitor gets its own
+; bar with its own clock, so a single overlay could only ever serve one screen -
+; which is why the feature did nothing at all on a second display.
+;
+; Each value is {gui, text, clock, rect, fit, lean}: the overlay and its control,
+; the cached native clock HWND, and the three change-detection keys. Per-bar,
+; because two monitors can differ in DPI, taskbar thickness and clock width, so
+; there is no shared answer to cache.
+global CustomClockBars := Map()
+
+; The clock control class differs BETWEEN taskbars, which is the whole reason the
+; second display showed nothing. Measured on 26200: the primary Shell_TrayWnd has
+; "TrayClockWClass1", and every Shell_SecondaryTrayWnd has "ClockButton1" instead -
+; same 54x30 box, different class. Looking for only the first one found nothing on
+; the secondary bar and the overlay was never built there.
+global CLOCK_CLASSES := ["TrayClockWClass", "ClockButton"]
+
+; Every taskbar on the system, primary first.
+CustomClockTaskbars() {
+    bars := []
+    if (h := WinExist("ahk_class Shell_TrayWnd"))
+        bars.Push(h)
+    ; One per additional monitor. IsMouseOverTaskbar already treats this class as
+    ; a taskbar; this feature was the one place that did not.
+    for h in WinGetList("ahk_class Shell_SecondaryTrayWnd")
+        bars.Push(h)
+    return bars
+}
+
+; Find the native clock inside one taskbar, and cache it on that bar's record.
+;
+; ControlGetHwnd's first parameter is a ClassNN, NOT a class name: the real control
+; is "TrayClockWClass1", and passing "TrayClockWClass" matches nothing and THROWS
+; "Target control not found". Measured on 26200 - WinGetControls lists
+; TrayClockWClass1 while ControlGetHwnd("TrayClockWClass", ...) throws on the same
+; window in the same process. That is why this feature never put a pixel on screen
+; even on the primary bar: the EP_IconSize early return used to hide the failure by
+; returning first, and removing that return only moved it one line down.
+;
+; The instance number has been 1 on every build seen, but it is resolved by
+; scanning rather than hardcoded, and the result is cached until the window dies -
+; so the scan happens once per bar per Explorer session, not once per second.
+;
+; Returns 0 when the bar has no such control, which is the normal case on a stock
+; Win11 taskbar whose XAML clock is neither class - the overlay then correctly does
+; nothing on that bar rather than guessing at a rectangle.
+FindTrayClock(tbHwnd, rec) {
+    global CLOCK_CLASSES
+    if (rec.clock && DllCall("IsWindow", "ptr", rec.clock))
+        return rec.clock
+    rec.clock := 0
+    try {
+        for cn in WinGetControls("ahk_id " tbHwnd) {
+            for cls in CLOCK_CLASSES {
+                if (SubStr(cn, 1, StrLen(cls)) = cls) {
+                    rec.clock := ControlGetHwnd(cn, "ahk_id " tbHwnd)
+                    break 2
+                }
+            }
+        }
+    }
+    return rec.clock
+}
 
 SyncCustomClockTimer() {
     global CustomClockEnabled, LastWeatherFetch, CustomClockWeather
@@ -8931,89 +9131,381 @@ SyncCustomClockTimer() {
         LastWeatherFetch := 0
         CustomClockWeather := "Updating..."
         SetTimer(UpdateCustomClock, 1000)
-        UpdateCustomClock()
+        ; Guarded separately from the try inside UpdateCustomClock, because this
+        ; also runs from the deferred-init block at load: a throw here would be a
+        ; startup error dialog rather than one dead timer.
+        try UpdateCustomClock()
     } else {
         SetTimer(UpdateCustomClock, 0)
         HideCustomClock()
     }
 }
 
-HideCustomClock() {
-    global CustomClockGui
-    if (CustomClockGui) {
-        CustomClockGui.Destroy()
-        CustomClockGui := 0
-    }
+; Tear down the overlay for ONE taskbar and forget the bar entirely.
+DestroyClockBar(tbHwnd) {
+    global CustomClockBars
+    if !CustomClockBars.Has(tbHwnd)
+        return
+    rec := CustomClockBars[tbHwnd]
+    ; GuiDestroy, not Gui.Destroy: it also calls RS_RemoveHwnd. These overlays have
+    ; alpha and z-order state in RenderCore, and our own tool windows raise no
+    ; shell destroy notification, so nothing else would ever drop it.
+    if (rec.gui)
+        GuiDestroy(rec.gui)
+    CustomClockBars.Delete(tbHwnd)
 }
 
-UpdateCustomClock() {
-    global CustomClockGui, CustomClockText, CustomClockWeather, LastWeatherFetch, EP_IconSize
-    
-    if (EP_IconSize != "Small") {
-        HideCustomClock()
-        return
+HideCustomClock() {
+    global CustomClockBars
+    ; Walk a Clone: DestroyClockBar deletes from the Map, and deleting during
+    ; enumeration shifts the remainder under the enumerator and silently skips one -
+    ; which would leave an overlay welded to a taskbar with nothing tracking it.
+    for tb, unused in CustomClockBars.Clone()
+        DestroyClockBar(tb)
+}
+
+; Width in px of `text` as the control would actually draw it, using the
+; control's own selected font. GetTextExtentPoint32 against the control's DC is
+; the only honest answer: a font size in points is not a width in pixels, and the
+; conversion depends on the DPI, the font Windows actually substituted and the
+; string itself. Everything that sizes the clock overlay goes through this or
+; MeasureTextHeight, so there is not one pixel constant in the layout.
+MeasureTextWidth(ctrlHwnd, text) {
+    res := 0
+    if (text == "")
+        return 0
+    try {
+        hdc := DllCall("GetDC", "ptr", ctrlHwnd, "ptr")
+        if !hdc
+            return 0
+        ; WM_GETFONT (0x31) by DllCall, not AHK's SendMessage: the wrapper resolves
+        ; a WinTitle, and a child control under DetectHiddenWindows false is not a
+        ; target it reliably finds. The "never SendMessage without a timeout" rule
+        ; is about foreign windows - this is our own control in our own process, so
+        ; it cannot block on someone else's message loop.
+        hFont := DllCall("SendMessageW", "ptr", ctrlHwnd, "uint", 0x0031
+                       , "ptr", 0, "ptr", 0, "ptr")
+        old := hFont ? DllCall("SelectObject", "ptr", hdc, "ptr", hFont, "ptr") : 0
+        sz := Buffer(8, 0)
+        if DllCall("GetTextExtentPoint32W", "ptr", hdc, "wstr", text
+                 , "int", StrLen(text), "ptr", sz)
+            res := NumGet(sz, 0, "int")
+        if old
+            DllCall("SelectObject", "ptr", hdc, "ptr", old)
+        DllCall("ReleaseDC", "ptr", ctrlHwnd, "ptr", hdc)
     }
-    
-    tbHwnd := WinExist("ahk_class Shell_TrayWnd")
-    if (!tbHwnd) {
-        HideCustomClock()
-        return
+    return res
+}
+
+; Height of one line in the control's current font. Measured against a string with
+; both an ascender and a descender, so the answer includes the full line box
+; rather than the height of whatever digits happen to be showing.
+MeasureTextHeight(ctrlHwnd) {
+    res := 0
+    try {
+        hdc := DllCall("GetDC", "ptr", ctrlHwnd, "ptr")
+        if !hdc
+            return 0
+        hFont := DllCall("SendMessageW", "ptr", ctrlHwnd, "uint", 0x0031
+                       , "ptr", 0, "ptr", 0, "ptr")
+        old := hFont ? DllCall("SelectObject", "ptr", hdc, "ptr", hFont, "ptr") : 0
+        sz := Buffer(8, 0)
+        if DllCall("GetTextExtentPoint32W", "ptr", hdc, "wstr", "Agy"
+                 , "int", 3, "ptr", sz)
+            res := NumGet(sz, 4, "int")
+        if old
+            DllCall("SelectObject", "ptr", hdc, "ptr", old)
+        DllCall("ReleaseDC", "ptr", ctrlHwnd, "ptr", hdc)
+    }
+    return res
+}
+
+; Fit `lines` into availW x availH at the largest font size of at least minSize,
+; and centre the block vertically. Returns the size used, or 0 if even minSize does
+; not fit - which is how the caller learns to try less content instead.
+;
+; Largest first, measuring every candidate rather than assuming a points-to-pixels
+; ratio. That is what makes this correct at 125% and 150% scaling, on a taskbar of
+; any thickness, and if Windows substitutes a different font: there is no constant
+; here that a different DPI could invalidate.
+;
+; The vertical centring offsets the control inside the overlay by half the leftover
+; height. Matching the native clock's Y is NOT enough on its own - the text block is
+; shorter than the box, so an un-offset control sits high and reads as misaligned
+; against the neighbouring tray icons even though the window rects agree exactly.
+FitCustomClockText(ctrl, lines, availW, availH, minSize) {
+    for size in [10, 9, 8, 7, 6, 5, 4] {
+        if (size < minSize)
+            break
+        ctrl.SetFont("s" size, "Segoe UI")
+        lineH := MeasureTextHeight(ctrl.Hwnd)
+        if (lineH < 1)
+            continue
+        wMax := 0
+        for ln in lines {
+            w := MeasureTextWidth(ctrl.Hwnd, ln)
+            if (w > wMax)
+                wMax := w
+        }
+        if (wMax <= availW && lineH * lines.Length <= availH) {
+            top := (availH - lineH * lines.Length) // 2
+            if (top < 0)
+                top := 0
+            ctrl.Move(0, top, availW, availH - top)
+            return size
+        }
+    }
+    return 0
+}
+
+; Build the overlay. Separate from UpdateCustomClock so the extended styles and
+; the show order are stated once, in one place, rather than buried in a branch of
+; a tick handler.
+BuildCustomClock(rec, x, y, w, h) {
+    ; +E0x20      WS_EX_TRANSPARENT - click-through, so the click still reaches
+    ;             the native clock underneath and opens the calendar flyout.
+    ; +E0x8000000 WS_EX_NOACTIVATE  - never takes focus from the taskbar, and
+    ;             stays out of Alt-Tab. The same pair the monitor dimmer uses.
+    ;
+    ; WS_EX_LAYERED (+E0x80000) is deliberately NOT requested here, and asking for
+    ; it is what makes an overlay like this invisible rather than what fixes it: a
+    ; window carrying that style with no matching SetLayeredWindowAttributes call
+    ; draws NOTHING at all. RS_SetAlpha adds the style and sets the attribute
+    ; together, which is why nothing else in this file asks for it in the option
+    ; string either (MagHostGui is the one exception and says why).
+    ;
+    ; WS_EX_TRANSPARENT on its own has never been the reason a window does not
+    ; render - under DWM it only affects hit-testing and sibling paint order.
+    g := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20 +E0x8000000")
+    g.MarginX := 0
+    g.MarginY := 0
+    g.BackColor := "111111"
+    g.SetFont("s6 cWhite q5", "Segoe UI")
+    rec.gui  := g
+    rec.text := g.Add("Text", "x0 y0 w" w " h" h " Center", "Loading...")
+
+    ; Alpha and z-order BEFORE Show, so the window is never composited in a state
+    ; the user can see - the rule the Spotlight launcher records after flashing a
+    ; grey rectangle on every launch.
+    ; -1 = HWND_TOPMOST. 0x13 = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE.
+    RS_SetAlpha(g.Hwnd, 255, RS_PRI_ANIM)
+    RS_SetZOrder(g.Hwnd, -1, 0x0013, RS_PRI_ANIM)
+    RS_Commit()
+
+    g.Show("NoActivate x" x " y" y " w" w " h" h)
+    rec.rect := x "," y "," w "," h
+}
+
+; The timer tick: one pass over every taskbar on the system.
+;
+; Deliberately ONE timer for all of them, not a timer per monitor - a second
+; polling engine is exactly what the architecture rules forbid, and the per-bar
+; work is a handful of window queries.
+UpdateCustomClock() {
+    global CustomClockBars, CustomClockWeather, LastWeatherFetch
+
+    ; Drop bars that no longer exist - a monitor unplugged, or Explorer restarted
+    ; and rebuilt every taskbar with new HWNDs. Walk a Clone, because
+    ; DestroyClockBar deletes from the Map.
+    for tb, unused in CustomClockBars.Clone() {
+        if !DllCall("IsWindow", "ptr", tb)
+            DestroyClockBar(tb)
     }
 
-    WinGetPos(&tx, &ty, &tw, &th, "ahk_id " tbHwnd)
-    if (ty >= A_ScreenHeight - 2) {
-        HideCustomClock()
-        return
+    for tb in CustomClockTaskbars() {
+        if !CustomClockBars.Has(tb)
+            CustomClockBars[tb] := {gui: 0, text: 0, clock: 0, rect: "", fit: "", lean: 0}
+        ; Guarded per bar, and not as a formality: every WinGetPos can be handed a
+        ; window that died on the previous line, and an uncaught throw in a timer
+        ; callback pops an error dialog and kills that timer - so one bad tick during
+        ; an Explorer restart would leave the clock dead for the whole session.
+        ; Per bar rather than around the loop, so a broken secondary taskbar cannot
+        ; take the primary overlay down with it.
+        try
+            UpdateClockBar(tb, CustomClockBars[tb])
+        catch
+            DestroyClockBar(tb)
     }
-    
-    clockHwnd := ControlGetHwnd("TrayClockWClass", "ahk_id " tbHwnd)
-    if (!clockHwnd) {
-        HideCustomClock()
-        return
-    }
-    
-    if (!DllCall("IsWindowVisible", "Ptr", clockHwnd)) {
-        HideCustomClock()
-        return
-    }
-    
-    WinGetPos(&cx, &cy, &cw, &ch, "ahk_id " clockHwnd)
-    
-    if (!CustomClockGui) {
-        CustomClockGui := Gui("-Caption +AlwaysOnTop +ToolWindow +E0x20 -DPIScale")
-        CustomClockGui.MarginX := 0
-        CustomClockGui.MarginY := 0
-        CustomClockGui.BackColor := "111111"
-        CustomClockGui.SetFont("s6 cWhite q5", "Segoe UI")
-        CustomClockText := CustomClockGui.Add("Text", "x0 y0 w" cw " h" ch " Center", "Loading...")
-        CustomClockGui.Show("NA x" cx " y" cy " w" cw " h" ch)
-    } else {
-        CustomClockGui.Move(cx, cy, cw, ch)
-        CustomClockText.Move(0, 0, cw, ch)
-    }
-    
+
+    ; One flush for every bar's queued position and z-order. These are one-shot
+    ; producers on a timer, so nothing else will ever flush them - the animation
+    ; scheduler only flushes for registered animators, and it is not running on our
+    ; behalf. Batching also lets RS_Apply use DeferWindowPos across the bars.
+    RS_Commit()
+
+    ; Once per tick, not once per bar - every overlay shows the same reading.
     now := A_TickCount
-    ; Only fetch if 15 minutes have passed since last attempt (or 0)
     if (LastWeatherFetch == 0 || (now - LastWeatherFetch > 15 * 60 * 1000)) {
         LastWeatherFetch := now
         FetchWeather()
     }
-    
-    t := FormatTime(, "HH.mm.ss")
-    d := FormatTime(, "dd.MM.yyyy")
-    w := CustomClockWeather
-    
-    CustomClockText.Value := t "`n" d "`n" w
+}
+
+; Position and repaint the overlay for ONE taskbar. `rec` is that bar's record in
+; CustomClockBars, and every piece of remembered state lives on it rather than in a
+; global - two monitors can differ in DPI, taskbar thickness and clock width, so
+; there is no shared answer.
+UpdateClockBar(tbHwnd, rec) {
+    global CustomClockWeather
+
+    clockHwnd := FindTrayClock(tbHwnd, rec)
+    if (!clockHwnd || !DllCall("IsWindowVisible", "Ptr", clockHwnd)) {
+        DestroyClockBar(tbHwnd)
+        return
+    }
+
+    WinGetPos(&tx, &ty, &tw, &th, "ahk_id " tbHwnd)
+    WinGetPos(&cx, &cy, &cw, &ch, "ahk_id " clockHwnd)
+    if (cw < 1 || ch < 1) {
+        DestroyClockBar(tbHwnd)
+        return
+    }
+
+    ; Is this bar's native clock still on screen? One containment test against the
+    ; monitor holding THIS taskbar covers all four edges, auto-hide, the mid-slide
+    ; animation and a bar the user has dragged to another edge - when the bar goes,
+    ; the clock goes with it, so there is nothing to track.
+    ;
+    ; This replaces a comparison against A_ScreenWidth/A_ScreenHeight, which
+    ; describe the PRIMARY monitor only: a taskbar on a secondary monitor to the
+    ; left sits at negative x and read as permanently auto-hidden.
+    MonitorRectAt(tx + tw // 2, ty + th // 2, &ml, &mt, &mr, &mb)
+    if (cx < ml || cy < mt || cx + cw > mr || cy + ch > mb) {
+        DestroyClockBar(tbHwnd)
+        return
+    }
+
+    tbm := TaskbarMetrics(tbHwnd)
+
+        ; EXACTLY the native clock's rect. Never wider.
+        ;
+        ; Widening this to a "readable" minimum and growing it leftwards is what
+        ; made the overlay paint over 11px of ControlCenterButton1 - the gear -
+        ; which looked like Windows had mispositioned its own tray icon. Measured
+        ; on 26200: the tray children abut at gap 0 with a shared centreY, so ANY
+        ; overlay wider than the control it covers necessarily eats a neighbour.
+        ;
+        ; Taking the clock's own box instead means the overlay inherits the native
+        ; right boundary, the native vertical centre and the native footprint for
+        ; free, at any DPI and on any taskbar - so it cannot clip the notification
+        ; button or the show-desktop strip either. The text is fitted to this box
+        ; rather than the box stretched to the text.
+    destX := cx, destY := cy, destW := cw, destH := ch
+
+    if (!rec.gui)
+        BuildCustomClock(rec, destX, destY, destW, destH)
+
+    ; One coherent time/date block, always including the date in dd.MM.yyyy. The
+    ; pattern is given explicitly, so the separators and the leading zeros on day
+    ; and month do not depend on the machine's regional settings.
+    ;
+    ; Windows' own clock drops the date entirely on a small taskbar - measured,
+    ; ControlGetText on TrayClockWClass1 returns just "System Clock, 13:44:16" - so
+    ; a missing date there is not a geometry or overlay problem to chase, it is
+    ; simply not drawn at that size. This is the overlay's job.
+    ;
+    ; There is a hard physical limit and it is resolved by measurement, not by
+    ; wishing. Measured on 26200 the native clock box is 54x30 px. So the content
+    ; degrades in a fixed order: the DATE is never what gets dropped, and it never
+    ; shares a line with the temperature. If time+temperature will not fit at a
+    ; legible size, the temperature goes and time+date stay. A bar with more room
+    ; (Win10 large icons, or a native Win11 bar at 40-48 px) fits all three.
+    dateLine := FormatTime(, "dd.MM.yyyy")
+    full := [], lean := []
+    if (tbm.small) {
+        lean.Push(FormatTime(, "HH.mm")), lean.Push(dateLine)
+        full.Push(FormatTime(, "HH.mm")
+                . (CustomClockWeather == "" ? "" : "  " CustomClockWeather))
+        full.Push(dateLine)
+    } else {
+        lean.Push(FormatTime(, "HH.mm.ss")), lean.Push(dateLine)
+        full.Push(FormatTime(, "HH.mm.ss")), full.Push(dateLine)
+        full.Push(CustomClockWeather)
+    }
+
+    ; Re-fit only when the box, the layout or the width of the weather string
+    ; changes - the fit walks up to seven font sizes with two GDI measurements each,
+    ; which is not work to repeat every second on every monitor. Ticking seconds
+    ; cannot change the fit, because the time line's character count is fixed.
+    fitKey := destW "x" destH "/" (tbm.small ? "s" : "l") "/" StrLen(CustomClockWeather)
+    if (rec.fit != fitKey) {
+        rec.fit := fitKey
+        ; 6 is the legibility floor for the preferred content. Below that, shed the
+        ; temperature and accept whatever fits for time + date.
+        rec.lean := FitCustomClockText(rec.text, full, destW, destH, 6) ? 0 : 1
+        if (rec.lean)
+            FitCustomClockText(rec.text, lean, destW, destH, 4)
+    }
+
+    txt := ""
+    for ln in (rec.lean ? lean : full)
+        txt .= (txt == "" ? "" : "`n") ln
+    rec.text.Value := txt
+
+    ; Skip a reposition that would not move a pixel. SetWindowPos on a real window
+    ; costs ~260 us and forces a re-layout, and this ran unconditionally once a
+    ; second. Same short-circuit the active border uses.
+    ;
+    ; The control's own geometry is NOT touched here. FitCustomClockText owns it,
+    ; because the vertical centring offset it applies would be thrown away by a
+    ; Move(0, 0, ...) - and any change to destW/destH changes fitKey, so the fit has
+    ; already re-run by this point.
+    rect := destX "," destY "," destW "," destH
+    if (rec.rect != rect) {
+        rec.rect := rect
+        RS_SetPos(rec.gui.Hwnd, destX, destY, destW, destH, RS_PRI_ANIM)
+    }
+
+    ; Re-assert topmost EVERY tick. This, not any extended window style, is what
+    ; keeps the overlay visible: the taskbar is WS_EX_TOPMOST too, and within the
+    ; topmost band z-order is insertion order - the bar raises itself on hover, on
+    ; click and on the Win key, which buried this overlay for the rest of the
+    ; session. Show() passes SWP_NOACTIVATE and never re-inserts, and nothing else
+    ; was putting it back. The caller flushes.
+    RS_SetZOrder(rec.gui.Hwnd, -1, 0x0013, RS_PRI_ANIM)
 }
 
 FetchWeather() {
-    global CustomClockReq, CustomClockWeather
+    global CustomClockReq, CustomClockReqAt, CustomClockWeather
+    ; One request at a time. This used to overwrite CustomClockReq while a request
+    ; was still in flight, and the orphaned callback then read the readyState and
+    ; status of the NEW object - cross-talk that WeatherCallback's bare try hid
+    ; completely.
+    ;
+    ; A request that never reaches readyState 4 would otherwise hold the slot for
+    ; the rest of the session, so one is abandoned after 60 s.
+    if (CustomClockReq) {
+        if (A_TickCount - CustomClockReqAt < 60000)
+            return
+        try CustomClockReq.abort()
+        CustomClockReq := 0
+    }
     try {
-        CustomClockReq := ComObject("Msxml2.XMLHTTP")
-        CustomClockReq.open("GET", "http://wttr.in/?format=%c+%t+%w", true)
+        CustomClockReqAt := A_TickCount
+        ; Held in a global purely so the COM object is not garbage-collected
+        ; mid-flight. Do not tidy this into a local.
+        ; ServerXMLHTTP, NOT Msxml2.XMLHTTP. wttr.in chooses between a one-line
+        ; plain answer and its full HTML page from the User-Agent, and
+        ; Msxml2.XMLHTTP SILENTLY IGNORES setRequestHeader("User-Agent", ...) -
+        ; measured on this machine, the same request returns 11,953 bytes of
+        ; "<!DOCTYPE html>" through Msxml2.XMLHTTP with or without the header, and
+        ; 17 bytes of "+33C" through ServerXMLHTTP with it. The overlay was
+        ; painting the HTML document over the taskbar. ServerXMLHTTP supports the
+        ; same async onreadystatechange interface, so nothing else changes.
+        CustomClockReq := ComObject("Msxml2.ServerXMLHTTP")
+        ; HTTPS. This is the only outbound request in the whole program, and it was
+        ; plain HTTP until now - see the note in CLAUDE.md.
+        ;
+        ; Temperature only. %c+%t+%w needs ~140px to render, and the native clock
+        ; is 40px wide on a small taskbar - asking for the condition glyph and the
+        ; wind meant an overlay that either wrapped into unreadable fragments or
+        ; swallowed 100px of tray icons.
+        CustomClockReq.open("GET", "https://wttr.in/?format=%t", true)
+        try CustomClockReq.setRequestHeader("User-Agent", "curl/8.4.0")
         CustomClockReq.onreadystatechange := WeatherCallback
         CustomClockReq.send()
     } catch {
+        CustomClockReq := 0
         CustomClockWeather := "Net Err"
     }
 }
@@ -9021,16 +9513,24 @@ FetchWeather() {
 WeatherCallback() {
     global CustomClockReq, CustomClockWeather
     try {
-        if (CustomClockReq.readyState == 4) {
-            if (CustomClockReq.status == 200) {
-                CustomClockWeather := StrReplace(CustomClockReq.responseText, "`n", "")
-                CustomClockWeather := StrReplace(CustomClockWeather, "`r", "")
-            } else {
-                CustomClockWeather := "API Err"
-            }
-            CustomClockReq := 0 ; Free the object
+        ; Fires for readyState 1-3 as well, and those are not answers yet - return
+        ; without releasing, or the request is dropped while it is still running.
+        if (!CustomClockReq || CustomClockReq.readyState != 4)
+            return
+        if (CustomClockReq.status == 200) {
+            txt := Trim(StrReplace(StrReplace(CustomClockReq.responseText, "`n", " "), "`r", " "))
+            ; Never paint an arbitrary remote response into the overlay. A
+            ; "%c+%t+%w" answer is about 20 characters, so anything long or
+            ; carrying markup means the plain-text negotiation above failed and
+            ; wttr.in served a page instead.
+            CustomClockWeather := (txt = "" || StrLen(txt) > 40 || InStr(txt, "<")) ? "No data" : txt
+        } else {
+            CustomClockWeather := "API Err"
         }
     }
+    ; Released outside the try: a throw above must still clear the slot, or the
+    ; one-at-a-time guard in FetchWeather blocks every future request for 60 s.
+    CustomClockReq := 0
 }
 
 ; ----------------------------------------------------------------------------
@@ -9560,6 +10060,7 @@ SyncDimmerTimer()
 SyncSmartTaskbar()
 SyncHotCornersTimer()
 SyncCursorWrapTimer()
+SyncCustomClockTimer()
 SyncActiveBorderTimer()
 SyncTextExpander()
 UpdateKeyboardHook()

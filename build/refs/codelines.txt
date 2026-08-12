@@ -39,6 +39,8 @@
                         touches := true
                         WinGetPos(&ox, &oy, &ow, &oh, other)
                         WinSetTransparent(255, obj.gui.Hwnd)
+                       , "ptr", 0, "ptr", 0, "ptr")
+                       , "ptr", 0, "ptr", 0, "ptr")
                        : A_TrayMenu.Uncheck(TRAY_MEMORY)
                      , right: vLeft + vWidth, bottom: vTop + vHeight, mons: mons}
                     , "int", it.x, "int", it.y, "int", it.w, "int", it.h
@@ -57,6 +59,7 @@
                     break
                     break
                     break
+                    break 2
                     continue
                     continue
                     continue
@@ -125,6 +128,7 @@
                     OutputDebug("MediaCore: IAudioMeterInformation unavailable, "
                     peak := 0.0
                     placed := true
+                    rec.clock := ControlGetHwnd(cn, "ahk_id " tbHwnd)
                     res := DllCall("DeferWindowPos", "ptr", hdwp
                     return sel.Item(0).Path
                     return true
@@ -156,12 +160,16 @@
                     WinSetTransparent(Round(255 * (1 - (t**2))), obj.gui.Hwnd)
                     WinSetTransparent(Round(255 * (t**3)), obj.gui.Hwnd)
                    "ptr", buf, "uint*", &size, "int")
+                 , "int", 3, "ptr", sz)
+                 , "int", StrLen(text), "ptr", sz)
                  , "uint", 0x1 | 0x8, "int")
                  . "|ForegroundStaging|TaskListThumbnailWnd|Button|MultitaskingViewFrame"
                  . "|Windows\.UI\.Core\.CoreWindow|ApplicationFrameInputSinkWindow"
                  . "|XamlExplorerHostIslandWindow|TopLevelWindowForOverflowXamlIsland)$"
                 , "int", 0, "int", 0, "int", 0, "int", 0, "uint", entry.flags)
+                . (CustomClockWeather == "" ? "" : "  " CustomClockWeather))
                 || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd")
+                }
                 }
                 }
                 }
@@ -260,9 +268,6 @@
                 curW := 2 + (edgeW - 2) * ease
                 curX := mx - (mx - edgeX) * ease
                 curY := my - (my - edgeY) * ease
-                CustomClockWeather := "API Err"
-                CustomClockWeather := StrReplace(CustomClockReq.responseText, "`n", "")
-                CustomClockWeather := StrReplace(CustomClockWeather, "`r", "")
                 CustomTrans.Delete(lParam)
                 cx := Round(A_ScreenWidth / 2)
                 cx := wx + ww//2
@@ -332,6 +337,7 @@
                 if (RS_LastAlpha[hwnd] == entry.value)
                 if (RS_LastRegion[hwnd] == entry.value)
                 if (sel.Count > 0)
+                if (SubStr(cn, 1, StrLen(cls)) = cls) {
                 if (WinGetMinMax(FocusTargetHwnd) == 0) {
                 if DimmerGuis.Has(A_Index) {
                 if hdwp {
@@ -405,6 +411,7 @@
                 return
                 return 0
                 return 1 ; HTCLIENT
+                return dpiY
                 return false
                 return false
                 return false
@@ -461,6 +468,7 @@
                 targetMon := A_Index
                 ToggleRollUp(hwnd)
                 ToggleRollUp(hwnd)
+                top := 0
                 try {
                 try {
                 try C[s.key].Value := shown
@@ -498,6 +506,7 @@
                 WinTargetAlpha[hwnd] := Min(baseAlpha, dimAlpha)
                 WinTargetAlpha[lParam] := baseAlpha
                 wl := NumGet(monInfo, 20, "int")
+                wMax := w
                 wr := NumGet(monInfo, 28, "int")
                 wt := NumGet(monInfo, 24, "int")
                 wVal := 0, hVal := 0
@@ -615,7 +624,6 @@
             } else {
             } else {
             } else {
-            } else {
             } else if (cursor == "SizeNS") {
             } else if (dist > clickDist + 12) {
             } else if (entry.value == "") {
@@ -649,6 +657,7 @@
             BossKeyMuteState := false
             BossKeyWindows.Push(hwnd)
             BounceSqueeze(hwnd, destX, destY, destW, destH, cpx, cpy)
+            break
             break
             break
             break
@@ -711,11 +720,13 @@
             continue
             continue
             continue
+            continue
             ControlSetText(oldText, "Edit1", hwnd)
             ctl.OnEvent("Change", (*) => ApplyUi(true))
             ctl.OnEvent("Change", (*) => SetTimer(ApplyUi, -600))
             ctl.OnEvent("Click", (*) => ApplyUi(true))
             ctl.OnEvent("LoseFocus", (*) => ApplyUi(true))
+            ctrl.Move(0, top, availW, availH - top)
             curH := 1
             curH := 1
             curH := 1
@@ -743,7 +754,9 @@
             curW := s.w * Abs(Cos(t * 15 * s.spinW))
             curX := s.x + (s.w - curW)/2
             curY := s.y + (s.h - curH)/2
-            CustomClockReq := 0 ; Free the object
+            CustomClockBars[tb] := {gui: 0, text: 0, clock: 0, rect: "", fit: "", lean: 0}
+            CustomClockWeather := "API Err"
+            CustomClockWeather := (txt = "" || StrLen(txt) > 40 || InStr(txt, "<")) ? "No data" : txt
             cx := wx + srcX + pieceW/2
             cy := hiddenY
             cy := wy + srcY + pieceH/2
@@ -753,6 +766,8 @@
             dead.Push(hwnd)
             dead.Push(pid)
             desktopHwnd := w
+            DestroyClockBar(tb)
+            DestroyClockBar(tb)
             dist := GetDistToRect(mx, my, X, Y, W, H)
             dist := Sqrt((mx - prevX) ** 2 + (my - prevY) ** 2)
             dist := Sqrt(dx*dx + dy*dy)
@@ -767,10 +782,13 @@
             DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", s.thumb)
             DllCall("Dwmapi\DwmUpdateThumbnailProperties", "ptr", s.thumb, "ptr", props)
             DllCall("PrintWindow", "ptr", hwnd, "ptr", hdcMem, "uint", 2)
+            DllCall("SelectObject", "ptr", hdc, "ptr", old)
+            DllCall("SelectObject", "ptr", hdc, "ptr", old)
             DllCall("SelectObject", "ptr", hdcMem, "ptr", oldObj)
             DllCall("SelectObject", "ptr", hdcMem, "ptr", oldObj)
             DllCall("SetWindowPos", "ptr", s.gui.Hwnd, "ptr", -1, "int", Round(curX), "int", Round(curY), "int", Round(curW), "int", Round(curH), "uint", 0x14 | 0x40)
             DllCall("SetWindowPos", "ptr", SF_Hwnd, "ptr", -1, "int", mx - s//2, "int", my - s//2, "int", s, "int", s, "uint", 0x50) ; SWP_NOACTIVATE | SWP_SHOWWINDOW
+            DllCall("Shcore\GetDpiForMonitor", "Ptr", hMon, "Int", 0, "UInt*", &dpiX:=0, "UInt*", &dpiY:=0)
             DllCall("Shcore\GetDpiForMonitor", "Ptr", hMonitor, "Int", 0, "UInt*", &dpiX:=0, "UInt*", &dpiY:=0)
             doc := ComObject("htmlfile")
             doc.write("<body><script>document.write(eval('" text "'));</script></body>")
@@ -817,9 +835,11 @@
             Finish()
             finished := false
             Fired := false
+            FitCustomClockText(rec.text, lean, destW, destH, 4)
             flags := 0x0014
             fn(args*)
             FocusGuis.Push({gui: g, targetAlpha: alphas[A_Index], currentAlpha: 0})
+            for cls in CLOCK_CLASSES {
             for ctl in cpg {
             for hLine in hLines {
             for it in list {
@@ -920,11 +940,11 @@
             if (curH < 1)
             if (cursor == "SizeWE") {
             if (curW < 1)
-            if (CustomClockReq.status == 200) {
             if (dist < bestDist) {
             if (dist < clickDist) {
             if (dist == 0 || (anyMedia && MC_IsMediaHwnd(hwnd)))
             if (DllCall("IsWindow", "ptr", hwnd)) {
+            if (dpiY >= 48)
             if (dragged) {
             if (dX != 0 || dY != 0) {
             if (eh = h)
@@ -962,10 +982,12 @@
             if (t > 0.4) {
             if (t >= 1) {
             if (t >= 1) {
+            if (top < 0)
             if (tx < m.l || tx >= m.r)
             if (ty < m.t)
             if (w == 0 || h == 0)
             if (w > 0) {
+            if (w > wMax)
             if (window.HWND == hwnd)
             if (window.HWND == hwnd) {
             if (WinGetExStyle(hwnd) & 0x80) ; WS_EX_TOOLWINDOW
@@ -1188,7 +1210,11 @@
             RegWrite(epIcon, "REG_DWORD", ADVANCED_KEY, "TaskbarSmallIcons")
             RegWrite(epWant ? 1 : 0, "REG_DWORD", EP_KEY, "OldTaskbar")
             RemovePrivacyBlur(hwnd)
+            res := NumGet(sz, 0, "int")
+            res := NumGet(sz, 4, "int")
             RestoreFromTray(wParam)
+            return
+            return
             return
             return
             return
@@ -1237,6 +1263,8 @@
             return "Transient"
             return "Transient"
             return ; Don't animate maximized windows to save performance
+            return 0
+            return 0
             return 1
             return 1
             return -1
@@ -1298,6 +1326,8 @@
             return false
             return false
             return false
+            return false
+            return false
             return i
             return i
             return i
@@ -1306,6 +1336,7 @@
             return p2
             return p2
             return res
+            return size
             return StealthPanicConfig_NormalizeList(raw)
             return true
             return true
@@ -1362,14 +1393,14 @@
             RS_SetPos(hwnd, x, destY, -1, -1, RS_PRI_USER)
             RS_SetPos(hwnd, x, y + shrink, w, h - shrink*2, RS_PRI_ANIM)
             RS_SetPos(hwnd, x, y, -1, -1, RS_PRI_USER)
+            RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
+            RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
             RS_SetPos(hwnd, X, Y, W, H, RS_PRI_ANIM)
-            RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
-            RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
             RS_SetRegion(ActiveBorderGui.Hwnd, rect1 "  " rect2 "  " rect3 "  " rect4, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "", RS_PRI_ANIM)
-            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
-            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "0-0 w" w " h" curH, RS_PRI_ANIM)
+            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
+            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
             RS_SetRegion(MicOsdGui.Hwnd, "0-0 w240 h70 r20-20", RS_PRI_ANIM)
             RS_SetRegion(OsdGui.Hwnd, "0-0 w280 h64 r20-20", RS_PRI_ANIM)
             Run(appStr)
@@ -1404,6 +1435,8 @@
             ShowSmartGrid()
             shrink := Round(h * t * 0.3)
             shrink := Round(w * t * 0.3)
+            side  := (tx + tw // 2 < (ml + mr) // 2) ? "L" : "R"
+            side  := (ty + th // 2 < (mt + mb) // 2) ? "T" : "B"
             Sleep(10)
             Sleep(10)
             Sleep(10)
@@ -1460,6 +1493,8 @@
             TaskbarWaveGui := ""
             TaskbarWaveThumb := 0
             th := 48 ; Fallback
+            thick := th
+            thick := tw
             throw Error("CreateWindowEx Magnifier")
             throw Error("EnumAudioEndpoints")
             throw Error("GetProcessId")
@@ -1474,6 +1509,7 @@
             ToggleRollUp(hwnd)
             ToggleStealthPanic()
             token .= ".exe"
+            top := (availH - lineH * lines.Length) // 2
             TriggerBlackHoleMinimize(hwndToMin)
             TriggerCursorYawn()
             try
@@ -1532,17 +1568,19 @@
             try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
             try WinGetPos(&wx, &wy, &ww, &wh, hwndToMin)
             try WinGetPos(&x, &y, &w, &h, hwnd)
-            try WinGetPos(&X, &Y, &W, &H, hwnd)
             try WinGetPos(&x, &y, &w, &h, hwnd)
+            try WinGetPos(&X, &Y, &W, &H, hwnd)
             try WinHide(hwnd)
             try WinMove(ElasticBaseX, ElasticBaseY,,, ElasticHwnd)
             try WinSetAlwaysOnTop(1, OsdGui.Hwnd)
             try WinSetRegion(entry.value, hwnd)
             try WinSetTransparent(alpha, guiObj.Hwnd)
             tx := gx + Clamp(Round(vX * GLIDE_THROW * 12), -GLIDE_MAX, GLIDE_MAX)
+            txt := Trim(StrReplace(StrReplace(CustomClockReq.responseText, "`n", " "), "`r", " "))
             ty := gy + Clamp(Round(vY * GLIDE_THROW * 12), -GLIDE_MAX, GLIDE_MAX)
             UngroupWindow(DragHwnd)
             UnrollWindow(hwnd, restoredRect)
+            UpdateClockBar(tb, CustomClockBars[tb])
             vLines.Push(oLeft, oRight)
             vx := (cx - winCx) * (Random(15, 40) / 100)
             vy := (cy - winCy) * (Random(15, 40) / 100) - Random(5, 20)
@@ -1552,6 +1590,7 @@
             w := baseSize - 12 + (40 * ease)
             w := forceW, h := forceH
             w := Max(1, Round(150 * (vol / 100)))
+            w := MeasureTextWidth(ctrl.Hwnd, ln)
             W := R - X
             WinActivate("ahk_id " hwnd)
             WinActivate("ahk_id " hwnd)
@@ -1836,8 +1875,15 @@
         }
         }
         }
+        }
+        }
+        }
+        }
+        }
         } catch {
         } catch as e {
+        } else {
+        } else {
         } else {
         } else {
         } else {
@@ -1864,6 +1910,7 @@
         } else if (t < 0.7) {
         a := WinGetTransparent(guiObj.Hwnd)
         A_Clipboard := LTrim(resText, "= ")
+        abd := Buffer(cbSize, 0)
         abd := Buffer(cbSize, 0)
         abd := Buffer(cbSize, 0)
         action := "None"
@@ -1903,6 +1950,9 @@
         approachOk := (minSpeed <= 0)
         appStr := DerefEnv(appInput)
         attempt++
+        b := NumGet(abd, oRc + 12, "int")
+        bars.Push(h)
+        bars.Push(h)
         baseSize := 24
         batched := false
         bestDy := 0, bestY := "", edgePad := 5
@@ -1927,6 +1977,7 @@
         BreathingEnabled := C["breath"].Value
         BringForwardWindow(newActive)
         buf := Buffer(520, 0)
+        BuildCustomClock(rec, destX, destY, destW, destH)
         c1 := 1.70158
         c1 := 1.70158
         c1 := 1.70158
@@ -1965,9 +2016,11 @@
         catch
         catch
         catch
+        catch
         catch {
         catch {
         catch {
+        cbSize := A_PtrSize == 8 ? 48 : 36
         cbSize := A_PtrSize == 8 ? 48 : 36
         cbSize := A_PtrSize == 8 ? 48 : 36
         cbSize := A_PtrSize == 8 ? 976 : 956
@@ -2006,6 +2059,7 @@
         crashX := tx - (newL - L)
         crashY := ty - (newT - T)
         ctrl := ControlGetClassNN(ControlGetFocus("A"))
+        ctrl.SetFont("s" size, "Segoe UI")
         curH := h + curSqY
         curH := h + Round((orig.h - h) * ease)
         curH := Round(curH * scaleDown)
@@ -2055,21 +2109,13 @@
         curY := startY + (destY - startY - h/2) * ease
         curY := startY + (destY - startY) * ease
         CustomClockEnabled := C["customclock"].Value
-        CustomClockGui := 0
-        CustomClockGui := Gui("-Caption +AlwaysOnTop +ToolWindow +E0x20 -DPIScale")
-        CustomClockGui.BackColor := "111111"
-        CustomClockGui.Destroy()
-        CustomClockGui.MarginX := 0
-        CustomClockGui.MarginY := 0
-        CustomClockGui.Move(cx, cy, cw, ch)
-        CustomClockGui.SetFont("s6 cWhite q5", "Segoe UI")
-        CustomClockGui.Show("NA x" cx " y" cy " w" cw " h" ch)
-        CustomClockReq := ComObject("Msxml2.XMLHTTP")
+        CustomClockReq := 0
+        CustomClockReq := 0
+        CustomClockReq := ComObject("Msxml2.ServerXMLHTTP")
         CustomClockReq.onreadystatechange := WeatherCallback
-        CustomClockReq.open("GET", "http://wttr.in/?format=%c+%t+%w", true)
+        CustomClockReq.open("GET", "https://wttr.in/?format=%t", true)
         CustomClockReq.send()
-        CustomClockText := CustomClockGui.Add("Text", "x0 y0 w" cw " h" ch " Center", "Loading...")
-        CustomClockText.Move(0, 0, cw, ch)
+        CustomClockReqAt := A_TickCount
         CustomClockWeather := "Net Err"
         CustomClockWeather := "Updating..."
         CustomTrans.Delete(hwnd)
@@ -2082,6 +2128,10 @@
         decay := Exp(-t * 5)
         default: return
         DestroyActiveBorder()
+        DestroyClockBar(tb)
+        DestroyClockBar(tbHwnd)
+        DestroyClockBar(tbHwnd)
+        DestroyClockBar(tbHwnd)
         dimAlpha := TuneAlpha("breatheAlpha")
         DimmerGuis.Clear()
         dir := dx > 0 ? 1 : -1
@@ -2099,6 +2149,8 @@
         DllCall("QueryPerformanceFrequency", "Int64*", &freq)
         DllCall("ReleaseDC", "ptr", 0, "ptr", hdcDest)
         DllCall("ReleaseDC", "ptr", 0, "ptr", hdcDest)
+        DllCall("ReleaseDC", "ptr", ctrlHwnd, "ptr", hdc)
+        DllCall("ReleaseDC", "ptr", ctrlHwnd, "ptr", hdc)
         DllCall("ScreenToClient", "ptr", desktop, "ptr", pt)
         DllCall("SendMessageTimeout", "ptr", hwnd, "uint", 0x84, "ptr", 0, "ptr", lp, "uint", 2, "uint", 50, "ptr*", &res)
         DllCall("SetWindowPos", "ptr", animGui.Hwnd, "ptr", -1, "int", Round(curX), "int", Round(curY), "int", curW, "int", curH, "uint", 0x14)
@@ -2147,6 +2199,7 @@
         ease := t * t * t
         ease := t * t * t
         ease := t ** 3
+        edge := NumGet(abd, oEdge, "uint")
         elapsed := A_TickCount - StealthEscTimer
         ElasticAwayCounts[hwnd] := 0
         ElasticBaseX := startX
@@ -2231,6 +2284,7 @@
         FocusRadius  := Tune("focusRadius")
         FocusTargetHwnd := hwnd
         FocusTargetHwnd := WinExist("A")
+        for cn in WinGetControls("ahk_id " tbHwnd) {
         for ctl in g {
         for ed in editions {
         for eh in newGroup
@@ -2261,6 +2315,7 @@
         for k, g in DimmerGuis {
         for layer in FocusGuis
         for layer in FocusGuis
+        for ln in lines {
         for m in g.mons {
         for pname, cpg in Pages {
         for proc in wmi.ExecQuery("Select CommandLine from Win32_Process where ProcessId=" pid) {
@@ -2275,6 +2330,10 @@
         fR := NumGet(rc, 8,  "int")
         FrameOverbudget++
         fT := NumGet(rc, 4,  "int")
+        full.Push(CustomClockWeather)
+        full.Push(dateLine)
+        full.Push(FormatTime(, "HH.mm")
+        full.Push(FormatTime(, "HH.mm.ss")), full.Push(dateLine)
         g := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
         g := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
         g := ScreenMetrics()
@@ -2300,6 +2359,7 @@
         GrabPanEnabled := C["grabpan"].Value
         GravityCloseEnabled := C["gravityclose"].Value
         GridHoverZone := hovered
+        GuiDestroy(rec.gui)
         guiObj := QuickLookGui
         guiObj.Interactive := false
         guiObj.Opt("-Caption -Border")
@@ -2312,19 +2372,18 @@
         h := Round(250 * scale)
         hbm := DllCall("CreateCompatibleBitmap", "ptr", hdcDest, "int", w, "int", h, "ptr")
         hbm := DllCall("CreateCompatibleBitmap", "ptr", hdcDest, "int", w, "int", h, "ptr")
+        hdc := DllCall("GetDC", "ptr", ctrlHwnd, "ptr")
+        hdc := DllCall("GetDC", "ptr", ctrlHwnd, "ptr")
         hdcMem := DllCall("CreateCompatibleDC", "ptr", hdcDest, "ptr")
         hdcMem := DllCall("CreateCompatibleDC", "ptr", hdcDest, "ptr")
+        hFont := DllCall("SendMessageW", "ptr", ctrlHwnd, "uint", 0x0031
+        hFont := DllCall("SendMessageW", "ptr", ctrlHwnd, "uint", 0x0031
         hIcon := DllCall("LoadIcon", "ptr", 0, "ptr", 32512, "ptr")
         HideActiveBorder()
         HideActiveBorder()
         HideActiveBorder()
         HideActiveBorder()
         HideActiveBorder()
-        HideCustomClock()
-        HideCustomClock()
-        HideCustomClock()
-        HideCustomClock()
-        HideCustomClock()
         HideCustomClock()
         HideMag()
         HideSmartGrid()
@@ -2348,6 +2407,7 @@
         hwnd := WinExist("ahk_class CabinetWClass")
         hwnd := WinExist("ahk_class Shell_TrayWnd")
         hwnd := WinExist("ahk_class Shell_TrayWnd")
+        hwnd := WinExist("ahk_class Shell_TrayWnd")
         hwnds := WinGetList()
         hwnds := WinGetList()
         hwnds := WinGetList()
@@ -2365,6 +2425,7 @@
         if !ActiveBorderShown {
         if !batched {
         if !ComputeSnap(pL, pT, pR, pB, vLines, hLines, SNAP_DISTANCE, &newL, &newT, CORNER_BOOST)
+        if !CustomClockBars.Has(tb)
         if !DllCall("IsWindow", "ptr", animGui.Hwnd) {
         if !DllCall("IsWindow", "ptr", hwnd)
         if !DllCall("IsWindow", "ptr", hwnd)
@@ -2380,12 +2441,17 @@
         if !DllCall("IsWindow", "ptr", hwnd) {
         if !DllCall("IsWindow", "ptr", hwnd) {
         if !DllCall("IsWindow", "ptr", srcHwnd) {
+        if !DllCall("IsWindow", "ptr", tb)
         if !DllCall("IsWindowVisible", "ptr", hwnd)
         if !DllCall("LoadLibrary", "str", "Magnification.dll", "ptr")
         if !DllCall("Magnification\MagInitialize")
+        if !DllCall("Shell32\SHAppBarMessage", "uint", 5, "ptr", abd)
         if !found
         if !GetRects(hwnd, &sL, &sT, &sR, &sB, &sx, &sy)
         if !GetRects(other, &oLeft, &oTop, &oRight, &oBottom, &oWinX, &oWinY)
+        if !hdc
+        if !hdc
+        if !hwnd
         if !hwnd
         if !hwnd
         if !hwnd
@@ -2403,6 +2469,7 @@
         if (!ActiveDeleteGuis.Has(animKey))
         if (!approachOk && prevAt && now > prevAt) {
         if (!BreatheCursorActive) {
+        if (!CustomClockReq || CustomClockReq.readyState != 4)
         if (!DllCall("IsWindow", "ptr", hwnd))
         if (!DllCall("IsWindow", "ptr", hwnd))
         if (!DllCall("IsWindow", "ptr", hwnd))
@@ -2429,6 +2496,7 @@
         if (A_Index == curMon)
         if (A_LoopField == "")
         if (A_PtrSize == 8)
+        if (A_TickCount - CustomClockReqAt < 60000)
         if (A_TickCount - EnteredAt < Tune("cornerDelay"))
         if (Abs(hi - v) < bestD) {
         if (Abs(lo - v) < bestD) {
@@ -2465,7 +2533,7 @@
         if (CurrentDragAlpha < 250) {
         if (curW < 1)
         if (curW < 1)
-        if (CustomClockReq.readyState == 4) {
+        if (CustomClockReq.status == 200) {
         if (cx >= m.l && cx < m.r && cy >= m.t && cy < m.b)
         if (dir != ShakeDir) {
         if (dirOnly != "" && FileExist(exePath)) {
@@ -2522,6 +2590,7 @@
         if (key == "SpotlightEnabled" && IsSet(SpotlightEnabled)) {
         if (L < oRight + proximity && R > oLeft - proximity)
         if (layer.currentAlpha != layer.targetAlpha) {
+        if (lineH < 1)
         if (list.Length > 1) {
         if (lParam) {
         if (lParam) {
@@ -2561,6 +2630,7 @@
         if (pw > 0 && ph > 0) {
         if (px >= m.l && px < m.r && py >= m.t && py < m.b)
         if (raw == TuneFormat(s, v))
+        if (rec.lean)
         if (res == 2) {
         if (res == 2) {
         if (resolvedPath != "") {
@@ -2569,6 +2639,7 @@
         if (SF_Hwnd && DllCall("IsWindow", "ptr", SF_Hwnd))
         if (SF_Phase == 1) {
         if (shouldHide != SmartTaskbarLastState) {
+        if (size < minSize)
         if (SmartCapsAction == "Backspace")
         if (SmartGridGuis.Length < A_Index) {
         if (Sparks.Length >= 30)
@@ -2612,6 +2683,7 @@
         if (testPath != "") {
         if (th < 10)
         if (token = "")
+        if (tw >= th) {
         if (tx >= m.l && tx < m.r && ty >= m.t && ty < m.b) {
         if (v == a)
         if (v == needle)
@@ -2631,10 +2703,13 @@
         if (WinGetPID(hwnd) = DllCall("GetCurrentProcessId", "uint"))
         if (WinGetPID(hwnd) = DllCall("GetCurrentProcessId", "uint"))
         if (WinGetPID(hwnd) = DllCall("GetCurrentProcessId", "uint"))
+        if (wMax <= availW && lineH * lines.Length <= availH) {
         if (writeBack) {
         if ActiveAnimations.Has(animKey)
         if destroy {
         if DllCall("FindWindowEx", "ptr", w, "ptr", 0, "str", "SHELLDLL_DefView", "ptr", 0) {
+        if DllCall("GetTextExtentPoint32W", "ptr", hdc, "wstr", "Agy"
+        if DllCall("GetTextExtentPoint32W", "ptr", hdc, "wstr", text
         if DllCall("GetWindow", "ptr", hwnd, "uint", 4, "ptr")
         if DllCall("IsWindow", "ptr", hwnd)
         if DllCall("IsWindow", "ptr", hwnd)
@@ -2662,6 +2737,7 @@
         if hbm
         if hdcMem
         if hdcMem
+        if hMon := DllCall("MonitorFromWindow", "ptr", hwnd, "uint", 2, "ptr") {
         if hMonitor := DllCall("MonitorFromRect", "Ptr", rect, "UInt", 2, "Ptr") {
         if hwnd
         if hwnd
@@ -2689,6 +2765,8 @@
         if MC_PidExe.Has(pid)
         if MC_PidQualifiedAt.Has(pid)
         if MicOsdHiding {           ; revive it rather than stacking a second one
+        if old
+        if old
         if on
         if onDone
         if onDone
@@ -2722,12 +2800,16 @@
         KeyWait("CapsLock")
         KeyWait("MButton")
         L := m.l, T := m.t, R := m.r, B := m.b
+        l := NumGet(abd, oRc,      "int")
         landed()
         LastNonModifierKeyTime := A_TickCount
         lastTriggers.Delete(A_ThisHotkey)
         LastWeatherFetch := 0
         LastWeatherFetch := now
+        lean.Push(FormatTime(, "HH.mm")), lean.Push(dateLine)
+        lean.Push(FormatTime(, "HH.mm.ss")), lean.Push(dateLine)
         LightsaberSeamEnabled := C["lightsaber"].Value
+        lineH := MeasureTextHeight(ctrl.Hwnd)
         list := []
         list := StealthPanicConfig_ReadLegacy(iniFile)
         LivePipEnabled := C["pip"].Value
@@ -2752,6 +2834,7 @@
         LS_Gui.BackColor := "00FFFF"
         LS_Hwnd := LS_Gui.Hwnd
         m := g.mons[activeMon]
+        m := g.mons[idx]
         m.Clear()
         m.Clear()
         MagActive := false
@@ -2791,13 +2874,16 @@
         minSpeed := Tune("wrapSpeed")
         minY := 0
         minY := height - h
+        ml := m.l, mt := m.t, mr := m.r, mb := m.b
         MomentumTiltEnabled := C["momentum"].Value
         MonitorGet(A_Index, &mL, &mT, &mR, &mB)
         MonitorGet(MonitorGetPrimary(), &ML, &MT, &MR, &MB)
+        MonitorGet(MonitorGetPrimary(), &ml, &mt, &mr, &mb)
         MonitorGet(targetMon, &mL, &mT, &mR, &mB)
         MonitorGetWorkArea(, &wl, &wt, &wr, &wb)
         MonitorGetWorkArea(A_Index, &wl, &wt, &wr, &wb)
         MonitorGetWorkArea(idx, &wl, &wt, &wr, &wb)
+        MonitorRectAt(tx + tw // 2, ty + th // 2, &ml, &mt, &mr, &mb)
         MonitorThrowEnabled := C["monthrow"].Value
         mons := []
         MotionBlurScrollEnabled := C["motionblur"].Value
@@ -2888,9 +2974,11 @@
         NumPut("ptr", hide ? 1 : 2, abd, A_PtrSize == 8 ? 40 : 32)
         NumPut("ptr", hwnd, abd, A_PtrSize == 8 ? 8 : 4)
         NumPut("ptr", hwnd, abd, A_PtrSize == 8 ? 8 : 4)
+        NumPut("ptr", hwnd, abd, A_PtrSize == 8 ? 8 : 4)
         NumPut("uint", (idx == CarouselIndex) ? 255 : Round(100 * scale), props, 32)
         NumPut("uint", 0x01 | 0x02 | 0x04 | 0x08 | 0x10, props, 0)
         NumPut("uint", 0x01 | 0x08, props, 0)
+        NumPut("uint", cbSize, abd, 0)
         NumPut("uint", cbSize, abd, 0)
         NumPut("uint", cbSize, abd, 0)
         NumPut("uint", cbSize, nid, 0)
@@ -2916,9 +3004,13 @@
         ObjRelease(pColl)
         ObjRelease(pDevice)
         ObjRelease(pSE)
+        oEdge := A_PtrSize == 8 ? 20 : 12
         ok := DllCall("SendMessageTimeout", "ptr", hwnd, "uint", 0x7F
+        old := hFont ? DllCall("SelectObject", "ptr", hdc, "ptr", hFont, "ptr") : 0
+        old := hFont ? DllCall("SelectObject", "ptr", hdc, "ptr", hFont, "ptr") : 0
         oldText := ControlGetText("Edit1", hwnd)
         OpenAnim       := C["openanim"].Text
+        oRc   := A_PtrSize == 8 ? 24 : 16
         origH := RolledUpWindows[hwnd]
         OriginalTaskbarState := GetTaskbarState()
         osc := Sin(t * 15)
@@ -2988,6 +3080,7 @@
         QuickLookGui := ""
         r := {Gui: g, Active: false, Start: 0, x: 0, y: 0, vx: 0, vy: 0}
         r := {Gui: g, Active: false, Start: 0, x: 0, y: 0}
+        r := NumGet(abd, oRc +  8, "int")
         r.Active := false
         r.Active := false
         r.Gui.Hide()
@@ -2997,6 +3090,9 @@
         raw := ""
         raw := ""
         raw := IniRead(INI, section, key, defaultVal)
+        rec.fit := fitKey
+        rec.lean := FitCustomClockText(rec.text, full, destW, destH, 6) ? 0 : 1
+        rec.rect := rect
         rect := Buffer(16)
         rect := Buffer(16, 0)
         region := "0-0 W" FocusBounds.w " H" FocusBounds.h
@@ -3268,7 +3364,6 @@
         return
         return
         return
-        return
         return ""
         return ""
         return ""
@@ -3281,7 +3376,9 @@
         return "🔇"
         return "🔈"
         return "🔉"
+        return (r > l && b > t)
         return {x: rx, y: ry, w: rw, h: rh}
+        return 0
         return 0
         return 0
         return 0
@@ -3292,6 +3389,7 @@
         return defaultVal              ; absent: leave it uncached so it gets written
         return DllCall("GetClassLongW", "ptr", hwnd, "int", GCLP_HICON, "uint")
         return DllCall("Shell32\SHAppBarMessage", "uint", 4, "ptr", abd)
+        return dpi
         return false
         return false
         return false
@@ -3362,9 +3460,12 @@
         return Number(raw)
         return out
         return pg
+        return rec.clock
         return s.def
         return StealthAppCache[exeName]
         return StealthPanicConfig_DefaultAppList()
+        return true
+        return true
         return true
         return true
         return true
@@ -3469,6 +3570,7 @@
         RS_SetPos(hwnd, x, y, w, h, RS_PRI_USER)
         RS_SetPos(MagFrameGui.Hwnd, mx - 72, my - 162, -1, -1, RS_PRI_ANIM)
         RS_SetPos(MagHostGui.Hwnd, mx - 70, my - 160, -1, -1, RS_PRI_ANIM)
+        RS_SetPos(rec.gui.Hwnd, destX, destY, destW, destH, RS_PRI_ANIM)
         RS_SetPos(startHwnd, sx, sy + 50, -1, -1, RS_PRI_USER)
         RS_SetPos(StartMenuBlurGui.Hwnd, 0, 0, A_ScreenWidth, A_ScreenHeight, RS_PRI_USER)
         RS_SetRegion(BreatheGui.Hwnd, "0-0 w40 h40 E", RS_PRI_ANIM)
@@ -3569,6 +3671,7 @@
         ShowSeamFlash(s[1], s[2], s[3], s[4])
         ShowVolumeOSD(SoundGetVolume(), SoundGetMute())
         ShowVolumeOSD(SoundGetVolume(), SoundGetMute())
+        side  := (edge == 0) ? "L" : (edge == 1) ? "T" : (edge == 2) ? "R" : "B"
         side := 1
         side := -1
         sinceCheck := 0
@@ -3645,6 +3748,8 @@
         SyncMediaCore()
         SyncSmartTaskbar()
         SyncTaskbarUiTimer()      ; the last one lets the poll stop
+        sz := Buffer(8, 0)
+        sz := Buffer(8, 0)
         t := (now - start) / ms
         t := (now - start) / ms
         t := (now - start) / ms
@@ -3669,6 +3774,7 @@
         t := (now - start) / ms
         t := (now - start) / ms
         t := g.AddText("x0 y" ny " w" SW " h42 +0x200 c" FG " Background" NAV, "    " name)
+        t := NumGet(abd, oRc +  4, "int")
         t.OnEvent("Click", NavClick.Bind(name))
         targetAlpha := Clamp(Round(255 - (speed * 4)), TuneAlpha("parallaxMin"), 255)
         TaskbarScrollEnabled := C["taskbarscroll"].Value
@@ -3684,6 +3790,8 @@
         TextExpanderEnabled := C["expander"].Value
         TextMagnifierEnabled := C["textmag"].Value
         th := dh
+        thick := (side == "L" || side == "R") ? (tr - tl) : (tb - tt)
+        thick := 1
         thresh := Tune("cornerSize")
         thumbId := 0
         Thumbnails.Push(thumbId)
@@ -3702,6 +3810,7 @@
         TrayMinimizeEnabled := C["traymin"].Value
         TriggerMotionBlur(hwnd, dir)
         TriggerShatterClose(hwnd)
+        try
         try {
         try {
         try {
@@ -3739,6 +3848,8 @@
         try ClosePiP(src)
         try cls := WinGetClass(ahwnd)
         try cls := WinGetClass(hwnd)
+        try CustomClockReq.abort()
+        try CustomClockReq.setRequestHeader("User-Agent", "curl/8.4.0")
         try DirCreate(dirOnly)
         try DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", thumbId)
         try DllCall("UnhookWinEvent", "ptr", MenuEventHook)
@@ -3802,6 +3913,7 @@
         try SpotlightGui.Destroy()
         try StealthOriginalMute := SoundGetMute()
         try UnGhostWindow(hwnd)
+        try UpdateCustomClock()
         try WinActivate("Stealth Panic Mode Settings")
         try WinActivate(hwnd)
         try WinActivate(hwnd)
@@ -3824,6 +3936,7 @@
         tx := Clamp(Round(VelX * GLIDE_THROW * 12), -GLIDE_MAX, GLIDE_MAX)
         tx := dl
         tx := dr - tw
+        txt .= (txt == "" ? "" : "`n") ln
         ty := bestY
         ty := Clamp(Round(VelY * GLIDE_THROW * 12), -GLIDE_MAX, GLIDE_MAX)
         ty := db - th
@@ -3832,7 +3945,6 @@
         uiOldSmartTb := SmartTaskbarEnabled
         UnGhostWindow(hwnd)
         UnGhostWindow(hwnd)
-        UpdateCustomClock()
         UpdateMicOSD(isMuted)
         UpdateOSD(vol, isMuted)
         UpdateSmartGrid()
@@ -3857,6 +3969,7 @@
         WindowCmdLineCache[hwnd] := cmdLine
         WinGetPos(&bx, &by, &bw, &bh, hwnd)
         WinGetPos(&tx, &ty, &tw, &th, hwnd)
+        WinGetPos(&tx, &ty, &tw, &th, tbHwnd)
         WinGetPos(&wX, &wY, &wW, &wH, hwnd)
         WinGetPos(&x, &y, &w, &h, hwnd)
         WinGetPos(&x, &y, &w, &h, hwnd)
@@ -3885,6 +3998,7 @@
         WinTargetAlpha[hwnd] := current
         WL := 0, WT := 0, WR := A_ScreenWidth, WB := A_ScreenHeight
         WL := 0, WT := 0, WR := A_ScreenWidth, WB := A_ScreenHeight
+        wMax := 0
         wmi := ""
         WriteLog("  remembered " key " -> " x "," y " " w "x" h)
         WriteLog("ApplyUi: could not read a control - " e.Message)
@@ -3905,6 +4019,17 @@
     , step: step, dec: dec, page: page, label: label, hint: hint}
     {
     {key: key, sec: sec, ini: ini, def: def, lo: lo, hi: hi
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
     }
     }
     }
@@ -4365,6 +4490,7 @@
     } else {
     } else {
     } else {
+    } else {
     } else if (!isVisible && StartMenuBlurGui) {
     } else if (crashX < -4) {
     } else if (crashY < -4) {
@@ -4447,6 +4573,7 @@
     b6 := pg.AddButton("xm y+12 w312 h30", "Stealth Panic Mode settings (Esc Esc Esc)")
     b6.OnEvent("Click", (*) => OpenStealthPanicSettings())
     back := ""
+    bars := []
     bestD := threshold + 1
     bestDist := 999999
     BG   := dark ? "1F1F1F" : "F5F5F5"      ; content background
@@ -4497,7 +4624,7 @@
     C["corners_en"] := Box(pg, CW, FG, "Enable Hot Corners (Shift+Alt+C)", HotCornersEnabled, "xm y+16")
     C["cursoryawn"] := Box(pg, CW, FG, "Cursor Yawn (Wakes up after idle)", CursorYawnEnabled, "xm y+16")
     C["curtain"] := Box(pg, CW, FG, "Curtain Drop (Win+Alt+D)", CurtainDropEnabled, "xm y+16")
-    C["customclock"] := Box(pg, CW, FG, "Small Taskbar Custom Clock", CustomClockEnabled, "xm y+16")
+    C["customclock"] := Box(pg, CW, FG, "Taskbar Custom Clock", CustomClockEnabled, "xm y+16")
     C["debuglog"] := Box(pg, CW, FG, "Write a debug log (snap.log)", DEBUG, "xm y+16")
     C["deletehole"] := Box(pg, CW, FG, "Recycle Bin Black Hole (Delete Animation)", BlackHoleDeleteEnabled, "xm y+16")
     C["elastic"] := Box(pg, CW, FG, "Rubber-Band Scroll (Kinetic lean)", ElasticScrollEnabled, "xm y+16")
@@ -4637,7 +4764,7 @@
     ClipSaved := ClipboardAll()
     ClipWait(1, false)
     cloaked := 0
-    clockHwnd := ControlGetHwnd("TrayClockWClass", "ahk_id " tbHwnd)
+    clockHwnd := FindTrayClock(tbHwnd, rec)
     cls := ""
     cls := ""
     cls := ""
@@ -4672,8 +4799,9 @@
     CurtainDropEnabled := IniStr("memory", "curtain", "1") = "1"
     CurtainDropped := false
     CurtainWindows := Map()
+    CustomClockBars.Delete(tbHwnd)
     CustomClockEnabled := IniStr("taskbar", "customclock", "0") = "1"
-    CustomClockText.Value := t "`n" d "`n" w
+    CustomClockReq := 0
     CustomTrans[hwnd] := current
     cx := L + W/2
     cx := Max(Min(px, rx + rw), rx)
@@ -4687,9 +4815,9 @@
     cY := y + h / 2
     cy := y + h // 2
     cycle := Mod(t, 3000) / 3000
-    d := FormatTime(, "dd.MM.yyyy")
     dark := IsDark()
     data := Buffer(24, 0)
+    dateLine := FormatTime(, "dd.MM.yyyy")
     dead := ""
     dead := []
     dead := []
@@ -4703,6 +4831,7 @@
     destH := finalH - gap*2
     destW := (tw < 0) ? -1 : tw + (winW - (fR - fL))
     destW := finalW - gap*2
+    destX := cx, destY := cy, destW := cw, destH := ch
     destX := finalX + gap
     destX := mL + 40
     destX := mL + Round((mR - mL - W)/2)
@@ -4738,6 +4867,7 @@
     DllCall("SetWindowPos", "ptr", TaskbarWaveGui.Hwnd, "ptr", -1, "int", destX, "int", destY, "int", size, "int", size, "uint", 0x10 | 0x40)
     DllCall("shell32\Shell_NotifyIconW", "uint", 0, "ptr", nid)
     DllCall("user32\SetWindowCompositionAttribute", "ptr", guiObj.Hwnd, "ptr", data)
+    dpi := 0
     dpiScale := 1.0
     dragged := false
     DragHwnd := 0
@@ -4758,6 +4888,7 @@
     dy := my - DragTrailY
     dy := my - ShakePrevY
     ease := 1 - (1 - (t / 300)) ** 2
+    edge := 3, tl := 0, tt := 0, tr := 0, tb := 0
     editions := ["Enterprise", "Professional", "Community", "Preview", "BuildTools"]
     ElasticDragEnabled := IniStr("mouse", "elasticdrag", "1") = "1"
     ElasticHwnd := 0
@@ -4811,6 +4942,7 @@
     Finish() {
     finished := false
     finished := true
+    fitKey := destW "x" destH "/" (tbm.small ? "s" : "l") "/" StrLen(CustomClockWeather)
     flash := Gui("-Caption +ToolWindow +AlwaysOnTop -DPIScale +E0x20", "SeamFlash")
     flash.BackColor := "00E5FF"
     flash.MarginX := 0, flash.MarginY := 0
@@ -4831,6 +4963,7 @@
     for h in g1
     for h in g2 {
     for h in newGroup
+    for h in WinGetList("ahk_class Shell_SecondaryTrayWnd")
     for hwnd in CarouselWindows {
     for hwnd in dead
     for hwnd in dead {
@@ -4872,6 +5005,7 @@
     for layer in FocusGuis {
     for layer in FocusGuis {
     for line in StrSplit(section, "`n", "`r") {
+    for ln in (rec.lean ? lean : full)
     for m in [MC_PidSeenAt, MC_PidQualifiedAt, MC_PidExe,
     for m in [RS_Alpha, RS_Pos, RS_Region, RS_ZOrder, RS_LastAlpha, RS_LastRegion]
     for m in [RS_Alpha, RS_Pos, RS_Region, RS_ZOrder, RS_LastAlpha, RS_LastRegion] {
@@ -4891,10 +5025,14 @@
     for s in TUNE_SPEC {
     for s in TUNE_SPEC {
     for s, pip in PipGuis {
+    for size in [10, 9, 8, 7, 6, 5, 4] {
     for src, pip in PipGuis {
     for src, pip in PipGuis {
     for src, pip in PipGuis.Clone()
     for srcHwnd, pipGui in PipGuis.Clone() {
+    for tb in CustomClockTaskbars() {
+    for tb, unused in CustomClockBars.Clone()
+    for tb, unused in CustomClockBars.Clone() {
     for thumbId in Thumbnails {
     for token in StrSplit(RegExReplace(s, "[;\s]+", ","), ",") {
     for v in lines {
@@ -4908,29 +5046,37 @@
     frameW := fR - fL
     fresh := StealthPanicConfig_ReadAppList(StealthPanicIniPath)
     from := RS_CurrentAlpha(hwnd, toAlpha)
+    full := [], lean := []
     fw := fR - fL, fh := fB - fT
     fw := fR - fL, fh := fB - fT
     g := Gui("+Resize +OwnDialogs", "Window Tweaks")
+    g := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20 +E0x8000000")
     g := Gui("-Caption +ToolWindow +AlwaysOnTop +LastFound +Border -DPIScale")
+    g := ScreenMetrics()
     g := ScreenMetrics()
     g := ScreenMetrics()
     g := ScreenMetrics()
     g.AddText("x20 y22 w160 c" FG " Background" NAV, "Window Tweaks")
     g.AddText("x21 y50 w160 c" cSub " Background" NAV, "version " VERSION)
     g.BackColor := "111111"
+    g.BackColor := "111111"
     g.BackColor := BG
     g.HintLbl := g.AddText("x20 y" (H - 40) " w160 c" cSub " Background" NAV, "Shift+Alt+W  opens this")
+    g.MarginX := 0
     g.MarginX := 0, g.MarginY := 0
     g.MarginX := 20
+    g.MarginY := 0
     g.MarginY := 20
     g.OnEvent("Close", (*) => CloseWin(g))
     g.OnEvent("Escape", (*) => CloseWin(g))
     g.OnEvent("Size", Gui_Size)
     g.SetFont("s10 norm", "Segoe UI")
     g.SetFont("s13 bold", "Segoe UI")
+    g.SetFont("s6 cWhite q5", "Segoe UI")
     g.SetFont("s8 norm", "Segoe UI")
     g.SetFont("s8", "Segoe UI")
     g.Show("NoActivate AutoSize Center")
+    g.Show("NoActivate x" x " y" y " w" w " h" h)
     g.Show("w" W " h" H)
     g.SidebarBg := g.AddText("x0 y0 w" SW " h" H " Background" NAV)
     g1 := MagGroups.Has(h1) ? MagGroups[h1] : [h1]
@@ -4992,6 +5138,7 @@
     global CarouselGui, CarouselWindows, Thumbnails, CarouselIndex, CarouselAngleOffset, CarouselActive
     global CarouselIndex, CarouselWindows, CarouselAngleOffset
     global CarouselIndex, CarouselWindows, CarouselAngleOffset
+    global CLOCK_CLASSES
     global ContextMenuAnimEnabled
     global CurPage, Pages
     global CurPage, Pages, Win
@@ -5000,11 +5147,13 @@
     global CurtainDropEnabled, SparkTypingEnabled, CarouselAltTabEnabled, MotionBlurScrollEnabled
     global CurtainDropped, CurtainWindows
     global CurtainDropped, CurtainWindows
+    global CustomClockBars
+    global CustomClockBars
+    global CustomClockBars, CustomClockWeather, LastWeatherFetch
     global CustomClockEnabled, LastWeatherFetch, CustomClockWeather
-    global CustomClockGui
-    global CustomClockGui, CustomClockText, CustomClockWeather, LastWeatherFetch, EP_IconSize
+    global CustomClockReq, CustomClockReqAt, CustomClockWeather
     global CustomClockReq, CustomClockWeather
-    global CustomClockReq, CustomClockWeather
+    global CustomClockWeather
     global CustomTrans, BreathingEnabled, WinCurrentAlpha, WinTargetAlpha
     global CustomTrans, GhostWindows
     global CustomTrans, PendingTransMsg
@@ -5338,6 +5487,7 @@
     idx := 0
     idx := 0
     idx := Mod(idx, SIZE_CYCLE.Length) + 1
+    idx := MonitorIndexAt(px, py)
     if !(A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < Timeout)
     if !(BorderColor = "auto" || BorderColor ~= "^[0-9A-Fa-f]{6}$")
     if !(ext ~= "^(png|jpg|jpeg|gif|bmp|txt|md|ini|ahk|csv|log|json|xml|ps1|bat|cmd)$")
@@ -5350,6 +5500,7 @@
     if !BreathingEnabled
     if !BreathingEnabled
     if !CaretGetPos(&cx, &cy)
+    if !CustomClockBars.Has(tbHwnd)
     if !DEBUG
     if !desktop
     if !DllCall("GetClientRect", "ptr", hwnd, "ptr", rc)
@@ -5478,13 +5629,11 @@
     if (!BreatheGui) {
     if (!CarouselActive)
     if (!CarouselActive)
-    if (!clockHwnd) {
+    if (!clockHwnd || !DllCall("IsWindowVisible", "Ptr", clockHwnd)) {
     if (!ContextMenuAnimEnabled || !hwnd || idObject != 0 || idChild != 0)
-    if (!CustomClockGui) {
     if (!DllCall("IsWindow", "ptr", ElasticHwnd) || DragHwnd == ElasticHwnd) {
     if (!DllCall("IsWindow", "ptr", hwnd))
     if (!DllCall("IsWindow", "ptr", hwnd))
-    if (!DllCall("IsWindowVisible", "Ptr", clockHwnd)) {
     if (!dragged) {
     if (!ElasticScrollEnabled)
     if (!FocusModeEnabled && FocusGuis.Length)
@@ -5524,6 +5673,7 @@
     if (!PushedBackWindows.Has(hwnd))
     if (!r.Active)
     if (!r.Active)
+    if (!rec.gui)
     if (!RestoreEnabled || !DllCall("IsWindow", "ptr", hwnd))
     if (!RestoreEnabled || !IsRestorable(hwnd))
     if (!SchedulerRunning) {
@@ -5540,7 +5690,6 @@
     if (!targetMon)
     if (!TaskbarWaveEnabled || !IsMouseOverTaskbar()) {
     if (!TaskbarWaveGui) {
-    if (!tbHwnd) {
     if (!TrayMinimizeEnabled)
     if ((cursor == "SizeWE" || cursor == "SizeNS") && mHwnd) {
     if ((wParam & 0x7FFF) = 2) { ; HSHELL_WINDOWDESTROYED
@@ -5607,8 +5756,10 @@
     if (CursorYawnEnabled) {
     if (CurtainDropped) {
     if (CustomClockEnabled) {
-    if (CustomClockGui) {
+    if (CustomClockReq) {
     if (CustomTrans.Has(hwnd) || GhostWindows.Has(hwnd))
+    if (cw < 1 || ch < 1) {
+    if (cx < ml || cy < mt || cx + cw > mr || cy + ch > mb) {
     if (dir == 1) {
     if (dir > 0)
     if (dirOnly != "" && !DirExist(dirOnly))
@@ -5618,6 +5769,7 @@
     if (DllCall("dwmapi\DwmGetWindowAttribute", "ptr", hwnd, "int", 9, "ptr", rc, "int", 16) = 0) {
     if (DllCall("GetAncestor", "ptr", hwnd, "uint", 2, "ptr") != hwnd)
     if (DllCall("ole32\CLSIDFromString", "WStr", guid, "Ptr", buf, "Int") != 0)
+    if (dpi >= 48)
     if (DragHwnd || GetKeyState("LButton", "P") || GetKeyState("RButton", "P")
     if (DragHwnd == hwnd)
     if (dt <= 0)
@@ -5627,7 +5779,6 @@
     if (ElasticDragEnabled) {
     if (ElasticHwnd != hwnd) {
     if (ElasticHwnd && DllCall("IsWindow", "ptr", ElasticHwnd))
-    if (EP_IconSize != "Small") {
     if (event = 0x000A) {                    ; MOVESIZESTART
     if (exeName == "")
     if (exStyle & 0x20)
@@ -5640,6 +5791,7 @@
     if (GhostWindows.Count == 0)
     if (GhostWindows.Count == 1)
     if (GridActive) {
+    if (h := WinExist("ahk_class Shell_TrayWnd"))
     if (h < 1)
     if (HotCornersEnabled)
     if (hovered != GridHoverZone) {
@@ -5653,6 +5805,7 @@
     if (hwnd == LastBorderHwnd && X == LastBorderX && Y == LastBorderY && !SizeChanged)
     if (hwnds.Length == 0)
     if (idObject != 0 || idChild != 0)
+    if (idx >= 1 && idx <= g.mons.Length) {
     if (InfiniteWrapEnabled)
     if (info.exe != "" && MC_FallbackExe.Has(info.exe)) {
     if (info.exe != "" && MC_LiveExe.Has(info.exe))
@@ -5662,6 +5815,7 @@
     if (IsObject(restoredRect) && restoredRect.HasOwnProp("w")) {
     if (IsObject(restoredRect) && restoredRect.HasOwnProp("w")) {
     if (IsObject(restoredRect) && restoredRect.HasOwnProp("w")) {
+    if (isPrimary && GetTaskbarPos(&edge, &tl, &tt, &tr, &tb)) {
     if (IsSet(LivePipEnabled) && !LivePipEnabled && IsSet(PipGuis)) {
     if (IsSet(ProximityGhostEnabled) && !ProximityGhostEnabled && IsSet(GhostWindows)) {
     if (isVisible && !StartMenuBlurGui) {
@@ -5726,6 +5880,10 @@
     if (pw > 0 && ph > 0) {
     if (QuickLookGui) {
     if (QuickLookGui) {
+    if (rec.clock && DllCall("IsWindow", "ptr", rec.clock))
+    if (rec.fit != fitKey) {
+    if (rec.gui)
+    if (rec.rect != rect) {
     if (resizeMask == 0)
     if (RippleClickEnabled) {
     if (RollUpEnabled || MiddleClickCloseEnabled) {
@@ -5781,10 +5939,13 @@
     if (t > 300) {
     if (t > 400) {
     if (targetPath != "" && InStr(targetPath, "shell:") == 0) {
+    if (tbm.small) {
     if (text = "")
     if (text = "") {
+    if (text == "")
     if (TextMagnifierEnabled) {
     if (th > dh)
+    if (thick < 1)
     if (title == "")
     if (ToastBounceEnabled)
     if (topDist < wH / 3)
@@ -5794,7 +5955,6 @@
     if (tx < dl)
     if (ty + th > db)
     if (ty < dt)
-    if (ty >= A_ScreenHeight - 2) {
     if (uiAutoStart != "" && uiAutoStart != IsAutoStart())
     if (uiOldBottom && !AlwaysOnBottomEnabled) {
     if (uiOldFocusDepth && !FocusDepthEnabled)
@@ -5927,6 +6087,7 @@
     interval := ((now - MC_LastHitAt) > MC_IDLE_AFTER_MS) ? MC_IDLE_SWEEP_MS : MC_SWEEP_MS
     isHidden := GhostHiddenWindows.Has(hwnd)
     isPip := false
+    isPrimary := false
     isTopmost := 0
     isVisible := false
     JelloStep(dt, now) {
@@ -5984,6 +6145,7 @@
     LogFunc("Checking portable directories...")
     LogFunc("Checking Visual Studio...")
     LogFunc("Checking WindowsApps...")
+    logical := (thick * 96) // DpiForWindow(tbHwnd)
     LogLaunch("--- Starting Safe Workspace Launch ---")
     LogLaunch("`n--- Launch Sequence Complete ---")
     LogLaunch(msg) {
@@ -6058,11 +6220,13 @@
     minAlpha := TuneAlpha("ghostAlpha")
     minMax := 0
     minY := ph - h
+    ml := 0, mt := 0, mr := A_ScreenWidth, mb := A_ScreenHeight
     MomentumTiltEnabled := IniStr("mouse", "momentum", "1") = "1"
     mon := MonitorIndexAt(mx, my)
     monCount := MonitorGetCount()
     MonitorGet(activeMon, &L, &T, &R, &B)
     MonitorGet(prim, &mL, &mT, &mR, &mB)
+    MonitorRectAt(tx + tw // 2, ty + th // 2, &ml, &mt, &mr, &mb)
     MonitorThrowEnabled := IniStr("mouse", "monthrow", "1") = "1"
     MotionBlurActiveHwnd := hwnd
     MotionBlurLastTime := now
@@ -6148,10 +6312,10 @@
     numAlpha := (alpha == "Off") ? 256 : Integer(alpha)
     NumPut("char", 255, props, 36)
     NumPut("int", 0, accent, 12)
-    NumPut("Int", 0, props, 4)
     NumPut("int", 0, props, 4)
-    NumPut("int", 0, props, 8)
+    NumPut("Int", 0, props, 4)
     NumPut("Int", 0, props, 8)
+    NumPut("int", 0, props, 8)
     NumPut("int", 0x88222222, accent, 8)
     NumPut("Int", 1, props, 40)
     NumPut("int", 1, props, 40)
@@ -6364,6 +6528,13 @@
     radiusX := A_ScreenWidth * 0.3
     radiusY := A_ScreenHeight * 0.1
     rc := Buffer(16, 0)
+    rec := CustomClockBars[tbHwnd]
+    rec.clock := 0
+    rec.gui  := g
+    rec.rect := x "," y "," w "," h
+    rec.text := g.Add("Text", "x0 y0 w" w " h" h " Center", "Loading...")
+    rec.text.Value := txt
+    rect := destX "," destY "," destW "," destH
     rects := []
     RegisterAnimation("BreatheCursor", UpdateBreathe)
     RegisterAnimation("Carousel", CarouselCallback)
@@ -6399,6 +6570,8 @@
     renderStart := QPC()
     RenderTaskbarWave()
     res := 0
+    res := 0
+    res := 0
     resizeMask := 0
     resText := SpotlightResult.Text
     restoredRect := RestorePosition(hwnd)
@@ -6421,15 +6594,19 @@
     return (s.dec > 0) ? Round(v, s.dec) : Integer(Round(v))
     return (v < 0) ? 0 : (v > 255) ? 255 : v
     return (v >= 256) ? 255 : v
-    Return 0
+    return {edge: side, thick: thick, logical: logical, small: (logical <= 36)}
     return 0
+    return 0
+    Return 0
     return 1
     return 1
     return 1
     return -1
     return -1
+    return 96
     return A_ScriptDir "\StealthPanic.ini"
     return activeFades
+    return bars
     return buf
     return ClassifyWindowImpl(hwnd) == "Main"
     return cloaked != 0
@@ -6441,6 +6618,7 @@
     return desktopHwnd
     return dirOnly "\" nameNoExt "Apps.txt"
     return DllCall("RegisterShellHookWindow", "ptr", A_ScriptHwnd)
+    return false
     return false
     return false
     return false
@@ -6465,6 +6643,9 @@
     return ok
     return out
     return pg.AddText(pos " w" w " c" col, txt)
+    return rec.clock
+    return res
+    return res
     return s ? TuneFormat(s, Tune(key)) : ""
     return ScreenGeom
     return SpotlightGui && WinActive("ahk_id " SpotlightGui.Hwnd)
@@ -6479,6 +6660,7 @@
     return t
     return text
     return TextExpanderEnabled
+    return true
     return true
     return true
     return true
@@ -6524,6 +6706,8 @@
     RS_Commit()
     RS_Commit()
     RS_Commit()
+    RS_Commit()
+    RS_Commit()
     RS_Commit()                     ; one-shot producer: nothing else will flush
     RS_Commit()                    ; one-shot producer: nothing else will flush
     RS_Commit()                    ; one-shot producer: nothing else will flush
@@ -6537,6 +6721,7 @@
     RS_SetAlpha(CarouselGui.Hwnd, 220, RS_PRI_USER)
     RS_SetAlpha(DragTrailGui.Hwnd, 80, RS_PRI_ANIM)
     RS_SetAlpha(g.Hwnd, 0, RS_PRI_ANIM)
+    RS_SetAlpha(g.Hwnd, 255, RS_PRI_ANIM)
     RS_SetAlpha(hwnd, "Off", RS_PRI_USER)
     RS_SetAlpha(hwnd, 0, RS_PRI_ANIM)
     RS_SetAlpha(MotionBlurGui.Hwnd, Round(Abs(MotionBlurScrollSpeed) * 3), RS_PRI_ANIM)
@@ -6557,7 +6742,9 @@
     RS_SetRegion(BreatheGui.Hwnd, "0-0 w" size " h" size " E", RS_PRI_ANIM)
     RS_SetRegion(r.Gui.Hwnd, "0-0 w" size " h" size " E", RS_PRI_ANIM)
     RS_SetRegion(SpotlightGui.Hwnd, "0-0 w640 h140 r20-20", RS_PRI_ANIM)
+    RS_SetZOrder(g.Hwnd, -1, 0x0013, RS_PRI_ANIM)
     RS_SetZOrder(hwnd, 0, 0x0013, RS_PRI_USER)      ; HWND_TOP
+    RS_SetZOrder(rec.gui.Hwnd, -1, 0x0013, RS_PRI_ANIM)
     RS_Shutdown()
     RS_ZOrder[hwnd] := {insertAfter: insertAfter, flags: flags, pri: pri}
     Run "explorer.exe"
@@ -6790,7 +6977,7 @@
     Sub(pg, CW, cSub, "Notifications slide in elastically with an overshoot bounce.", "xm y+8")
     Sub(pg, CW, cSub, "Only hides taskbar when windows maximize or touch the bottom edge.", "xm y+8")
     Sub(pg, CW, cSub, "Only needed when reporting a problem. Buffered in memory, written when idle.", "xm y+8")
-    Sub(pg, CW, cSub, "Overlays a custom clock with Date and Weather when using Small Icons.", "xm y+8")
+    Sub(pg, CW, cSub, "Overlays the taskbar clock with Time, Date and Weather. Fetches weather over HTTPS.", "xm y+8")
     Sub(pg, CW, cSub, "Overrides Roll-Up. Middle-click any window's title bar to close it.", "xm y+8")
     Sub(pg, CW, cSub, "Pins any window permanently to your desktop background, transforming it into a widget.", "xm y+8")
     Sub(pg, CW, cSub, "Press Ctrl+G in any File Dialog to jump to the last active Explorer folder.", "xm y+8")
@@ -6842,7 +7029,6 @@
     t    := SpotlightTarget
     t := A_TickCount
     T := Clamp(T, vy, vy + vh - margin)
-    t := FormatTime(, "HH.mm.ss")
     t := now - BreatheStart
     t := now - r.Start
     t := now - r.Start
@@ -6853,7 +7039,7 @@
     targetPath := Trim(args, "`" ")
     TaskbarScrollEnabled := IniStr("memory", "taskbarscroll", "1") = "1"
     TaskbarWaveEnabled := IniStr("taskbar", "wave", "0") = "1"
-    tbHwnd := WinExist("ahk_class Shell_TrayWnd")
+    tbm := TaskbarMetrics(tbHwnd)
     text := LogBuf
     text := StrReplace(listStr, "`r`n", "`n")
     text := StrReplace(text, "`r", "`n")
@@ -6963,6 +7149,12 @@
     try {
     try {
     try {
+    try {
+    try {
+    try {
+    try {
+    try {
+    try {
     try back := FileRead(appsPath, "UTF-8")
     try BreathingEnabled ? A_TrayMenu.Check(TRAY_BREATHING)
     try ClosePiP(guiObj.SourceHwnd)
@@ -6977,6 +7169,7 @@
     try DestroyActiveBorder()
     try DllCall("DeregisterShellHookWindow", "ptr", A_ScriptHwnd)
     try DllCall("dwmapi\DwmUnregisterThumbnail", "ptr", pip.ThumbId)
+    try dpi := DllCall("User32\GetDpiForWindow", "ptr", hwnd, "uint")
     try EP_IconSize := RegRead(ADVANCED_KEY, "TaskbarSmallIcons", 0) != 0 ? "Small" : "Large"
     try EP_Style := RegRead(EP_KEY, "OldTaskbar", 0) != 0 ? "Win10" : "Win11"
     try exStyle := WinGetExStyle(hwnd)
@@ -6987,6 +7180,7 @@
     try FlushLog()
     try g.Destroy()
     try g.Destroy()
+    try HideCustomClock()
     try Hotstring(":?*:@@date", (*) => Send(FormatTime(, "yyyy-MM-dd")), "On")
     try Hotstring(":?*:@@time", (*) => Send(FormatTime(, "HH:mm")), "On")
     try hwnd := g.Hwnd
@@ -6995,6 +7189,7 @@
     try IniDelete(iniFile, "SafeApps")
     try IniDelete(iniFile, "stealth", "applist")
     try IniRead(INI, "snippets")
+    try isPrimary := (WinGetClass(tbHwnd) = "Shell_TrayWnd")
     try isTopmost := WinGetExStyle(FocusTargetHwnd) & 0x8
     try list := WinGetList()
     try MC_EnumObj := ComObject(MC_CLSID_MMDeviceEnumerator, MC_IID_IMMDeviceEnumerator)
@@ -7036,6 +7231,7 @@
     try SetTimer(RenderShakeFind, 0)
     try SetTimer(ShakeDetector, 0)
     try SetTimer(SmartTaskbarMonitorStep, 0)
+    try SetTimer(UpdateCustomClock, 0)
     try SnapEnabled ? A_TrayMenu.Check(TRAY_SNAP)
     try StealthLaunchDelay := Number(IniRead(StealthPanicIniPath, "stealth", "delay", StealthLaunchDelay))
     try StealthLaunchSafeApps := IniRead(StealthPanicIniPath, "stealth", "launchapps", StealthLaunchSafeApps ? "1" : "0") == "1"
@@ -7082,9 +7278,9 @@
     try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&X, &Y, &W, &H, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(, , &bounceW, &bounceH, hwnd)
     try WinGetPos(, , &winW, &winH, hwnd)
     try WinGetPos(,, &rawW, &rawH, hwnd)
@@ -7148,6 +7344,7 @@
     tx := 0, ty := 0
     tx := dl + Round((fL - sl) * dw / sw)
     tx := wl + ((wr - wl) - tw) // 2, ty := wt + ((wb - wt) - th) // 2
+    txt := ""
     ty := dt + Round((fT - st) * dh / sh)
     ty := my
     ui := A_ScriptDir "\StealthPanicUI.ahk"
@@ -7183,7 +7380,6 @@
     vY := T - PrevY
     w := 640, h := 140
     W := 780, H := 560, SW := 196
-    w := CustomClockWeather
     w := IniRead(POS_FILE, key, "w", "")
     w := Max(1, Round(150 * (vol / 100)))
     W := R - L
@@ -7711,6 +7907,18 @@ $!F4::GravityClose()
 }
 }
 }
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
 ~Delete:: {
 ~Esc:: {
 ~Esc::CloseCarousel(false)
@@ -7785,6 +7993,7 @@ Box(pg, w, col, txt, checked, pos := "xm y+16") {
 BreathingAnimatorStep(dt:=0, now:=0) {
 BreathingMonitorStep() {
 BringForwardWindow(hwnd) {
+BuildCustomClock(rec, x, y, w, h) {
 BuildTray()
 BuildTray() {
 BuildWin() {
@@ -7822,10 +8031,13 @@ CursorMonitorIndex() {
 CursorWrapMonitorStep() {
 CurtainBounceUp(hwnd, x, y, w, h) {
 CurtainDropDown(hwnd, x, y, w, h) {
+CustomClockTaskbars() {
 CycleWindowSize() {
 DerefEnv(str) {
 DestroyActiveBorder() {
+DestroyClockBar(tbHwnd) {
 DetectHiddenWindows false
+DpiForWindow(hwnd) {
 DragTrailCallback(dt, now) {
 DrawActiveBorder(X, Y, W, H, SizeChanged:=true) {
 ElasticScroll(hwnd, dir, startX, startY) {
@@ -7840,8 +8052,10 @@ ExitStealthPanic(ExitReason, ExitCode) {
 FadeGui(guiObj, toAlpha, ms := 0, destroy := false, onDone := "") {
 FadeSeam(flashGui, x, y, w, h) {
 FetchWeather() {
+FindTrayClock(tbHwnd, rec) {
 FindVisualStudio() {
 FinishDrag(hwnd, startL, startT, startR, startB, startA) {
+FitCustomClockText(ctrl, lines, availW, availH, minSize) {
 FlushLog() {
 FlushTransNotify() {
 FocusAnimatorStep(dt:=0, now:=0) {
@@ -7856,6 +8070,7 @@ GetProcessCommandLine(pid, hwnd) {
 GetRects(hwnd, &fL, &fT, &fR, &fB, &winX, &winY) {
 GetSelectedExplorerFile() {
 GetSpeakerIcon(vol, isMuted) {
+GetTaskbarPos(&edge, &l, &t, &r, &b) {
 GetTaskbarState() {
 GetVolumeOSDPos(&x, &visibleY, &hiddenY) {
 GhostMonitorStep() {
@@ -7892,6 +8107,7 @@ global CarouselAngleOffset := 0
 global CarouselGui := ""
 global CarouselIndex := 1
 global CarouselWindows := []
+global CLOCK_CLASSES := ["TrayClockWClass", "ClockButton"]
 global ContextMenuAnimEnabled := false
 global CORNER_ACTIONS := ["None", "Task View", "Show Desktop", "Action Center", "Start Menu", "Lock Screen", "Mute Volume"]
 global CORNER_BOOST   := 2.2
@@ -7902,10 +8118,10 @@ global CursorYawnIdleTime := 900000
 global CurtainDropEnabled := true
 global CurtainDropped := false
 global CurtainWindows := Map()
+global CustomClockBars := Map()
 global CustomClockEnabled := false
-global CustomClockGui := 0
-global CustomClockReq := 0 ; Store COM object to prevent GC during async
-global CustomClockText := 0
+global CustomClockReq := 0      ; Store COM object to prevent GC during async
+global CustomClockReqAt := 0    ; when that request started, so a dead one is abandoned
 global CustomClockWeather := ""
 global CustomTrans := Map()
 global DEBUG          := false
@@ -8223,9 +8439,12 @@ MC_Shutdown() {
 MC_Sweep(now) {
 MC_SweepStep(now, busy := false) {
 MC_Tick() {
+MeasureTextHeight(ctrlHwnd) {
+MeasureTextWidth(ctrlHwnd, text) {
 MenuEvent(hook, event, hwnd, idObject, idChild, thread, time) {
 MonitorDimmerTickStep(dt:=0, now:=0) {
 MonitorIndexAt(px, py) {
+MonitorRectAt(px, py, &ml, &mt, &mr, &mb) {
 MotionBlurCallback(dt, now) {
 MoveFast(hwnd, x, y) {
 MoveToNextMonitor() {
@@ -8363,6 +8582,7 @@ SyncCursorFxTimer()
 SyncCursorFxTimer() {
 SyncCursorWrapTimer()
 SyncCursorWrapTimer() {
+SyncCustomClockTimer()
 SyncCustomClockTimer() {
 SyncDimmerTimer()
 SyncDimmerTimer() {
@@ -8381,6 +8601,7 @@ SyncTray()
 SyncTray() {
 SyncTuningGlobals() {
 TaskbarCreated(*) {
+TaskbarMetrics(tbHwnd) {
 ThrowWindowToNextMonitor(hwnd, L, T, W, H, vx, vy) {
 TileWindow(cell) {
 ToggleActiveBorder() {
@@ -8430,6 +8651,7 @@ UngroupWindow(h) {
 UnmaximizeFirst(hwnd) {
 UnrollWindow(hwnd, restoredRect := "") {
 UpdateBreathe(dt, now) {
+UpdateClockBar(tbHwnd, rec) {
 UpdateCustomClock() {
 UpdateKeyboardHook()
 UpdateKeyboardHook() {
