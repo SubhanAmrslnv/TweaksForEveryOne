@@ -52,6 +52,15 @@ export default class TweakExtension {
         // Hook into GNOME Shell Clock
         const dateMenu = Main.panel.statusArea.dateMenu;
         if (dateMenu && dateMenu._clockDisplay) {
+            // Highly robust approach: override set_text on the St.Label instance itself.
+            // This prevents GNOME's WallClock from overwriting our text regardless of GNOME version.
+            this._origSetText = dateMenu._clockDisplay.set_text;
+            
+            dateMenu._clockDisplay.set_text = (text) => {
+                // Ignore GNOME's native updates
+            };
+            
+            // Set up our own timer for seconds
             this._clockUpdateId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
                 this._updateClockLabel();
                 return GLib.SOURCE_CONTINUE;
@@ -68,8 +77,13 @@ export default class TweakExtension {
         const t = now.format('%H.%M.%S');
         const d = now.format('%d.%m.%Y');
         
-        // Combine them horizontally for the panel
-        dateMenu._clockDisplay.set_text(`${t}  |  ${d}  |  ${this._latestWeather}`);
+        const customText = `${t}  |  ${d}  |  ${this._latestWeather}`;
+        
+        if (this._origSetText) {
+            this._origSetText.call(dateMenu._clockDisplay, customText);
+        } else {
+            dateMenu._clockDisplay.set_text(customText);
+        }
     }
 
     disable() {
@@ -84,10 +98,14 @@ export default class TweakExtension {
         this._signalIds = [];
         this._dbusProxy = null;
         
-        // Reset clock
+        // Restore original clock logic
         const dateMenu = Main.panel.statusArea.dateMenu;
-        if (dateMenu && dateMenu._clock) {
-            dateMenu._clock.notify('clock');
+        if (dateMenu && dateMenu._clockDisplay && this._origSetText) {
+            dateMenu._clockDisplay.set_text = this._origSetText;
+            this._origSetText = null;
+            if (dateMenu._clock) {
+                dateMenu._clock.notify('clock');
+            }
         }
     }
 }
