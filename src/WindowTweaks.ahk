@@ -24,7 +24,7 @@ KeyHistory 0
 ProcessSetPriority "BelowNormal"
 
 ; Window Tweaks - snapping, ice glide, always-on-top, position memory, taskbar.
-; Win+Ctrl+W opens the settings window. See GUIDE.md.
+; Shift+Alt+W opens the settings window. See GUIDE.md.
 
 global VERSION := "1.0"
 
@@ -88,10 +88,29 @@ global BreatheCursorEnabled := true
 global RestoreEnabled := true
 global BlackHoleMinimizeEnabled := true
 global MomentumTiltEnabled := true
+; Feature state lives next to its flag, never next to the function that uses it.
+; Hotkeys are live from load time and #HotIf expressions are evaluated against
+; these globals from the first keypress, while a top-level "global X := ..."
+; only runs when the auto-execute thread reaches that line. State declared
+; thousands of lines down is therefore unassigned for the whole of startup:
+; #HotIf CarouselActive threw "This global variable has not been assigned a
+; value" on any Alt/Tab/Esc press, and ShellEvent's HSHELL_WINDOWDESTROYED
+; cleanup threw the same on PushedBackWindows. See the deferred-init block at
+; the bottom of the file for the other half of this rule.
 global FocusDepthEnabled := false
+global LastActiveHwnd := 0
+global PushedBackWindows := Map()
 global CurtainDropEnabled := true
+global CurtainDropped := false
+global CurtainWindows := Map()
 global SparkTypingEnabled := false        ; OFF-BY-DEFAULT: never rendered until now
 global CarouselAltTabEnabled := false     ; OFF-BY-DEFAULT: never rendered until now
+global CarouselActive := false
+global CarouselGui := ""
+global CarouselIndex := 1
+global CarouselWindows := []
+global Thumbnails := []
+global CarouselAngleOffset := 0
 global MotionBlurScrollEnabled := false   ; OFF-BY-DEFAULT: never rendered until now
 global TaskbarWaveEnabled := false        ; OFF-BY-DEFAULT: never rendered until now
 global CustomClockEnabled := false
@@ -105,6 +124,7 @@ global CursorYawnEnabled := true
 global CursorYawnActive := false
 global CursorYawnIdleTime := 900000
 global ShatterEnabled := false            ; OFF-BY-DEFAULT: never rendered until now
+global ActiveShatters := Map()
 global LightsaberSeamEnabled := true
 global PrivacyBlurEnabled := true
 global PrivacyBlurWindows := Map()
@@ -116,7 +136,7 @@ global SeamFlashEnabled := true
 global FlyMinimizeEnabled := true
 ; OFF-BY-DEFAULT, both of these: they are what puts the *MButton handler in
 ; front of EVERY middle click in the system - swallowed, probed with a 50 ms
-; SendMessageTimeout to a foreign window, then re-synthesised. Win+Ctrl+R still
+; SendMessageTimeout to a foreign window, then re-synthesised. Shift+Alt+R still
 ; rolls a window up regardless; this flag only gates the middle-click gesture.
 global RollUpEnabled := false
 global TrayMinimizeEnabled := true
@@ -148,6 +168,7 @@ global SpotlightEnabled := true
 global SpotlightGui := "", SpotlightInput := "", SpotlightResult := ""
 global ActiveBorderEnabled := false
 global ActiveBorderGui := ""
+global ActiveBorderShown := false
 global LastBorderHwnd := 0, LastBorderX := "", LastBorderY := "", LastBorderW := "", LastBorderH := ""
 global AlwaysOnBottomEnabled := true
 global BottomWindows := Map()
@@ -246,7 +267,7 @@ global TUNE_SPEC := [
 , TS("focusAlpha"   , "focus"    , "alpha"       ,     94,    30,    100,     5, 0, "anim"   , "Focus mode dim"         , "% outside the active window")
 , TS("focusFeather" , "focus"    , "feather"     ,     70,     0,    200,    10, 0, "anim"   , "Focus mode softness"    , "px of falloff per layer")
 , TS("focusRadius"  , "focus"    , "radius"      ,     40,     0,    200,     5, 0, "anim"   , "Focus mode corners"     , "px corner radius")
-, TS("transStep"    , "trans"    , "step"        ,     25,     5,     64,     1, 0, "anim"   , "Transparency step"      , "alpha per Win+Ctrl+wheel notch")
+, TS("transStep"    , "trans"    , "step"        ,     25,     5,     64,     1, 0, "anim"   , "Transparency step"      , "alpha per Shift+Alt+wheel notch")
 , TS("transMin"     , "trans"    , "min"         ,     20,     5,     90,     5, 0, "anim"   , "Transparency floor"     , "% the wheel will not go below")
 ]
 
@@ -261,6 +282,22 @@ global Win := "", Pages := Map(), NavItems := Map(), CurPage := ""
 global C := Map()
 global IniCache := Map()
 
+; A tray label string IS its own lookup key - SyncTray() passes the whole
+; "Magnetic snap`tShift+Alt+S" to Check/Uncheck, and m.Default matches on it too.
+; Written out by hand it appeared at three sites per item, so it drifted at two:
+; every one of these still read Win+Ctrl+* long after commit 3dadac4 moved the
+; bindings to Shift+Alt, and correcting only the m.Add call would have silently
+; killed the tick marks. One constant per item, used at every site.
+;
+; These have to live up here, not next to BuildTray(): BuildTray() is called a
+; few lines below, and a "global X := ..." further down the file has not run yet
+; when the call happens - the same trap the deferred-init block exists for.
+global TRAY_SETTINGS  := "Settings`tShift+Alt+W"
+global TRAY_SNAP      := "Magnetic snap`tShift+Alt+S"
+global TRAY_MEMORY    := "Position memory`tShift+Alt+M"
+global TRAY_BREATHING := "Breathing windows`tShift+Alt+E"
+global TRAY_STEALTH   := "Stealth Panic settings`tEsc Esc Esc"
+
 LoadSettings()
 RotateLog()
 SyncTray()
@@ -272,6 +309,14 @@ BuildTray()
 ; the overlay GUIs and then had SF_Hwnd/LS_Gui/LS_Hwnd reset to 0 underneath
 ; them, and armed ShakeDetector's 40 ms timer before the variables it reads
 ; existed. They are called at the very bottom of the file instead.
+;
+; These four are the ONLY top-level calls allowed above the deferred-init block,
+; because each one touches only globals declared above this line. Anything that
+; arms a timer or registers a hook - every Sync*() call, RegisterShellHook() -
+; goes in the deferred-init block at the bottom, however far that is from the
+; function it calls. Read the banner there for what went wrong when they did not,
+; and note that these four are also the allowlist scripts\Check-Split.ps1
+; check 8b compares against.
 
 
 WriteLog("=== Window Tweaks " VERSION " started ===")
@@ -309,7 +354,7 @@ IniStr(section, key, defaultVal) {
 ; Settings that feed a DropDownList must be validated by MEMBERSHIP, not range.
 ; A value that is merely "not silly" still breaks two things: Choose() throws on
 ; a string that is not in the list, which happens inside BuildWin and leaves
-; Win+Ctrl+W permanently dead, and a value the dropdown cannot show leaves the
+; Shift+Alt+W permanently dead, and a value the dropdown cannot show leaves the
 ; GUI displaying one thing while the engine uses another.
 IniPick(section, key, allowed, defaultVal) {
     v := IniStr(section, key, defaultVal)
@@ -568,7 +613,7 @@ LoadSettings() {
 ;
 ; Measured: one IniWrite costs 771 us, and SaveSettings writes 45 keys - 34.6 ms
 ; of blocking disk I/O. It runs on every checkbox click, every debounced keystroke
-; in the settings window, and every toggle hotkey, so Win+Ctrl+S used to stall the
+; in the settings window, and every toggle hotkey, so Shift+Alt+S used to stall the
 ; whole process for 35 ms. A toggle changes exactly one key; writing only that one
 ; costs 0.8 ms, and SaveSettings() no longer writes at all - it queues.
 
@@ -760,26 +805,33 @@ BuildTray() {
     A_IconTip := "Window Tweaks " VERSION
     m := A_TrayMenu
     m.Delete()
-    m.Add("Settings`tWin+Ctrl+W", (*) => ShowWin())
+    global TRAY_SETTINGS, TRAY_SNAP, TRAY_MEMORY, TRAY_BREATHING, TRAY_STEALTH
+    m.Add(TRAY_SETTINGS, (*) => ShowWin())
     m.Add()
-    m.Add("Magnetic snap`tWin+Ctrl+S", (*) => ToggleSnap())
-    m.Add("Position memory`tWin+Ctrl+M", (*) => ToggleMemory())
-    m.Add("Breathing windows`tWin+Ctrl+E", (*) => ToggleBreathing())
+    m.Add(TRAY_SNAP, (*) => ToggleSnap())
+    m.Add(TRAY_MEMORY, (*) => ToggleMemory())
+    m.Add(TRAY_BREATHING, (*) => ToggleBreathing())
+    m.Add()
+    ; The engine runs inside this process but its settings are a separate GUI,
+    ; and nothing here used to point at it - triple-Esc was the only way to
+    ; discover the feature exists at all.
+    m.Add(TRAY_STEALTH, (*) => OpenStealthPanicSettings())
     m.Add()
     m.Add("Restart", (*) => Reload())
     m.Add("Exit", (*) => ExitApp())
-    m.Default := "Settings`tWin+Ctrl+W"
+    m.Default := TRAY_SETTINGS
     SyncTray()
 }
 
 SyncTray() {
     global SnapEnabled, RestoreEnabled, BreathingEnabled
-    try SnapEnabled ? A_TrayMenu.Check("Magnetic snap`tWin+Ctrl+S")
-                    : A_TrayMenu.Uncheck("Magnetic snap`tWin+Ctrl+S")
-    try RestoreEnabled ? A_TrayMenu.Check("Position memory`tWin+Ctrl+M")
-                       : A_TrayMenu.Uncheck("Position memory`tWin+Ctrl+M")
-    try BreathingEnabled ? A_TrayMenu.Check("Breathing windows`tWin+Ctrl+E")
-                         : A_TrayMenu.Uncheck("Breathing windows`tWin+Ctrl+E")
+    global TRAY_SNAP, TRAY_MEMORY, TRAY_BREATHING
+    try SnapEnabled ? A_TrayMenu.Check(TRAY_SNAP)
+                    : A_TrayMenu.Uncheck(TRAY_SNAP)
+    try RestoreEnabled ? A_TrayMenu.Check(TRAY_MEMORY)
+                       : A_TrayMenu.Uncheck(TRAY_MEMORY)
+    try BreathingEnabled ? A_TrayMenu.Check(TRAY_BREATHING)
+                         : A_TrayMenu.Uncheck(TRAY_BREATHING)
 }
 
 ; =========================================================== Settings window ===========================================================
@@ -848,7 +900,7 @@ BuildWin() {
     }
 
     g.SetFont("s8", "Segoe UI")
-    g.HintLbl := g.AddText("x20 y" (H - 40) " w160 c" cSub " Background" NAV, "Win+Ctrl+W  opens this")
+    g.HintLbl := g.AddText("x20 y" (H - 40) " w160 c" cSub " Background" NAV, "Shift+Alt+W  opens this")
 
     ; --- content ---
     CX := SW + 28, CW := W - SW - 56
@@ -870,7 +922,7 @@ BuildWin() {
     Sub(pg, CW, cSub, "Fluid, physics-based movement and snapping.", "xm y+10")
     
     C["snap"] := Box(pg, CW, FG, "Enable magnetic snapping", SnapEnabled, "xm y+16")
-    C["magnetic"] := Box(pg, CW, FG, "Magnetic Window Groups (Win+Ctrl+Shift+G)", MagneticGroupsEnabled, "xm y+16")
+    C["magnetic"] := Box(pg, CW, FG, "Magnetic Window Groups (Shift+Alt+J)", MagneticGroupsEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Groups windows together when snapped. Dragging one will pull the other.", "xm y+8")
     
     C["shatter"] := Box(pg, CW, FG, "Shatter to Close (Shift+Alt+F4)", ShatterEnabled, "xm y+16")
@@ -913,15 +965,15 @@ BuildWin() {
     C["focusdepth"] := Box(pg, CW, FG, "Focus Depth of Field (3D background scale)", FocusDepthEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Pushes inactive windows back slightly and dims them.", "xm y+8")
     
-    C["curtain"] := Box(pg, CW, FG, "Curtain Drop (Win+D)", CurtainDropEnabled, "xm y+16")
+    C["curtain"] := Box(pg, CW, FG, "Curtain Drop (Win+Alt+D)", CurtainDropEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Smoothly drops windows down off-screen instead of instantly vanishing.", "xm y+8")
     
     C["carousel"] := Box(pg, CW, FG, "3D Carousel Alt-Tab", CarouselAltTabEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Replaces standard Alt-Tab with a spinning 3D ring of live windows.", "xm y+8")
     
-    C["grabpan"] := Box(pg, CW, FG, "Universal Grab && Pan (Win+Ctrl+Shift+P)", GrabPanEnabled, "xm y+12")
+    C["grabpan"] := Box(pg, CW, FG, "Universal Grab && Pan (Shift+Alt+Space)", GrabPanEnabled, "xm y+12")
     C["rollup"] := Box(pg, CW, FG, "Middle-click title bar to roll up", RollUpEnabled, "xm y+12")
-    Sub(pg, CW, cSub, "Win+Ctrl+R rolls a window up whether this is on or off - this is the mouse gesture.", "xm y+8")
+    Sub(pg, CW, cSub, "Shift+Alt+R rolls a window up whether this is on or off - this is the mouse gesture.", "xm y+8")
     
     C["mem"] := Box(pg, CW, FG, "Remember window positions", RestoreEnabled, "xm y+16")
     b := pg.AddButton("xm y+12 w190 h30", "Forget saved positions")
@@ -935,22 +987,22 @@ BuildWin() {
     C["spotlight"] := Box(pg, CW, FG, "Quick Spotlight Launcher (Double-tap Ctrl)", SpotlightEnabled, "xm y+16")
     Sub(pg, CW, cSub, "A fast, minimalist search bar for calculations, folders, and apps.", "xm y+8")
     
-    C["pip"] := Box(pg, CW, FG, "Live Window PiP (Win+Ctrl+P)", LivePipEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Press Win+Ctrl+P on any window to create a live, always-on-top thumbnail.", "xm y+8")
+    C["pip"] := Box(pg, CW, FG, "Live Window PiP (Shift+Alt+P)", LivePipEnabled, "xm y+16")
+    Sub(pg, CW, cSub, "Press Shift+Alt+P on any window to create a live, always-on-top thumbnail.", "xm y+8")
     
-    C["ghost"] := Box(pg, CW, FG, "Proximity Ghost Window (Win+Ctrl+G)", ProximityGhostEnabled, "xm y+16")
+    C["ghost"] := Box(pg, CW, FG, "Proximity Ghost Window (Shift+Alt+G)", ProximityGhostEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Turns active window into an interactive ghost overlay that fades in as your mouse approaches.", "xm y+8")
     TuneRow(pg, "ghostAlpha", FG, cSub)
     TuneRow(pg, "ghostRange", FG, cSub)
     TuneRow(pg, "ghostClick", FG, cSub)
 
-    C["bottom"] := Box(pg, CW, FG, "Always on Bottom / Widget (Win+Ctrl+B)", AlwaysOnBottomEnabled, "xm y+16")
+    C["bottom"] := Box(pg, CW, FG, "Always on Bottom / Widget (Shift+Alt+B)", AlwaysOnBottomEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Pins any window permanently to your desktop background, transforming it into a widget.", "xm y+8")
     
     C["midclose"] := Box(pg, CW, FG, "Middle-Click Titlebar to Close", MiddleClickCloseEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Overrides Roll-Up. Middle-click any window's title bar to close it.", "xm y+8")
     
-    C["traymin"] := Box(pg, CW, FG, "Minimize to Tray (Win+Ctrl+H)", TrayMinimizeEnabled, "xm y+16")
+    C["traymin"] := Box(pg, CW, FG, "Minimize to Tray (Shift+Alt+H)", TrayMinimizeEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Hides the active window completely and creates a custom System Tray icon.", "xm y+8")
     
     C["quickfolder"] := Box(pg, CW, FG, "Quick Folder Jump (Ctrl+G in dialogs)", QuickFolderJumpEnabled, "xm y+16")
@@ -976,7 +1028,7 @@ BuildWin() {
     C["mickill"] := Box(pg, CW, FG, "Global Mic Kill-Switch (Double-tap Alt)", MicKillSwitchEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Quickly double-tap the Alt key to instantly mute or unmute your microphone system-wide.", "xm y+8")
     
-    C["bosskey"] := Box(pg, CW, FG, "Boss Key (Win+Ctrl+Esc)", BossKeyEnabled, "xm y+16")
+    C["bosskey"] := Box(pg, CW, FG, "Boss Key (Shift+Alt+Esc)", BossKeyEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Instantly hides all windows and mutes system volume. Press again to restore.", "xm y+8")
     
     C["expander"] := Box(pg, CW, FG, "Global Text Expander (Snippets)", TextExpanderEnabled, "xm y+16")
@@ -986,7 +1038,7 @@ BuildWin() {
     C["smartcaps_act"] := pg.AddDropDownList("x320 yp-3 w90 Choose" IndexOf(CAPS_ACTIONS, SmartCapsAction), CAPS_ACTIONS)
     Sub(pg, CW, cSub, "Holding CapsLock for 0.4s toggles CapsLock. Tapping it sends Esc or Backspace.", "xm y+8")
     
-    C["plainpaste"] := Box(pg, CW, FG, "Plain-Text Paste (Ctrl+Win+V)", PlainPasteEnabled, "xm y+16")
+    C["plainpaste"] := Box(pg, CW, FG, "Plain-Text Paste (Ctrl+Alt+V)", PlainPasteEnabled, "xm y+16")
 
     ; Editable at last: this drives MediaCore's fallback list, which decides
     ; which programs are never dimmed by breathing or the monitor dimmer, and
@@ -1035,18 +1087,18 @@ BuildWin() {
     C["textmag"] := Box(pg, CW, FG, "Text Selection Magnifier (iOS style)", TextMagnifierEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Shows a 2x zoom loupe when selecting text.", "xm y+8")
     
-    C["wrap"] := Box(pg, CW, FG, "Infinite Cursor Wrap (Win+Ctrl+Shift+W)", InfiniteWrapEnabled, "xm y+16")
+    C["wrap"] := Box(pg, CW, FG, "Infinite Cursor Wrap (Shift+Alt+I)", InfiniteWrapEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Push the cursor into the left/right edge of the desktop and hold to teleport to the other side.", "xm y+8")
     TuneRow(pg, "wrapTol",   FG, cSub)
     TuneRow(pg, "wrapDelay", FG, cSub)
     TuneRow(pg, "wrapSpeed", FG, cSub)
     TuneRow(pg, "wrapCool",  FG, cSub)
 
-    C["multidimmer"] := Box(pg, CW, FG, "Multi-Monitor Focus Dimmer (Win+Ctrl+Shift+D)", MultiMonitorDimmerEnabled, "xm y+16")
+    C["multidimmer"] := Box(pg, CW, FG, "Multi-Monitor Focus Dimmer (Shift+Alt+D)", MultiMonitorDimmerEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Automatically dims every monitor except the one your mouse is currently on.", "xm y+8")
     TuneRow(pg, "dimmerAlpha", FG, cSub)
 
-    C["border"] := Box(pg, CW, FG, "Smart Active Border (Win+Ctrl+Shift+A)", ActiveBorderEnabled, "xm y+16")
+    C["border"] := Box(pg, CW, FG, "Smart Active Border (Shift+Alt+V)", ActiveBorderEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Draws a sleek, accent-colored border around the currently active window.", "xm y+8")
     TuneRow(pg, "borderThick", FG, cSub)
     TuneRow(pg, "borderAlpha", FG, cSub)
@@ -1086,12 +1138,12 @@ BuildWin() {
     TuneRow(pg, "animFadeMs",   FG, cSub)
     TuneRow(pg, "animNotchMs",  FG, cSub)
 
-    Lbl(pg, FG, "Focus mode (Win+Ctrl+F)", "xm y+20")
+    Lbl(pg, FG, "Focus mode (Shift+Alt+F)", "xm y+20")
     TuneRow(pg, "focusAlpha",   FG, cSub)
     TuneRow(pg, "focusFeather", FG, cSub)
     TuneRow(pg, "focusRadius",  FG, cSub)
 
-    Lbl(pg, FG, "Transparency wheel (Win+Ctrl+wheel)", "xm y+20", 300)
+    Lbl(pg, FG, "Transparency wheel (Shift+Alt+Wheel)", "xm y+20", 300)
     TuneRow(pg, "transStep", FG, cSub)
     TuneRow(pg, "transMin",  FG, cSub)
 
@@ -1100,13 +1152,13 @@ BuildWin() {
     Head(pg, CW, FG, "macOS Hot Corners")
     Sub(pg, CW, cSub, "Throw your mouse into the corners of the screen to trigger actions.", "xm y+10")
     
-    C["corners_en"] := Box(pg, CW, FG, "Enable Hot Corners (Win+Ctrl+Shift+C)", HotCornersEnabled, "xm y+16")
+    C["corners_en"] := Box(pg, CW, FG, "Enable Hot Corners (Shift+Alt+C)", HotCornersEnabled, "xm y+16")
     TuneRow(pg, "cornerSize",  FG, cSub)
     TuneRow(pg, "cornerDelay", FG, cSub)
 
     ; Choose by index, not by text: Choose("something not in the list") throws,
     ; and it would throw here - inside BuildWin, with no catch - which used to
-    ; leave Win+Ctrl+W permanently broken after a hand-edited settings.ini.
+    ; leave Shift+Alt+W permanently broken after a hand-edited settings.ini.
     ; LoadSettings validates these now; IndexOf is the second line of defence.
     Lbl(pg, FG, "Top Left:", "xm y+20")
     C["corner_tl"] := pg.AddDropDownList("x140 yp-3 w130 Choose" IndexOf(CORNER_ACTIONS, HotCornerTL), CORNER_ACTIONS)
@@ -1131,7 +1183,7 @@ BuildWin() {
     C["debuglog"] := Box(pg, CW, FG, "Write a debug log (snap.log)", DEBUG, "xm y+16")
     Sub(pg, CW, cSub, "Only needed when reporting a problem. Buffered in memory, written when idle.", "xm y+8")
     
-    C["smart_tb"] := Box(pg, CW, FG, "Smart Auto-Hide Taskbar (Win+Ctrl+Shift+T)", SmartTaskbarEnabled, "xm y+16")
+    C["smart_tb"] := Box(pg, CW, FG, "Smart Auto-Hide Taskbar (Shift+Alt+T)", SmartTaskbarEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Only hides taskbar when windows maximize or touch the bottom edge.", "xm y+8")
     
     C["deletehole"] := Box(pg, CW, FG, "Recycle Bin Black Hole (Delete Animation)", BlackHoleDeleteEnabled, "xm y+16")
@@ -1167,6 +1219,10 @@ BuildWin() {
     b4.OnEvent("Click", (*) => ShowHotkeys())
     b5 := pg.AddButton("x+12 yp w150 h30", "Guide")
     b5.OnEvent("Click", (*) => OpenDoc("GUIDE.md"))
+    ; Stealth Panic ships with this program and had no entry point anywhere in
+    ; the UI - not a page, not a button, not a tray item.
+    b6 := pg.AddButton("xm y+12 w312 h30", "Stealth Panic Mode settings (Esc Esc Esc)")
+    b6.OnEvent("Click", (*) => OpenStealthPanicSettings())
 
     g.OnEvent("Close", (*) => CloseWin(g))
     g.OnEvent("Escape", (*) => CloseWin(g))
@@ -1501,41 +1557,103 @@ RestartExplorer() {
     Run "explorer.exe"
 }
 
+; This listed 13 of the ~45 real bindings and claimed Ctrl+Win+V for plain paste,
+; which is bound to Ctrl+Alt+V. Every toggle and the whole keyboard-layout set
+; were missing, so the only way to find out Shift+Alt+I wraps the cursor was to
+; read the source. Keep this in step with the "=== Hotkeys ===" block and
+; docs\HOTKEYS.md - that file is the source of truth for the table.
 ShowHotkeys() {
     MsgBox(
-    "SHIFT+ALT HOTKEYS:`n"
-  . "Shift+Alt+W`tSettings menu`n"
-  . "Shift+Alt+O`tAlways on top (active window)`n"
-  . "Shift+Alt+B`tAlways on bottom (Desktop Widget)`n"
-  . "Shift+Alt+G`tProximity Ghost Window mode`n"
-  . "Shift+Alt+P`tLive Window Picture-in-Picture`n"
-  . "Shift+Alt+R`tRoll up / unroll the active window`n"
-  . "Shift+Alt+H`tMinimize the active window to the tray`n"
-  . "Shift+Alt+E`tBreathing windows on / off`n"
-  . "Shift+Alt+F`tFocus mode (cinema) on / off`n"
-  . "Shift+Alt+S`tMagnetic snapping on / off`n"
-  . "Shift+Alt+M`tPosition memory on / off`n"
-  . "Shift+Alt+Esc`tBoss key - hide everything and mute`n"
-  . "Shift+Alt+Wheel`tTransparency of the active window`n"
-  . "Alt+F4`t`tClose with the gravity-drop animation`n`n"
-  . "SYSTEM & MEDIA:`n"
-  . "Ctrl+Win+V`tPaste as plain text`n"
+    "WINDOWS AND MODES  (Shift+Alt)`n"
+  . "W`t`tSettings window`n"
+  . "O`t`tAlways on top (active window)`n"
+  . "R`t`tRoll up / unroll the active window`n"
+  . "H`t`tMinimize the active window to the tray`n"
+  . "Wheel`t`tTransparency of the active window`n"
+  . "F`t`tFocus mode (cinema) on / off`n"
+  . "Esc`t`tBoss key - hide everything and mute`n`n"
+  . "LAYOUT  (Shift+Alt)`n"
+  . "K`t`tCentre the window, keep its size`n"
+  . "U`t`tCycle size 50 / 75 / 90 percent, centred`n"
+  . "N`t`tMove to the next monitor`n"
+  . "Numpad 1-9`tTile to that cell of a 3x3 grid`n"
+  . "Numpad 0`tMaximize / restore`n"
+  . "Up / Down`tTop half / bottom half`n"
+  . "Z`t`tUndo the last layout change`n"
+  . "(the keypad keys need NumLock ON - Up/Down do not)`n`n"
+  . "FEATURE TOGGLES  (Shift+Alt)`n"
+  . "S`t`tMagnetic snapping`n"
+  . "M`t`tPosition memory`n"
+  . "E`t`tBreathing windows`n"
+  . "C`t`tHot corners`n"
+  . "V`t`tSmart active border`n"
+  . "I`t`tInfinite cursor wrap`n"
+  . "D`t`tMulti-monitor dimmer`n"
+  . "T`t`tSmart auto-hide taskbar`n"
+  . "J`t`tMagnetic window groups`n"
+  . "Space`t`tUniversal grab and pan`n`n"
+  . "RECOVERY  (Shift+Alt)`n"
+  . "Y`t`tRestore every rolled-up, ghosted or hidden window`n"
+  . "X`t`tReset the active window to fully opaque`n"
+  . "F5 / F6`tRestart / Exit`n`n"
+  . "SYSTEM AND MEDIA`n"
+  . "Ctrl+Alt+V`tPaste as plain text`n"
+  . "Alt+F4`t`tClose with the gravity-drop animation`n"
+  . "Esc Esc Esc`tStealth Panic Mode on / off`n`n"
+  . "WHEN A FEATURE IS ENABLED`n"
+  . "Double-tap Ctrl`tQuick Spotlight Launcher`n"
   . "Double-tap Alt`tGlobal Mic Kill-Switch`n"
-  . "Double-tap Ctrl`tQuick Spotlight Launcher`n`n"
-  . "WHEN A FEATURE IS ENABLED:`n"
+  . "Shift+Alt+B`tAlways on bottom (desktop widget)`n"
+  . "Shift+Alt+G`tProximity Ghost Window`n"
+  . "Shift+Alt+P`tLive Window Picture-in-Picture`n"
+  . "Shift+Alt+L`tQuick Spotlight Launcher`n"
+  . "Shift+Alt+A`tMic kill-switch`n"
+  . "Shift+Alt+Q`tQuick Look (in Explorer)`n"
+  . "Shift+Alt+F4`tShatter to close`n"
+  . "Win+Alt+D`tCurtain drop (show the desktop)`n"
+  . "Win+Alt+B`tMark the window private (blur when inactive)`n"
+  . "Alt+Tab`t`tCarousel Alt-Tab`n"
+  . "Delete`t`tBlack-hole delete (in Explorer)`n"
   . "Alt+LeftDrag`tMove a window from anywhere`n"
   . "Alt+RightDrag`tResize a window from the nearest edge`n"
-  . "Middle-click`tTitle bar: Close or Roll-up`n"
-  . "Middle-click`tHold to Universal Grab & Pan`n"
+  . "Middle-click`tTitle bar: close, or roll up`n"
+  . "Middle-click`tHold to grab and pan`n"
   . "Ctrl+G`t`tIn a Save/Open dialog: jump to the last Explorer folder`n"
   . "Spacebar`t`tIn Explorer: Quick Look preview`n"
   . "@@date / @@time`tText Expander snippets`n"
   . "CapsLock`ttap = Escape or Backspace, hold = Caps`n`n"
-  . "OVER THE TASKBAR:`n"
+  . "OVER THE TASKBAR`n"
   . "Wheel`t`tVolume up / down`n"
   . "Middle-click`tMute`n`n"
   . "HOTKEYS.md explains conflicts and how to change these.",
     "Window Tweaks - Hotkeys", "Iconi")
+}
+
+; The Stealth Panic engine is #Included into this process, but its settings are
+; a SEPARATE GUI process with its own ini - and nothing in this program pointed
+; at it, so the feature was undiscoverable unless you already knew to triple-tap
+; Escape. The ini path goes in as argument 1, exactly as both installers pass
+; it: without that handoff a machine carrying both the Window Tweaks install and
+; the standalone install gets the GUI editing one folder's config while the
+; engine reads another's - settings that appear to save and then do nothing.
+;
+; StealthPanicUI.ahk has no #SingleInstance, so a second click would open a
+; second window over the first. Activate the one that is already up instead.
+OpenStealthPanicSettings() {
+    global StealthPanicIniPath
+    if WinExist("Stealth Panic Mode Settings") {
+        try WinActivate("Stealth Panic Mode Settings")
+        return
+    }
+    ui := A_ScriptDir "\StealthPanicUI.ahk"
+    if !FileExist(ui) {
+        Notify("StealthPanicUI.ahk not found")
+        return
+    }
+    ini := IsSet(StealthPanicIniPath) ? StealthPanicIniPath : A_ScriptDir "\StealthPanic.ini"
+    try Run('"' A_AhkPath '" "' ui '" "' ini '"')
+    catch
+        Notify("Could not open Stealth Panic settings")
 }
 
 OpenLog() {
@@ -2350,7 +2468,7 @@ ChangeTransparency(dir) {
         current -= step
 
     ; The floor is a real one: a window at alpha 0 is invisible, focused and
-    ; still clickable, and the only way back is Win+Ctrl+X on a window you can
+    ; still clickable, and the only way back is Shift+Alt+X on a window you can
     ; no longer see.
     floor := TuneAlpha("transMin")
     if (current > 255)
@@ -2444,7 +2562,7 @@ RestoreAllWindows() {
     ; by hand. Each of these is reachable only through a hotkey that lives behind
     ; its feature flag, so switching the feature off strands the state with no way
     ; back - which is exactly what a panic key is for. Bye() already reverses all
-    ; of them on exit; there was no reason for Win+Ctrl+Y not to.
+    ; of them on exit; there was no reason for Shift+Alt+Y not to.
     global BottomWindows, CustomTrans, PushedBackWindows, CurtainWindows, PrivacyBlurWindows
     for hwnd, info in BottomWindows.Clone() {
         try RestoreFromBottom(hwnd)
@@ -2950,14 +3068,13 @@ SyncBreathingTimers() {
     ; SyncBreathingTimers is on every path that changes breathing - startup,
     ; ApplyUi and ToggleBreathing - whereas SyncMediaCore was only reached from
     ; ApplyUi and, at startup, as a side effect of SyncDimmerTimer. So toggling
-    ; breathing with Win+Ctrl+E never told MediaCore: turning it ON while nothing
+    ; breathing with Shift+Alt+E never told MediaCore: turning it ON while nothing
     ; else wanted MediaCore left the sweep stopped, and breathing then dimmed
     ; windows that were playing video - the exact thing MediaCore exists to
     ; prevent. Turning it OFF left the sweep running for nothing. Same pattern as
     ; SyncDimmerTimer, which already ends with this call.
     SyncMediaCore()
 }
-SyncBreathingTimers()
 
 
 
@@ -3559,7 +3676,7 @@ ToggleMemory() {
     Notify(RestoreEnabled ? "Position memory ON" : "Position memory OFF")
 }
 
-; ----- Win+Ctrl+Shift feature toggles ----------------------------------------
+; ----- Shift+Alt feature toggles -------------------------------------------
 ; All seven follow ToggleBreathing exactly: flip the flag, persist it, keep the
 ; settings window in step if it happens to be open, say so, then call the
 ; feature's Sync* function.
@@ -4631,7 +4748,13 @@ OnMessage(DllCall("RegisterWindowMessage", "str", "SHELLHOOK", "uint"), ShellEve
 ; pulse, breathing seeding, fly-to-mouse minimize and per-window cleanup for the
 ; rest of the session, with no error anywhere.
 OnMessage(DllCall("RegisterWindowMessage", "str", "TaskbarCreated", "uint"), TaskbarCreated)
-RegisterShellHook()
+; RegisterShellHook() itself is called from the deferred-init block at the bottom
+; of the file, NOT here. Registering it at this point armed ShellEvent ~3,200
+; lines before the state it cleans up existed, and every top-level call between
+; the two pumps the message queue, so a window closing during startup reached the
+; HSHELL_WINDOWDESTROYED branch and threw on PushedBackWindows. Only the
+; registration has to wait - no SHELLHOOK message is delivered until then, so
+; OnMessage above can stay where it is documented.
 
 RegisterShellHook() {
     DllCall("DeregisterShellHookWindow", "ptr", A_ScriptHwnd)
@@ -5172,7 +5295,6 @@ SyncDimmerTimer() {
     }
     SyncMediaCore()
 }
-SyncDimmerTimer()
 
 MonitorDimmerTickStep(dt:=0, now:=0) {
     global MultiMonitorDimmerEnabled, DimmerGuis
@@ -5327,7 +5449,6 @@ SyncSmartTaskbar() {
     else
         SetTimer(SmartTaskbarMonitorStep, 0)
 }
-SyncSmartTaskbar()
 
 SmartTaskbarMonitorStep() {
     global SmartTaskbarEnabled, SmartTaskbarLastState
@@ -5427,7 +5548,6 @@ SyncHotCornersTimer() {
     else
         SetTimer(HotCornersMonitorStep, 0)
 }
-SyncHotCornersTimer()
 
 SyncCursorWrapTimer() {
     global InfiniteWrapEnabled
@@ -5436,7 +5556,6 @@ SyncCursorWrapTimer() {
     else
         SetTimer(CursorWrapMonitorStep, 0)
 }
-SyncCursorWrapTimer()
 
 ; Virtual-screen metrics, cached. This runs 50 times a second; four SysGet calls
 ; plus a monitor enumeration per tick bought nothing, because the answer only
@@ -5994,7 +6113,7 @@ TogglePiP() {
     if (cls = "" || cls = "WorkerW" || cls = "Progman" || cls = "Shell_TrayWnd")
         return
 
-    ; Win+Ctrl+P while a PiP thumbnail itself is focused closes that thumbnail.
+    ; Shift+Alt+P while a PiP thumbnail itself is focused closes that thumbnail.
     for s, pip in PipGuis {
         if (pip.Hwnd == srcHwnd) {
             ClosePiP(s)
@@ -6346,7 +6465,6 @@ SyncActiveBorderTimer() {
         DestroyActiveBorder()
     }
 }
-SyncActiveBorderTimer()
 
 ActiveBorderMonitorStep() {
     global ActiveBorderEnabled, LastBorderHwnd, LastBorderX, LastBorderY, LastBorderW, LastBorderH
@@ -6428,8 +6546,6 @@ ActiveBorderMonitorStep() {
     
     DrawActiveBorder(X, Y, W, H, SizeChanged)
 }
-
-global ActiveBorderShown := false
 
 DrawActiveBorder(X, Y, W, H, SizeChanged:=true) {
     global ActiveBorderGui, ActiveBorderShown
@@ -6652,7 +6768,6 @@ SyncTextExpander() {
     
     HotIf()
 }
-SyncTextExpander()
 
 ; ====== Proximity Ghost Window ======
 GetDistToRect(px, py, rx, ry, rw, rh) {
@@ -7851,9 +7966,6 @@ DragTrailCallback(dt, now) {
     return true
 }
 
-global LastActiveHwnd := 0
-global PushedBackWindows := Map()
-
 ; ApplyUi (when the checkbox is cleared) and Bye() both call this. PushBackWindow
 ; pins a window at 98% size and alpha 210, and BringForwardWindow was the only
 ; reversal - reachable only from ApplyFocusDepth, which only runs while the
@@ -8120,9 +8232,6 @@ SparkCallback(idx, dt, now) {
     return true
 }
 
-global CurtainDropped := false
-global CurtainWindows := Map()
-
 ; Gated in the hotkey criteria rather than re-sending #d from the body. With the
 ; feature off the key is simply not claimed, so Windows' own show-desktop runs -
 ; CLAUDE.md lists Win+D as deliberately not touched.
@@ -8230,13 +8339,6 @@ CurtainBounceUp(hwnd, x, y, w, h) {
     }
     RegisterAnimation(animKey, UpStep)
 }
-
-global CarouselActive := false
-global CarouselGui := ""
-global CarouselIndex := 1
-global CarouselWindows := []
-global Thumbnails := []
-global CarouselAngleOffset := 0
 
 #HotIf CarouselAltTabEnabled && !CarouselActive
 *!Tab:: {
@@ -9126,8 +9228,6 @@ TriggerBlackHoleMinimize(hwnd) {
     RegisterAnimation(animKey, Step)
 }
 
-global ActiveShatters := Map()
-
 #HotIf ShatterEnabled
 +!F4:: {
     hwnd := WinExist("A")
@@ -9434,12 +9534,38 @@ CheckPrivacyBlur() {
 ; three used to be called next to LoadSettings() near the top, which reset
 ; SF_Hwnd / LS_Gui / LS_Hwnd to 0 immediately after they were assigned and armed
 ; ShakeDetector's 40 ms timer before the variables it reads existed. Anything
-; that touches a global declared below line ~150 belongs here, not up there.
+; that touches a global declared below line ~200 belongs here, not up there.
 ; InitShakeFind() and InitLightsaber() are NOT called here any more - both build
 ; their overlay lazily, on first use, so a feature nobody enabled costs nothing.
+;
+; The rule covers ANYTHING THAT CAN FIRE, not just globals: every Sync*() call
+; that arms a polling timer, and every hook registration. Seven Sync*() calls and
+; RegisterShellHook() used to sit next to the function they call, scattered from
+; line ~2900 to ~6700, which armed each feature while thousands of lines of
+; initialisers still had not run. That is not theoretical - several of those calls
+; build a Gui or talk to COM, and both pump the message queue, so a shell event
+; queued during startup got dispatched right there. A window closing at that
+; moment reached ShellEvent's HSHELL_WINDOWDESTROYED cleanup and threw "This
+; global variable has not been assigned a value" on PushedBackWindows, which is
+; declared ~3,200 lines below where the hook used to be registered. It reproduced
+; on a fresh install (the setup window closes as the app starts) and almost never
+; when running from src\ on a quiet desktop.
+;
+; scripts\Check-Split.ps1 check 8 enforces both halves of this.
 SyncShakeDetector()
 SyncCursorFxTimer()
 SyncTaskbarUiTimer()
+SyncBreathingTimers()
+SyncDimmerTimer()
+SyncSmartTaskbar()
+SyncHotCornersTimer()
+SyncCursorWrapTimer()
+SyncActiveBorderTimer()
+SyncTextExpander()
 UpdateKeyboardHook()
+; Last of all. ShellEvent is the widest-reaching callback in the file - window
+; created, destroyed, activated and minimised - so nothing else may still be
+; uninitialised when the shell starts delivering to it.
+RegisterShellHook()
 
 
