@@ -224,12 +224,15 @@ TS(key, sec, ini, def, lo, hi, step, dec, page, label, hint) =>
 
 global TUNE_SPEC := [
 ;      key             sec          ini             def     lo      hi     step dec page       label                      hint
-  TS("snapDist"     , "snap"     , "distance"    ,     30,     4,    120,     1, 0, "win"    , "Snap distance"          , "px from an edge")
+  TS("snapDist"     , "snap"     , "distance"    ,     30,     4,    120,     1, 0, "win"    , "Snap distance"          , "px from an edge, at an average drag speed")
+, TS("snapAdapt"    , "snap"     , "adapt"       ,   0.55,     0,      1,  0.05, 2, "win"    , "Snap speed response"    , "0 = fixed reach, 1 = strongly speed-scaled")
+, TS("snapHyst"     , "snap"     , "hyst"        ,      6,     0,     30,     1, 0, "win"    , "Edge stickiness"        , "px an edge you already touch wins ties by")
 , TS("snapBoost"    , "snap"     , "cornerBoost" ,    2.2,     1,      5,   0.1, 1, "win"    , "Corner boost"           , "x stronger at corners")
 , TS("snapProx"     , "snap"     , "neighbour"   ,     90,     0,    400,    10, 0, "win"    , "Neighbour reach"        , "px to nearby windows, 0 = edges only")
 , TS("glideThrow"   , "glide"    , "throw"       ,    0.9,     0,      3,   0.1, 1, "win"    , "Throw strength"         , "0 = stop where you let go")
 , TS("glideMs"      , "glide"    , "ms"          ,    650,   120,   1500,    10, 0, "win"    , "Slide time"             , "ms maximum")
 , TS("glideMax"     , "glide"    , "max"         ,    500,   100,   2000,    50, 0, "win"    , "Throw distance"         , "px a flick can carry a window")
+, TS("glideSettle"  , "glide"    , "settle"      ,      6,     0,     30,     1, 0, "win"    , "Settle overshoot"       , "px past the target on a hard landing, 0 = none")
 , TS("parallaxMin"  , "memory"   , "parallaxmin" ,     24,    10,    100,     5, 0, "win"    , "Drag opacity floor"     , "% at full drag speed")
 , TS("gridGap"      , "snap"     , "smartgap"    ,      8,     0,     40,     2, 0, "win"    , "Tiling grid gap"        , "px between tiled windows")
 , TS("elasticAmt"   , "snap"     , "elasticamt"  ,     18,     4,     60,     2, 0, "win"    , "Rubber-band travel"     , "px the window leans")
@@ -943,14 +946,17 @@ BuildWin() {
     TuneRow(pg, "elasticAmt", FG, cSub)
 
     TuneRow(pg, "snapDist",  FG, cSub)
+    TuneRow(pg, "snapAdapt", FG, cSub)
+    TuneRow(pg, "snapHyst",  FG, cSub)
     TuneRow(pg, "snapBoost", FG, cSub)
     TuneRow(pg, "snapProx",  FG, cSub)
     C["flash"] := Box(pg, CW, FG, "Magnetic Seam Flash (neon spark on snap)", SeamFlashEnabled, "xm y+16")
 
     C["glide"] := Box(pg, CW, FG, "Enable ice glide (Physics-based throwing)", GlideEnabled, "xm y+16")
-    TuneRow(pg, "glideThrow", FG, cSub)
-    TuneRow(pg, "glideMs",    FG, cSub)
-    TuneRow(pg, "glideMax",   FG, cSub)
+    TuneRow(pg, "glideThrow",  FG, cSub)
+    TuneRow(pg, "glideMs",     FG, cSub)
+    TuneRow(pg, "glideMax",    FG, cSub)
+    TuneRow(pg, "glideSettle", FG, cSub)
 
     C["parallax"] := Box(pg, CW, FG, "Parallax Dragging (Velocity Transparency)", ParallaxEnabled, "xm y+16")
     TuneRow(pg, "parallaxMin", FG, cSub)
@@ -2235,9 +2241,12 @@ ApplyLayout(hwnd, tx, ty, tw := -1, th := -1) {
     if (winW = "" || winH = "")
         return false
 
-    CancelAnimation("Glide_" hwnd)
-    CancelAnimation("Bounce_" hwnd)
-    CancelAnimation("RollUp_" hwnd)
+    ; Whatever is driving this window, whether or not this function has heard
+    ; of it. The hand-written list this replaces named three animations by name;
+    ; ten write RS_Pos. Region as well, because the list named RollUp_ - and
+    ; this function clears the roll-up region a few lines below.
+    Anim_Release(hwnd, "geom")
+    Anim_Release(hwnd, "region")
 
     if RolledUpWindows.Has(hwnd) {
         RolledUpWindows.Delete(hwnd)
@@ -2278,8 +2287,7 @@ UndoLayout() {
     if !DllCall("IsWindow", "ptr", hwnd)
         return
 
-    CancelAnimation("Glide_" hwnd)
-    CancelAnimation("Bounce_" hwnd)
+    Anim_Release(hwnd, "geom")
     ; Already in WinMove space - this is what WinGetPos reported before the move,
     ; so it must NOT go through the frame conversion a second time.
     RS_SetPos(hwnd, r.x, r.y, r.w, r.h, RS_PRI_USER)
@@ -2440,13 +2448,83 @@ ToggleMaximize() {
             return
         if !(WinGetStyle(hwnd) & 0x10000)          ; WS_MAXIMIZEBOX
             return
-        CancelAnimation("Glide_" hwnd)
-        CancelAnimation("Bounce_" hwnd)
-        if (WinGetMinMax(hwnd) = 1)
+        Anim_Release(hwnd, "geom")
+
+        wasMax := (WinGetMinMax(hwnd) = 1)
+        fromX := "", fromY := "", fromW := "", fromH := ""
+        try WinGetPos(&fromX, &fromY, &fromW, &fromH, hwnd)
+
+        if wasMax
             WinRestore(hwnd)
         else
             WinMaximize(hwnd)
+
+        MorphMaximize(hwnd, fromX, fromY, fromW, fromH)
     }
+}
+
+; Grow the window out to its new rect instead of letting it jump.
+;
+; This is the one roadmap item with no implementation. It has to run AFTER the
+; state change rather than instead of it, because WinMaximize/WinRestore own the
+; maximize state and RS_* has no concept of one - queueing an explicit rect
+; cannot make a window maximized, and a window that merely covers the work area
+; is not the same thing to the OS or to the app.
+;
+; So: let Windows do the state change, read where it landed, put the window back
+; where it started for one frame, and glide it to the destination. The window is
+; genuinely maximized the whole time; only its rect is animated.
+MorphMaximize(hwnd, fromX, fromY, fromW, fromH) {
+    global GlideEnabled
+    ; Inherits the user's existing preference rather than adding a setting: if
+    ; ice glide is off, they have said they do not want windows sliding.
+    if (!GlideEnabled || fromX = "" || fromW = "" || fromW < 1 || fromH < 1)
+        return
+    if !DllCall("IsWindow", "ptr", hwnd)
+        return
+    try WinGetPos(&toX, &toY, &toW, &toH, hwnd)
+    catch
+        return
+    if (toX = "" || toW = "" || toW < 1 || toH < 1)
+        return
+    ; Nothing worth animating, and this also catches the case where the app
+    ; refused the state change.
+    if (Abs(toX - fromX) < 4 && Abs(toY - fromY) < 4
+     && Abs(toW - fromW) < 4 && Abs(toH - fromH) < 4)
+        return
+
+    animKey := "Morph_" hwnd
+    start := QPC()
+    ms := 190
+    lastX := -99999, lastY := -99999, lastW := -1, lastH := -1
+
+    MorphStep(dt, now) {
+        if !DllCall("IsWindow", "ptr", hwnd)
+            return false
+        t := (now - start) / ms
+        if (t >= 1) {
+            RS_SetPos(hwnd, toX, toY, toW, toH, RS_PRI_ANIM)
+            return false
+        }
+        ; Quintic out, the same curve the glide uses, so a window growing to full
+        ; screen and a window sliding to an edge decelerate identically.
+        e := 1 - (1 - t) ** 5
+        nx := Round(fromX + (toX - fromX) * e)
+        ny := Round(fromY + (toY - fromY) * e)
+        nw := Round(fromW + (toW - fromW) * e)
+        nh := Round(fromH + (toH - fromH) * e)
+        if (nx != lastX || ny != lastY || nw != lastW || nh != lastH) {
+            RS_SetPos(hwnd, nx, ny, nw, nh, RS_PRI_ANIM)
+            lastX := nx, lastY := ny, lastW := nw, lastH := nh
+        }
+        return true
+    }
+
+    ; Seed the first frame from the old rect and commit it now, so the window
+    ; does not show one frame at its destination before the animation starts.
+    RS_SetPos(hwnd, fromX, fromY, fromW, fromH, RS_PRI_ANIM)
+    RS_Commit()
+    Anim_Claim(hwnd, "geom", animKey, MorphStep)
 }
 
 global CustomTrans := Map()
@@ -2478,18 +2556,17 @@ ChangeTransparency(dir) {
 
     CustomTrans[hwnd] := current
 
-    global BreathingEnabled, WinCurrentAlpha, WinTargetAlpha
-    if BreathingEnabled {
-        WinTargetAlpha[hwnd] := current
-        WinCurrentAlpha[hwnd] := current
-    }
-
+    ; No hand-off to breathing any more. This used to write the chosen alpha into
+    ; WinTargetAlpha/WinCurrentAlpha so breathing would not immediately fade the
+    ; window back down - one module reaching into another's private state to
+    ; hand-compose two opacities. RenderCore multiplies the base by the breathe
+    ; factor now, so the two are independent by construction.
     if (current == 255) {
-        RS_SetAlpha(hwnd, "Off", RS_PRI_USER)
+        RS_SetBaseAlpha(hwnd, 255, RS_PRI_USER)
         CustomTrans.Delete(hwnd)
         PendingTransMsg := "Transparency: OFF"
     } else {
-        RS_SetAlpha(hwnd, current, RS_PRI_USER)
+        RS_SetBaseAlpha(hwnd, current, RS_PRI_USER)
         PendingTransMsg := "Opacity: " Round((current / 255) * 100) "%"
     }
     ; One-shot producer: nothing else is animating, so nothing else will flush.
@@ -2507,22 +2584,27 @@ FlushTransNotify() {
     }
 }
 
-; Back to fully opaque in one press. Mirrors the current == 255 branch of
-; ChangeTransparency, including handing the window back to breathing at full
-; alpha - leaving WinTargetAlpha at the old value made breathing fade it
-; straight back down again.
+; Back to fully opaque in one press.
+;
+; This clears the breathe layer as well as the user's own opacity, and that is
+; deliberate: the key means "make this window solid NOW", so leaving it dim
+; because it happens to be idle would read as the key having done nothing. The
+; window starts breathing again on the next monitor tick, which is the same
+; behaviour as before - it used to be achieved by writing 255 into breathing's
+; two private maps from here.
 ResetTransparency() {
-    global CustomTrans, BreathingEnabled, WinCurrentAlpha, WinTargetAlpha
+    global CustomTrans, WinCurrentAlpha, WinTargetAlpha
     hwnd := WinExist("A")
     if !hwnd || !IsRestorable(hwnd)
         return
     if CustomTrans.Has(hwnd)
         CustomTrans.Delete(hwnd)
-    if BreathingEnabled {
+    if WinCurrentAlpha.Has(hwnd)
         WinCurrentAlpha[hwnd] := 255
+    if WinTargetAlpha.Has(hwnd)
         WinTargetAlpha[hwnd] := 255
-    }
-    RS_SetAlpha(hwnd, "Off", RS_PRI_USER)
+    RS_SetBaseAlpha(hwnd, 255, RS_PRI_USER)
+    RS_ClearAlphaLayer(hwnd, "breathe", RS_PRI_USER)
     RS_Commit()                    ; one-shot producer: nothing else will flush
     Notify("Transparency: OFF")
 }
@@ -2569,12 +2651,15 @@ RestoreAllWindows() {
         n += 1
     }
     for hwnd, alpha in CustomTrans.Clone() {
-        if DllCall("IsWindow", "ptr", hwnd) {
-            try RS_SetAlpha(hwnd, "Off", RS_PRI_USER)
+        if DllCall("IsWindow", "ptr", hwnd)
             n += 1
-        }
         CustomTrans.Delete(hwnd)
     }
+    ; Every window ANY layer is still dimming, not just the ones the user set by
+    ; hand. Enumerating CustomTrans alone missed a window left dim by a stranded
+    ; breathe, ghost, drag or depth layer - which is precisely the state a panic
+    ; key exists to clear, and the one the user cannot see the cause of.
+    RS_ResetAllAlphaState(RS_PRI_USER)
     if PushedBackWindows.Count {
         n += PushedBackWindows.Count
         try RestoreFocusDepth()
@@ -2646,7 +2731,7 @@ ToggleRollUp(hwnd := 0) {
             RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
             return true
         }
-        RegisterAnimation(animKey, RollDownStep)
+        Anim_Claim(hwnd, "region", animKey, RollDownStep)
     } else {
         RolledUpWindows[hwnd] := h
 
@@ -2663,7 +2748,7 @@ ToggleRollUp(hwnd := 0) {
             RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
             return true
         }
-        RegisterAnimation(animKey, RollUpStep)
+        Anim_Claim(hwnd, "region", animKey, RollUpStep)
     }
 }
 
@@ -2679,11 +2764,9 @@ AltDragMove() {
     if !hwnd || !IsRestorable(hwnd)
         return
 
-    CancelAnimation("Glide_" hwnd)
-    CancelAnimation("Bounce_" hwnd)
-    CancelAnimation("GhostSlideIn_" hwnd)
-    CancelAnimation("PortalScaleIn_" hwnd)
-    CancelAnimation("Unroll_" hwnd)
+    ; Geometry only. See the MOVESIZESTART hook for why the region animation is
+    ; left alone despite the old list naming Unroll_.
+    Anim_Release(hwnd, "geom")
 
     try {
         if WinGetMinMax(hwnd) != 0
@@ -2697,6 +2780,14 @@ AltDragMove() {
     global ParallaxEnabled, GlideEnabled, SnapEnabled
     global VelX, VelY, GLIDE_THROW, GLIDE_MAX
     vX := 0, vY := 0
+    ; Alt-drag hands VelX/VelY to SnapWindow, which now expects pixels per
+    ; SECOND. This loop samples on a Sleep(10) cadence rather than on the frame
+    ; clock, so it has to measure its own elapsed time; using the raw per-tick
+    ; delta is what made an alt-drag throw a different distance from a title-bar
+    ; drag of the same speed. Smoothed with the same 30 ms time constant, so
+    ; the two paths now agree by construction rather than by coincidence.
+    dragVX := 0.0, dragVY := 0.0
+    lastSample := QPC()
 
     busy := true
     try {
@@ -2706,9 +2797,17 @@ AltDragMove() {
             if !DllCall("IsWindow", "ptr", hwnd)
                 break
             MouseGetPos(&nX, &nY)
+            sampleNow := QPC()
+            sampleDt := sampleNow - lastSample
+            if (sampleDt < 1)
+                sampleDt := 1
+            lastSample := sampleNow
             if (nX != mX || nY != mY) {
                 vX := nX - mX
                 vY := nY - mY
+                k := 1 - Exp(-sampleDt / 30.0)
+                dragVX += ((vX / sampleDt * 1000) - dragVX) * k
+                dragVY += ((vY / sampleDt * 1000) - dragVY) * k
 
                 global GhostWindows
                 if (ParallaxEnabled && !GhostWindows.Has(hwnd)) {
@@ -2716,8 +2815,11 @@ AltDragMove() {
                     ; SampleVelocityStep. It used to be a separate hard-coded
                     ; 100 here against 60 there, so an alt-drag and a title-bar
                     ; drag of the same window at the same speed did not match.
-                    vel := Sqrt(vX**2 + vY**2)
-                    RS_SetAlpha(hwnd, Clamp(255 - Round(vel * 3), TuneAlpha("parallaxMin"), 255), RS_PRI_DRAG)
+                    ; Same gain as the title-bar path now, not a separate 3.
+                    vel := Sqrt(dragVX**2 + dragVY**2)
+                    RS_SetAlphaLayer(hwnd, "drag"
+                        , Clamp(255 - Round(vel * 0.06), TuneAlpha("parallaxMin"), 255) / 255.0
+                        , RS_PRI_DRAG)
                 }
 
                 try WinGetPos(&wX, &wY,,, hwnd)
@@ -2730,9 +2832,15 @@ AltDragMove() {
                 RS_SetPos(hwnd, wX, wY, -1, -1, RS_PRI_DRAG)
                 RS_Commit()
             } else {
+                ; Standing still decays the measured speed toward zero rather
+                ; than discarding it, so a pause mid-drag does not make the
+                ; release read as a flick.
                 vX := 0, vY := 0
+                k := 1 - Exp(-sampleDt / 30.0)
+                dragVX -= dragVX * k
+                dragVY -= dragVY * k
                 if (ParallaxEnabled && !GhostWindows.Has(hwnd))
-                    RS_SetAlpha(hwnd, 255, RS_PRI_DRAG)
+                    RS_SetAlphaLayer(hwnd, "drag", 1.0, RS_PRI_DRAG)
             }
             ; Sleep, not PreciseSleep: this yields, so the frame loop keeps
             ; running other animations instead of being starved by a spin.
@@ -2742,25 +2850,27 @@ AltDragMove() {
     busy := false
 
     if (ParallaxEnabled && !GhostWindows.Has(hwnd)) {
-        RS_SetAlpha(hwnd, "Off", RS_PRI_DRAG)
+        RS_ClearAlphaLayer(hwnd, "drag", RS_PRI_DRAG)
         RS_Commit()
     }
 
     ; Hand off to the same release pipeline a title-bar drag uses. SnapWindow
     ; reads VelX/VelY to carry the throw forward and calls Glide itself, so
     ; there is nothing to schedule separately.
-    VelX := vX, VelY := vY
+    VelX := dragVX, VelY := dragVY
     if (SnapEnabled) {
         if GetRects(hwnd, &eL, &eT, &eR, &eB, &ex, &ey)
             SnapWindow(hwnd, eL, eT, eR, eB, ex, ey)
-    } else if (GlideEnabled && (Abs(vX) > 5 || Abs(vY) > 5)) {
-        ; Snap off, glide on: throw it by hand, then keep it on screen.
+    } else if (GlideEnabled && (Abs(dragVX) > 330 || Abs(dragVY) > 330)) {
+        ; Snap off, glide on: throw it by hand, then keep it on screen. Same
+        ; px/s unit and the same 0.18 gain as SnapWindow, so this fallback and
+        ; the snap path cannot disagree about how far a flick carries.
         try {
             WinGetPos(&gx, &gy, &gw, &gh, hwnd)
-            tx := gx + Clamp(Round(vX * GLIDE_THROW * 12), -GLIDE_MAX, GLIDE_MAX)
-            ty := gy + Clamp(Round(vY * GLIDE_THROW * 12), -GLIDE_MAX, GLIDE_MAX)
+            tx := gx + Clamp(Round(dragVX * GLIDE_THROW * 0.18), -GLIDE_MAX, GLIDE_MAX)
+            ty := gy + Clamp(Round(dragVY * GLIDE_THROW * 0.18), -GLIDE_MAX, GLIDE_MAX)
             gR := tx + gw, gB := ty + gh
-            KeepOnScreen(hwnd, &tx, &ty, &gR, &gB, vX, vY)
+            KeepOnScreen(hwnd, &tx, &ty, &gR, &gB, dragVX, dragVY)
             Glide(hwnd, gx, gy, tx, ty)
         }
     }
@@ -3034,16 +3144,19 @@ global WinLastActive := Map()
 ; five times a second. That is exactly the polling the drag pipeline was
 ; designed to avoid, and it ran even for users who never turn breathing on.
 SyncBreathingTimers() {
-    global BreathingEnabled, WinTargetAlpha, WinCurrentAlpha, WinLastActive, CustomTrans
+    global BreathingEnabled, WinTargetAlpha, WinCurrentAlpha, WinLastActive
     if (BreathingEnabled) {
         now := QPC()
         hwnds := WinGetList()
         for hwnd in hwnds {
             if IsRestorable(hwnd) {
-                baseAlpha := CustomTrans.Has(hwnd) ? CustomTrans[hwnd] : 255
+                ; 255 = "this layer is not dimming anything", NOT "the window is
+                ; opaque". These two maps hold the breathe LAYER's numerator now;
+                ; the user's own opacity is a separate factor that RenderCore
+                ; multiplies in, so breathing no longer has to know about it.
                 WinLastActive[hwnd] := now
-                WinCurrentAlpha[hwnd] := baseAlpha
-                WinTargetAlpha[hwnd] := baseAlpha
+                WinCurrentAlpha[hwnd] := 255
+                WinTargetAlpha[hwnd] := 255
             }
         }
         SetTimer(BreathingMonitorStep, 200)
@@ -3058,7 +3171,7 @@ SyncBreathingTimers() {
     ; have flushed these writes, so without it they were never applied.
     for hwnd, alpha in WinCurrentAlpha {
         if DllCall("IsWindow", "ptr", hwnd)
-            try RS_SetAlpha(hwnd, CustomTrans.Has(hwnd) ? CustomTrans[hwnd] : "Off", RS_PRI_AMBIENT)
+            try RS_ClearAlphaLayer(hwnd, "breathe", RS_PRI_AMBIENT)
     }
     RS_Commit()
     WinTargetAlpha.Clear(), WinCurrentAlpha.Clear(), WinLastActive.Clear()
@@ -3095,7 +3208,7 @@ SyncBreathingTimers() {
 ;     key throws. Note the target is NOT necessarily written earlier in the same
 ;     iteration: the else branch only assigns once the idle threshold is passed.
 BreathingMonitorStep() {
-    global BreathingEnabled, WinLastActive, WinCurrentAlpha, WinTargetAlpha, CustomTrans
+    global BreathingEnabled, WinLastActive, WinCurrentAlpha, WinTargetAlpha, GhostWindows
     if !BreathingEnabled
         return
 
@@ -3121,14 +3234,31 @@ BreathingMonitorStep() {
             if !DllCall("IsWindow", "ptr", hwnd)
                 continue
 
-            lastActive := WinLastActive[hwnd]
-            baseAlpha := CustomTrans.Has(hwnd) ? CustomTrans[hwnd] : 255
+            ; The ghost owns this window's opacity outright, so keep breathing's
+            ; own state neutral for it. Without this the monitor kept recording a
+            ; target the animator then refused to act on, so every 200 ms tick
+            ; re-registered the animator, which retired again on the next frame -
+            ; restarting the scheduler and timeBeginPeriod(1) five times a second
+            ; for a window nothing was fading.
+            if GhostWindows.Has(hwnd) {
+                WinLastActive[hwnd] := now
+                WinTargetAlpha[hwnd] := 255
+                WinCurrentAlpha[hwnd] := 255
+                continue
+            }
 
+            lastActive := WinLastActive[hwnd]
+
+            ; No Min() against the user's opacity any more. These are layer
+            ; factors and RenderCore multiplies them, so a window the user set to
+            ; 50% and then left idle lands at 50% * 70%, and breathing can never
+            ; brighten a window the user deliberately dimmed - which is the only
+            ; thing that Min() was ever there to prevent.
             if (hwnd == aHwnd || hwnd == mHwnd || (anyMedia && MC_IsMediaHwnd(hwnd))) {
                 WinLastActive[hwnd] := now
-                WinTargetAlpha[hwnd] := baseAlpha
+                WinTargetAlpha[hwnd] := 255
             } else if (now - lastActive > BREATHE_IDLE_MS) {
-                WinTargetAlpha[hwnd] := Min(baseAlpha, dimAlpha)
+                WinTargetAlpha[hwnd] := dimAlpha
             }
 
             if (!WinTargetAlpha.Has(hwnd) || !WinCurrentAlpha.Has(hwnd))
@@ -3143,7 +3273,7 @@ BreathingMonitorStep() {
 }
 
 BreathingAnimatorStep(dt:=0, now:=0) {
-    global BreathingEnabled, WinTargetAlpha, WinCurrentAlpha, WinLastActive, CustomTrans, FRAME_MS
+    global BreathingEnabled, WinTargetAlpha, WinCurrentAlpha, WinLastActive, FRAME_MS
     global GhostWindows
     if !BreathingEnabled
         return false
@@ -3171,19 +3301,30 @@ BreathingAnimatorStep(dt:=0, now:=0) {
             continue
         }
 
-        ; A ghosted window's opacity belongs to GhostMonitorStep. Both write at
-        ; RS_PRI_AMBIENT but from different timers with their own commits, so
-        ; neither priority nor per-flush arbitration separates them - the window
-        ; visibly oscillated between the proximity alpha and the breathing alpha.
-        ; One owner per window.
-        if GhostWindows.Has(hwnd)
+        ; Breathing yields the whole window to the ghost, and this is now a
+        ; PRODUCT choice rather than an ownership workaround: the two layers
+        ; would compose cleanly, but ghost 0.30 x breathe 0.70 is alpha 54 - much
+        ; darker than the ghost's own 76 - so an idle ghosted window would sink
+        ; below the opacity the ghost settings ask for.
+        ;
+        ; Yielding means CLEARING, not just skipping. A window that was already
+        ; dimmed when it became a ghost would otherwise keep its breathe layer
+        ; forever - nothing else owns that name - and the ghost would sit at the
+        ; product anyway, which is the exact outcome this skip exists to avoid.
+        ; Resetting the tracked alpha alongside it keeps breathing's own state
+        ; agreeing with the layer, so un-ghosting fades from solid rather than
+        ; from a value the screen never had.
+        if GhostWindows.Has(hwnd) {
+            RS_ClearAlphaLayer(hwnd, "breathe", RS_PRI_AMBIENT)
+            WinCurrentAlpha[hwnd] := 255
             continue
+        }
 
         if (anyMedia && MC_IsMediaHwnd(hwnd)) {
-            ; Track it as awake so we stop re-queueing "Off" on every frame for
-            ; the whole time something is playing.
+            ; Track it as awake so we stop re-queueing on every frame for the
+            ; whole time something is playing. Clearing is free once clear.
             WinCurrentAlpha[hwnd] := 255
-            RS_SetAlpha(hwnd, "Off", RS_PRI_AMBIENT)
+            RS_ClearAlphaLayer(hwnd, "breathe", RS_PRI_AMBIENT)
             continue
         }
 
@@ -3214,9 +3355,9 @@ BreathingAnimatorStep(dt:=0, now:=0) {
             ; fractional current must not re-queue the same visible value.
             iv := Integer(current + 0.5)
             if (iv >= 255)
-                RS_SetAlpha(hwnd, "Off", RS_PRI_AMBIENT)
+                RS_ClearAlphaLayer(hwnd, "breathe", RS_PRI_AMBIENT)
             else
-                RS_SetAlpha(hwnd, iv, RS_PRI_AMBIENT)
+                RS_SetAlphaLayer(hwnd, "breathe", iv / 255.0, RS_PRI_AMBIENT)
         }
     }
 
@@ -3307,7 +3448,7 @@ GravityClose() {
     pic := animGui.Add("Picture", "x0 y0 w" w " h" h, "HBITMAP:" hbm)
     animGui.Show("x" x " y" y " w" w " h" h " NoActivate")
 
-    try RS_SetAlpha(hwnd, 0, RS_PRI_ANIM)
+    try RS_SetAlphaLayer(hwnd, "gravity", 0.0, RS_PRI_ANIM)
     RS_Commit()
 
     startW := w, startH := h
@@ -3379,7 +3520,7 @@ GravityClose() {
 CheckGravityClose(hwnd) {
     if !DllCall("IsWindow", "ptr", hwnd)
         return
-    try RS_SetAlpha(hwnd, "Off", RS_PRI_ANIM)
+    try RS_ClearAlphaLayer(hwnd, "gravity", RS_PRI_ANIM)
     RS_Commit()
 }
 
@@ -3872,12 +4013,18 @@ WinEvent(hook, event, hwnd, idObject, idChild, thread, time) {
             return
         if !GetRects(hwnd, &sL, &sT, &sR, &sB, &sx, &sy)
             return
-        CancelAnimation("Glide_" hwnd)
-        CancelAnimation("Bounce_" hwnd)
-        CancelAnimation("GhostSlideIn_" hwnd)
-        CancelAnimation("PortalScaleIn_" hwnd)
-        CancelAnimation("Unroll_" hwnd)
-        CancelAnimation("FadeBack_" hwnd)
+        ; The user has taken the window. Nothing else may drive its position or
+        ; its opacity until the drag ends.
+        ;
+        ; Region is deliberately NOT released, even though the hand-written list
+        ; this replaces named Unroll_. Cancelling a region animation mid-flight
+        ; strands the window clipped to a partial height, because only its
+        ; terminal frame clears the region - and nothing short of the panic key
+        ; or exit puts that back. Letting the unroll finish is self-healing and
+        ; costs nothing: a drag does not touch the region, so the two do not
+        ; fight. That the old list cancelled it was a latent bug, not a rule.
+        Anim_Release(hwnd, "geom")
+        Anim_Release(hwnd, "alpha")
 
         DragHwnd := hwnd, DragL := sL, DragT := sT, DragR := sR, DragB := sB
         VelX := 0, VelY := 0, PrevX := sL, PrevY := sT
@@ -3899,21 +4046,40 @@ WinEvent(hook, event, hwnd, idObject, idChild, thread, time) {
 }
 
 SampleVelocityStep(dt, now) {
-    global DragHwnd, VelX, VelY, PrevX, PrevY, ParallaxEnabled, CurrentDragAlpha
+    global DragHwnd, VelX, VelY, PrevX, PrevY, ParallaxEnabled, CurrentDragAlpha, FRAME_MS
     if !DragHwnd {
         return false
     }
     if !GetRects(DragHwnd, &L, &T, &R, &B, &x, &y)
         return true
-    VelX := VelX * 0.6 + (L - PrevX) * 0.4
-    VelY := VelY * 0.6 + (T - PrevY) * 0.4
+    ; Velocity is pixels per SECOND, not pixels per frame.
+    ;
+    ; This function is handed dt and used to ignore it: the old EMA smoothed
+    ; the raw per-frame displacement, so every constant downstream - the throw
+    ; gain, the monitor-throw and tilt thresholds, the parallax opacity ramp,
+    ; the group-break test - was silently calibrated to a 15 ms frame. The
+    ; scheduler clamps dt to three frames but does not guarantee it, so under
+    ; load the same hand motion reported up to 3x the velocity and the same
+    ; flick threw the window three times as far. Nothing else about the drag
+    ; was frame-rate dependent; this was.
+    ;
+    ; The smoothing constant is a time constant rather than a per-frame ratio
+    ; for the same reason. tau = 30 ms reproduces the old 0.4 blend exactly at
+    ; the nominal frame and holds that response when frames get heavy.
+    if (dt <= 0)
+        dt := FRAME_MS
+    k := 1 - Exp(-dt / 30.0)
+    VelX := VelX + (((L - PrevX) / dt * 1000) - VelX) * k
+    VelY := VelY + (((T - PrevY) / dt * 1000) - VelY) * k
     vX := L - PrevX
     vY := T - PrevY
     PrevX := L, PrevY := T
     
     global MagneticGroupsEnabled, MagGroups
     if (MagneticGroupsEnabled && (vX != 0 || vY != 0) && MagGroups.Has(DragHwnd)) {
-        if (Abs(vX) > 25 || Abs(vY) > 25) {
+        ; vX/vY are still raw per-frame deltas here, so this threshold is
+        ; converted rather than re-derived: 25 px per 15 ms frame is ~1650 px/s.
+        if (Abs(vX) / dt * 1000 > 1650 || Abs(vY) / dt * 1000 > 1650) {
             UngroupWindow(DragHwnd)
         } else {
             ; Queued, not WinMove'd. This runs inside the produce phase of the
@@ -3935,14 +4101,15 @@ SampleVelocityStep(dt, now) {
     global GhostWindows
     if (ParallaxEnabled && !GhostWindows.Has(DragHwnd)) {
         speed := Sqrt(VelX * VelX + VelY * VelY)
-        targetAlpha := Clamp(Round(255 - (speed * 4)), TuneAlpha("parallaxMin"), 255)
+        ; 4 alpha units per px/frame is 0.06 per px/s at the nominal frame.
+        targetAlpha := Clamp(Round(255 - (speed * 0.06)), TuneAlpha("parallaxMin"), 255)
         
         CurrentDragAlpha := CurrentDragAlpha * 0.7 + targetAlpha * 0.3
         
         if (CurrentDragAlpha < 250) {
-            RS_SetAlpha(DragHwnd, Integer(CurrentDragAlpha), RS_PRI_DRAG)
+            RS_SetAlphaLayer(DragHwnd, "drag", CurrentDragAlpha / 255.0, RS_PRI_DRAG)
         } else {
-            RS_SetAlpha(DragHwnd, "Off", RS_PRI_DRAG)
+            RS_ClearAlphaLayer(DragHwnd, "drag", RS_PRI_DRAG)
         }
     }
     
@@ -4002,12 +4169,11 @@ StartFadeBackAlpha(hwnd, startA) {
     if !DllCall("IsWindow", "ptr", hwnd)
         return
     if (startA >= 250) {
-        RS_SetAlpha(hwnd, "Off", RS_PRI_DRAG)
+        RS_ClearAlphaLayer(hwnd, "drag", RS_PRI_DRAG)
         RS_Commit()
         return
     }
     animKey := "FadeBack_" hwnd
-    CancelAnimation(animKey)
     start := QPC()
     ms := 190
     FadeBackStep(dt, now) {
@@ -4015,16 +4181,18 @@ StartFadeBackAlpha(hwnd, startA) {
             return false
         t := (now - start) / ms
         if (t >= 1) {
-            RS_SetAlpha(hwnd, "Off", RS_PRI_DRAG)
+            ; Clear, not "solid": the window goes back to whatever opacity the
+            ; user chose for it, which a hard 255 used to throw away silently.
+            RS_ClearAlphaLayer(hwnd, "drag", RS_PRI_DRAG)
             return false
         }
         ; Ease out: the window should rush back to solid the instant you let go,
         ; then settle. A linear ramp made the release feel sluggish.
         e := 1 - (1 - t) * (1 - t)
-        RS_SetAlpha(hwnd, Integer(startA + (255 - startA) * e), RS_PRI_DRAG)
+        RS_SetAlphaLayer(hwnd, "drag", (startA + (255 - startA) * e) / 255.0, RS_PRI_DRAG)
         return true
     }
-    RegisterAnimation(animKey, FadeBackStep)
+    Anim_Claim(hwnd, "alpha", animKey, FadeBackStep)
 }
 
 SnapWindow(hwnd, L, T, R, B, winX, winY) {
@@ -4032,7 +4200,7 @@ SnapWindow(hwnd, L, T, R, B, winX, winY) {
     global GlideEnabled, GLIDE_THROW, GLIDE_MAX, VelX, VelY
     
     global MonitorThrowEnabled
-    if (MonitorThrowEnabled && (Abs(VelX) > 15 || Abs(VelY) > 15)) {
+    if (MonitorThrowEnabled && (Abs(VelX) > 1000 || Abs(VelY) > 1000)) {
         if ThrowWindowToNextMonitor(hwnd, L, T, R - L, B - T, VelX, VelY)
             return
     }
@@ -4041,16 +4209,38 @@ SnapWindow(hwnd, L, T, R, B, winX, winY) {
     ; stopping dead where you let go.
     tx := 0, ty := 0
     if GlideEnabled {
-        tx := Clamp(Round(VelX * GLIDE_THROW * 12), -GLIDE_MAX, GLIDE_MAX)
-        ty := Clamp(Round(VelY * GLIDE_THROW * 12), -GLIDE_MAX, GLIDE_MAX)
+        ; 0.18 px of travel per px/s of release speed, which is the old
+        ; "* 12 per px/frame" expressed in the new unit (12 * 0.015).
+        tx := Clamp(Round(VelX * GLIDE_THROW * 0.18), -GLIDE_MAX, GLIDE_MAX)
+        ty := Clamp(Round(VelY * GLIDE_THROW * 0.18), -GLIDE_MAX, GLIDE_MAX)
     }
     pL := L + tx, pT := T + ty, pR := R + tx, pB := B + ty
     KeepOnScreen(hwnd, &pL, &pT, &pR, &pB, tx, ty)
 
     if (SnapEnabled) {
+        ; Reach scales with how fast the window was released.
+        ;
+        ; A fixed 30 px meant a slow, deliberate placement got exactly the same
+        ; yank as a hard flick, so parking a window a few pixels off an edge on
+        ; purpose was impossible without switching the feature off entirely.
+        ; Slow now reaches less and fast reaches further, which is also what
+        ; "momentum increases attraction" means physically. snapAdapt 0
+        ; reproduces the old fixed behaviour exactly.
+        spd   := Sqrt(VelX * VelX + VelY * VelY)
+        adapt := Tune("snapAdapt")
+        reach := SNAP_DISTANCE * (1 + adapt * (Min(spd, 900) / 900 * 2 - 1))
+        if (reach < 1)
+            reach := 1
+
+        ; Direction of travel per axis, so a line the window is moving away
+        ; from stops competing with the one it is heading for.
+        dirX := (VelX > 0) ? 1 : ((VelX < 0) ? -1 : 0)
+        dirY := (VelY > 0) ? 1 : ((VelY < 0) ? -1 : 0)
+
         ; Snap is judged from where the throw would land, not where you let go.
         CollectEdges(hwnd, pL, pT, pR, pB, &vLines, &hLines, NEIGHBOUR_PROX)
-        if !ComputeSnap(pL, pT, pR, pB, vLines, hLines, SNAP_DISTANCE, &newL, &newT, CORNER_BOOST)
+        if !ComputeSnap(pL, pT, pR, pB, vLines, hLines, Round(reach), &newL, &newT
+                      , CORNER_BOOST, dirX, dirY, Tune("snapHyst"))
             newL := pL, newT := pT
     } else {
         newL := pL, newT := pT
@@ -4059,7 +4249,7 @@ SnapWindow(hwnd, L, T, R, B, winX, winY) {
     if (newL = L && newT = T) {
         RememberPosition(hwnd)
         global MomentumTiltEnabled
-        if (MomentumTiltEnabled && (Abs(VelX) > 3 || Abs(VelY) > 3))
+        if (MomentumTiltEnabled && (Abs(VelX) > 200 || Abs(VelY) > 200))
             JelloBounce(hwnd, winX, winY, VelX, VelY)
         return
     }
@@ -4147,16 +4337,20 @@ SnapWindow(hwnd, L, T, R, B, winX, winY) {
     ; sign test contributed was excluding the case where the snap carried us
     ; FURTHER than the throw, which is not a crash.
     crashX := 0, crashY := 0
-    if (Abs(VelX) > 1.5 && tx != 0 && Abs(newL - L) < Abs(tx))
+    if (Abs(VelX) > 100 && tx != 0 && Abs(newL - L) < Abs(tx))
         crashX := tx - (newL - L)
-    if (Abs(VelY) > 1.5 && ty != 0 && Abs(newT - T) < Abs(ty))
+    if (Abs(VelY) > 100 && ty != 0 && Abs(newT - T) < Abs(ty))
         crashY := ty - (newT - T)
 
     landed := OnSnapLanded.Bind(hwnd, destX, destY, crashX, crashY, seams)
 
     glideMs := 0
     if GlideEnabled {
-        glideMs := Glide(hwnd, winX, winY, destX, destY, landed)
+        ; The crash impulse is handed to Glide so the window can overshoot the
+        ; edge it is landing against and spring back, rather than easing
+        ; asymptotically into it and then being squashed by a separate
+        ; animation afterwards.
+        glideMs := Glide(hwnd, winX, winY, destX, destY, landed, crashX, crashY)
     } else {
         ; One-shot: no animation is running, so nothing else would ever flush
         ; this. Without the commit, snapping did nothing at all whenever ice
@@ -4186,14 +4380,24 @@ OnSnapLanded(hwnd, destX, destY, crashX, crashY, seams) {
     for s in seams
         ShowSeamFlash(s[1], s[2], s[3], s[4])
 
-    if (Abs(crashX) <= 4 && Abs(crashY) <= 4)
-        return
     if !DllCall("IsWindow", "ptr", hwnd)
         return
     try {
         WinGetPos(, , &w, &h, hwnd)
+        ; Unconditional, and deliberately outside the squash gate below: this is
+        ; where the window came to rest, whether or not it hit anything hard
+        ; enough to squash. Gating it on the impact was already wrong, and
+        ; raising that gate would have widened the band of landings that were
+        ; never recorded.
         RememberPosition(hwnd, destX, destY, w, h)
-        BounceSqueeze(hwnd, destX, destY, w, h, crashX, crashY)
+
+        ; Squash threshold raised from 4 to 12. The glide now overshoots the
+        ; target and springs back on its own, so squashing the window as well
+        ; reads as two separate things happening on one landing. The squash is
+        ; kept for genuinely hard impacts, where it is the difference between
+        ; "arrived" and "hit something".
+        if (Abs(crashX) > 12 || Abs(crashY) > 12)
+            BounceSqueeze(hwnd, destX, destY, w, h, crashX, crashY)
     }
 }
 
@@ -4204,7 +4408,7 @@ VerifySnap(hwnd, newL, newT) {
     global ActiveAnimations
     if !DllCall("IsWindow", "ptr", hwnd)
         return
-    if ActiveAnimations.Has("Glide_" hwnd) || ActiveAnimations.Has("Bounce_" hwnd)
+    if Anim_Owner(hwnd, "geom")
         return
     if !GetRects(hwnd, &vL, &vT, &vR, &vB, &vx, &vy)
         return
@@ -4222,7 +4426,10 @@ VerifySnap(hwnd, newL, newT) {
 ; It is deliberately NOT called if the window dies mid-slide, or if a new glide
 ; cancels this one, because in both cases the window never landed where this snap
 ; intended and anything keyed to the landing would be wrong.
-Glide(hwnd, fromX, fromY, toX, toY, onLanded := "") {
+; crashX/crashY are how far past the destination the throw was still heading when
+; the snap stopped it. They are optional: a glide with nowhere to land (a monitor
+; throw, a plain slide) passes nothing and gets the pure ease-out it always had.
+Glide(hwnd, fromX, fromY, toX, toY, onLanded := "", crashX := 0, crashY := 0) {
     global GLIDE_MS
     dx := toX - fromX, dy := toY - fromY
     dist := Sqrt(dx * dx + dy * dy)
@@ -4234,9 +4441,29 @@ Glide(hwnd, fromX, fromY, toX, toY, onLanded := "") {
         return 0
     }
 
-    ms := Min(GLIDE_MS, 200 + dist * 1.1)
+    ; The floor was 200 ms, which made a 20 px correction take as long as a
+    ; 150 px slide and feel like the window was wading. Duration is dominated by
+    ; distance now and the floor is only there to stop a two-frame animation.
+    ms := Min(GLIDE_MS, 140 + dist * 0.9)
+    if (ms < 140)
+        ms := 140
+
+    ; Overshoot, capped and signed by the impulse that produced it. The window
+    ; passes the edge it is landing against and springs back, which is what
+    ; "hitting something" looks like. Previously nothing overshot at all: the
+    ; window eased asymptotically into its target and a separate animation
+    ; squashed its width afterwards, so the impact was read as a size change
+    ; rather than as motion.
+    settle := Tune("glideSettle")
+    ox := 0, oy := 0
+    if (settle > 0) {
+        if (crashX != 0)
+            ox := Clamp(crashX * 0.35, -settle, settle)
+        if (crashY != 0)
+            oy := Clamp(crashY * 0.35, -settle, settle)
+    }
+
     animKey := "Glide_" hwnd
-    CancelAnimation(animKey)
 
     start := QPC()
     lastX := -99999, lastY := -99999
@@ -4254,8 +4481,15 @@ Glide(hwnd, fromX, fromY, toX, toY, onLanded := "") {
         }
 
         e := 1 - (1 - t) ** 5
-        nx := Round(fromX + dx * e)
-        ny := Round(fromY + dy * e)
+        ; Exactly 0 at t=0 and t=1, so the terminal frame still writes the
+        ; precise destination and onLanded still fires from the frame that puts
+        ; the window down. t*(1-t)^3 peaks at t=0.25 with a value of 0.10547, so
+        ; it is normalised by 1/0.10547 - without that the whole excursion would
+        ; be a tenth of the configured pixels and invisible. The long tail after
+        ; the peak is the settle.
+        o := 9.4815 * t * (1 - t) ** 3
+        nx := Round(fromX + dx * e + ox * o)
+        ny := Round(fromY + dy * e + oy * o)
 
         if (nx != lastX || ny != lastY) {
             RS_SetPos(hwnd, nx, ny, -1, -1, RS_PRI_ANIM)
@@ -4264,7 +4498,7 @@ Glide(hwnd, fromX, fromY, toX, toY, onLanded := "") {
         return true
     }
 
-    RegisterAnimation(animKey, GlideStep)
+    Anim_Claim(hwnd, "geom", animKey, GlideStep)
     return ms
 }
 
@@ -4279,8 +4513,9 @@ JelloBounce(hwnd, destX, destY, vx, vy) {
     start := QPC()
     ms := 400
     
-    sqX := Clamp(vx * 1.5, -10, 10)
-    sqY := Clamp(vy * 1.5, -10, 10)
+    ; vx/vy arrive in px/s now. 1.5 px of squash per px/frame is 0.0225 per px/s.
+    sqX := Clamp(vx * 0.0225, -10, 10)
+    sqY := Clamp(vy * 0.0225, -10, 10)
     
     JelloStep(dt, now) {
         if (!DllCall("IsWindow", "ptr", hwnd))
@@ -4306,7 +4541,7 @@ JelloBounce(hwnd, destX, destY, vx, vy) {
         RS_SetPos(hwnd, curX, curY, curW, curH, RS_PRI_ANIM)
         return true
     }
-    RegisterAnimation(animKey, JelloStep)
+    Anim_Claim(hwnd, "geom", animKey, JelloStep)
 }
 
 BounceSqueeze(hwnd, X, Y, W, H, crashX, crashY) {
@@ -4371,7 +4606,7 @@ BounceSqueeze(hwnd, X, Y, W, H, crashX, crashY) {
         return true
     }
 
-    RegisterAnimation(animKey, BounceStep)
+    Anim_Claim(hwnd, "geom", animKey, BounceStep)
 }
 
 ThrowWindowToNextMonitor(hwnd, L, T, W, H, vx, vy) {
@@ -4481,7 +4716,11 @@ FadeSeam(flashGui, x, y, w, h) {
             return false
         }
 
-        alpha := Round(255 * (1 - t*t))
+        ; (1-t)^2, not 1-t^2. The old curve was still at 75% brightness a third
+        ; of the way through, which reads as a bar being drawn on the seam; this
+        ; one is bright immediately and mostly gone by the midpoint, which reads
+        ; as a spark where the two edges met.
+        alpha := Round(255 * (1 - t) ** 2)
 
         if (w < h) {
             shrink := Round(h * t * 0.3)
@@ -4851,24 +5090,24 @@ ShellEvent(wParam, lParam, *) {
                 ApplyFocusDepth(lParam)
             }
             
-            global BreathingEnabled, WinLastActive, WinCurrentAlpha, WinTargetAlpha, CustomTrans
+            global BreathingEnabled, WinLastActive, WinCurrentAlpha, WinTargetAlpha
             if (BreathingEnabled && IsRestorable(lParam) && !WinLastActive.Has(lParam)) {
-                baseAlpha := CustomTrans.Has(lParam) ? CustomTrans[lParam] : 255
+                ; 255 = "the breathe layer is dimming nothing yet". The user's
+                ; own opacity is a separate factor and is not this map's business.
                 WinLastActive[lParam] := QPC()
-                WinCurrentAlpha[lParam] := baseAlpha
-                WinTargetAlpha[lParam] := baseAlpha
+                WinCurrentAlpha[lParam] := 255
+                WinTargetAlpha[lParam] := 255
             }
         }
     }
 
     if ((wParam & 0x7FFF) = HSHELL_WINDOWCREATED) {
-        global OpenAnim, GhostHiddenWindows, BreathingEnabled, WinLastActive, WinCurrentAlpha, WinTargetAlpha, CustomTrans
+        global OpenAnim, GhostHiddenWindows, BreathingEnabled, WinLastActive, WinCurrentAlpha, WinTargetAlpha
         hwnd := lParam
         if (BreathingEnabled && IsRestorable(hwnd)) {
-            baseAlpha := CustomTrans.Has(hwnd) ? CustomTrans[hwnd] : 255
             WinLastActive[hwnd] := QPC()
-            WinCurrentAlpha[hwnd] := baseAlpha
-            WinTargetAlpha[hwnd] := baseAlpha
+            WinCurrentAlpha[hwnd] := 255
+            WinTargetAlpha[hwnd] := 255
         }
         
         ; Only hide a window we are definitely going to animate back.
@@ -4886,7 +5125,7 @@ ShellEvent(wParam, lParam, *) {
         ; animate should ever have paid that.
         if (OpenAnim != "None" && WillAnimateOpen(hwnd)) {
             try {
-                RS_SetAlpha(hwnd, 0, RS_PRI_ANIM)
+                RS_SetAlphaLayer(hwnd, "open", 0.0, RS_PRI_ANIM)
                 RS_Commit()
                 GhostHiddenWindows[hwnd] := true
             }
@@ -5032,13 +5271,16 @@ HandleNewWindow(hwnd) {
 }
 
 RevealWindow(hwnd) {
-    global CustomTrans, GhostWindows
+    global GhostWindows
     if !DllCall("IsWindow", "ptr", hwnd)
         return
-    ; Do not stomp an opacity the user asked for in the meantime.
-    if (CustomTrans.Has(hwnd) || GhostWindows.Has(hwnd))
+    ; The CustomTrans guard is gone: clearing the "open" layer cannot stomp an
+    ; opacity the user asked for in the meantime, because the base is a separate
+    ; factor. The ghost guard stays - a window that became a ghost while the open
+    ; animation was pending is no longer this code's to reveal.
+    if GhostWindows.Has(hwnd)
         return
-    try RS_SetAlpha(hwnd, "Off", RS_PRI_ANIM)
+    try RS_ClearAlphaLayer(hwnd, "open", RS_PRI_ANIM)
     RS_Commit()
 }
 
@@ -5059,7 +5301,7 @@ UnrollWindow(hwnd, restoredRect := "") {
 
     ; Reveal first, then clip: the region does the animating here, so the window
     ; must be opaque from the first frame.
-    try RS_SetAlpha(hwnd, "Off", RS_PRI_ANIM)
+    try RS_ClearAlphaLayer(hwnd, "open", RS_PRI_ANIM)
 
     animKey := "Unroll_" hwnd
     CancelAnimation(animKey)
@@ -5085,7 +5327,7 @@ UnrollWindow(hwnd, restoredRect := "") {
         return true
     }
     
-    RegisterAnimation(animKey, UnrollStep)
+    Anim_Claim(hwnd, "region", animKey, UnrollStep)
 }
 
 GhostSlideIn(hwnd, restoredRect := "") {
@@ -5122,7 +5364,7 @@ GhostSlideIn(hwnd, restoredRect := "") {
         t := (now - start) / ms
         if (t >= 1) {
             MoveFast(hwnd, x, endY)
-            try RS_SetAlpha(hwnd, "Off", RS_PRI_ANIM)
+            try RS_ClearAlphaLayer(hwnd, "open", RS_PRI_ANIM)
             return false
         }
         
@@ -5130,12 +5372,11 @@ GhostSlideIn(hwnd, restoredRect := "") {
         curY := Round(startY + (endY - startY) * ease)
         MoveFast(hwnd, x, curY)
         
-        alpha := Round(255 * ease)
-        try RS_SetAlpha(hwnd, alpha, RS_PRI_ANIM)
+        try RS_SetAlphaLayer(hwnd, "open", ease, RS_PRI_ANIM)
         return true
     }
     
-    RegisterAnimation(animKey, GhostSlideStep)
+    Anim_Claim(hwnd, "geom", animKey, GhostSlideStep)
 }
 
 PortalScaleIn(hwnd, restoredRect := "") {
@@ -5161,7 +5402,7 @@ PortalScaleIn(hwnd, restoredRect := "") {
     cX := x + w / 2
     cY := y + h / 2
     
-    try RS_SetAlpha(hwnd, 0, RS_PRI_ANIM)
+    try RS_SetAlphaLayer(hwnd, "open", 0.0, RS_PRI_ANIM)
     RS_SetPos(hwnd, Round(cX - (w * 0.8) / 2), Round(cY - (h * 0.8) / 2), Round(w * 0.8), Round(h * 0.8), RS_PRI_ANIM)
     RS_Commit()
     
@@ -5172,7 +5413,7 @@ PortalScaleIn(hwnd, restoredRect := "") {
         t := (now - start) / ms
         if (t >= 1) {
             RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
-            try RS_SetAlpha(hwnd, "Off", RS_PRI_ANIM)
+            try RS_ClearAlphaLayer(hwnd, "open", RS_PRI_ANIM)
             return false
         }
         
@@ -5189,12 +5430,11 @@ PortalScaleIn(hwnd, restoredRect := "") {
         
         RS_SetPos(hwnd, curX, curY, curW, curH, RS_PRI_ANIM)
         
-        alpha := Round(255 * (t > 0.4 ? 1 : (t / 0.4)))
-        try RS_SetAlpha(hwnd, alpha, RS_PRI_ANIM)
+        try RS_SetAlphaLayer(hwnd, "open", (t > 0.4 ? 1.0 : (t / 0.4)), RS_PRI_ANIM)
         return true
     }
     
-    RegisterAnimation(animKey, PortalScaleStep)
+    Anim_Claim(hwnd, "geom", animKey, PortalScaleStep)
 }
 
 global PulsingWindows := Map()
@@ -5220,7 +5460,7 @@ PulseWindow(hwnd) {
     ; position, then restored the window to it on its final frame. Activating a
     ; window mid-snap threw away the snap. Same guard idiom as VerifySnap.
     animKey := "Pulse_" hwnd
-    if (ActiveAnimations.Has("Glide_" hwnd) || ActiveAnimations.Has("Bounce_" hwnd))
+    if Anim_Owner(hwnd, "geom")
         return
     if PulsingWindows.Has(hwnd) {
         ; A callback dropped by the scheduler (it swallows exceptions) would
@@ -5267,7 +5507,10 @@ PulseWindow(hwnd) {
             return false
         }
 
-        e := Sin(3.14159265 * t)
+        ; t**0.7 skews the half-sine so the window jumps out quickly and eases
+        ; back slowly. A symmetric pulse spends as long growing as returning,
+        ; which reads as a wobble rather than as "this window just took focus".
+        e := Sin(3.14159265 * t ** 0.7)
         gx := Round(pw * e)
         gy := Round(ph * e)
         nx := x - gx, ny := y - gy
@@ -5278,7 +5521,7 @@ PulseWindow(hwnd) {
         return true
     }
 
-    RegisterAnimation(animKey, PulseStep)
+    Anim_Claim(hwnd, "geom", animKey, PulseStep)
 }
 
 ; ====== Multi-Monitor Focus Dimmer ======
@@ -6822,7 +7065,12 @@ ToggleGhostMode() {
         ; direct call left the cache stale, so the very first proximity write
         ; could be dropped as "already applied" and the window sat opaque until
         ; the mouse moved far enough to ask for a different value.
-        RS_SetAlpha(hwnd, 255, RS_PRI_AMBIENT)
+        ;
+        ; A layer at factor 1.0 rather than a cleared layer, for the same
+        ; reason: the mere presence of "ghost" keeps the record non-neutral, so
+        ; the composed value can never collapse to "Off" and strip
+        ; WS_EX_LAYERED back off while the cursor is sitting on the window.
+        RS_SetAlphaLayer(hwnd, "ghost", 1.0, RS_PRI_AMBIENT)
         RS_Commit()
         WinSetAlwaysOnTop(1, hwnd)
     } catch
@@ -6848,7 +7096,9 @@ UnGhostWindow(hwnd) {
         return
 
     try {
-        RS_SetAlpha(hwnd, "Off", RS_PRI_AMBIENT)
+        ; Clearing the layer, not forcing "Off": a window the user had also set
+        ; to 50% with the wheel goes back to 50%, not to fully opaque.
+        RS_ClearAlphaLayer(hwnd, "ghost", RS_PRI_AMBIENT)
         RS_Commit()                            ; nothing else will flush this
         if !(orig.exStyle & 0x20)
             WinSetExStyle("-0x20", hwnd)
@@ -6897,7 +7147,7 @@ GhostMonitorStep() {
             ; in one batched pass; committing in here meant one full flush per
             ; ghosted window, 40 times a second.
             if (!info.HasProp("lastAlpha") || info.lastAlpha != targetAlpha) {
-                RS_SetAlpha(hwnd, targetAlpha, RS_PRI_AMBIENT)
+                RS_SetAlphaLayer(hwnd, "ghost", targetAlpha / 255.0, RS_PRI_AMBIENT)
                 info.lastAlpha := targetAlpha
             }
 
@@ -6965,6 +7215,11 @@ Bye(*) {
     try SetTimer(CheckMouseIdle, 0)
     try SetTimer(CheckElasticDrag, 0)
     try SetTimer(CheckMagDrag, 0)
+    ; The custom clock repeats every second and was the only timer still
+    ; running through teardown. Bye() is also the tray -> Restart path, so it
+    ; survived past RS_Shutdown() with a live Gui behind it.
+    try SetTimer(UpdateCustomClock, 0)
+    try HideCustomClock()
 
     ; Rubber-band scroll parks a foreign window at an offset from its own base.
     ; Nothing else puts it back, so exiting mid-lean left it displaced.
@@ -7034,16 +7289,6 @@ Bye(*) {
         if DllCall("IsWindow", "ptr", hwnd)
             try RS_SetRegion(hwnd, "", RS_PRI_USER)
     }
-    for hwnd, alpha in CustomTrans {
-        if DllCall("IsWindow", "ptr", hwnd)
-            try RS_SetAlpha(hwnd, "Off", RS_PRI_USER)
-    }
-    ; Breathing-dimmed windows: nothing used to queue anything for these, so
-    ; exiting while windows were dimmed left them dimmed permanently.
-    for hwnd, alpha in WinCurrentAlpha {
-        if DllCall("IsWindow", "ptr", hwnd)
-            try RS_SetAlpha(hwnd, "Off", RS_PRI_USER)
-    }
     for hwnd, info in GhostWindows.Clone()
         try UnGhostWindow(hwnd)
     for hwnd, info in BottomWindows.Clone()
@@ -7057,6 +7302,13 @@ Bye(*) {
     try RestoreFocusDepth()
     try RestoreCurtain()
     try RestoreShatters()
+
+    ; Last, and after every restorer above, because those clear their own layers
+    ; and a record that has gone neutral has already pruned itself. This is the
+    ; sweep for anything they missed. It replaces two hand-written loops over
+    ; CustomTrans and WinCurrentAlpha, which between them knew about only two of
+    ; the six things that can dim a window.
+    try RS_ResetAllAlphaState(RS_PRI_USER)
 
     RS_Commit()
     RS_Flush()
@@ -7486,19 +7738,27 @@ ElasticTimeout() {
 
 ElasticScrollCallback(dt, now) {
     global ElasticHwnd, ElasticOffsetY, ElasticTargetY, ElasticVel, ElasticBaseX, ElasticBaseY
-    global DragHwnd
-    
+    global DragHwnd, FRAME_MS
+
     if (!DllCall("IsWindow", "ptr", ElasticHwnd) || DragHwnd == ElasticHwnd) {
         if (DragHwnd == ElasticHwnd)
             try RS_SetPos(ElasticHwnd, ElasticBaseX, ElasticBaseY, -1, -1, RS_PRI_ANIM)
         ElasticHwnd := 0
         return false
     }
-    
-    ElasticVel += (ElasticTargetY - ElasticOffsetY) * 0.4
-    ElasticVel *= 0.6
-    ElasticOffsetY += ElasticVel
-    
+
+    ; The only real spring in the program, and it was the last thing still
+    ; integrating per frame rather than per millisecond: a heavy frame made the
+    ; rubber band snap back faster, not later. Scaling the stiffness by dt and
+    ; the damping by an exponential of dt keeps the same shape at any frame rate,
+    ; and reproduces the old 0.4 / 0.6 constants exactly at the nominal frame.
+    if (dt <= 0)
+        dt := FRAME_MS
+    steps := dt / FRAME_MS
+    ElasticVel += (ElasticTargetY - ElasticOffsetY) * 0.4 * steps
+    ElasticVel *= Exp(-0.5108256 * steps)          ; ln(1/0.6) per nominal frame
+    ElasticOffsetY += ElasticVel * steps
+
     if (Abs(ElasticTargetY) < 1 && Abs(ElasticOffsetY) < 1 && Abs(ElasticVel) < 1) {
         try RS_SetPos(ElasticHwnd, ElasticBaseX, ElasticBaseY + Round(ElasticOffsetY), -1, -1, RS_PRI_ANIM)
         ElasticHwnd := 0
@@ -7976,11 +8236,32 @@ RestoreFocusDepth() {
     for hwnd, orig in PushedBackWindows.Clone() {
         try CancelAnimation("FocusDepth_" hwnd)
         if (DllCall("IsWindow", "ptr", hwnd)) {
-            try RS_SetPos(hwnd, orig.x, orig.y, orig.w, orig.h, RS_PRI_USER)
-            try RS_SetAlpha(hwnd, "Off", RS_PRI_USER)
+            ; Same staleness rule as BringForwardWindow: only hand the geometry
+            ; back if the window is still where we parked it. Anything else has
+            ; moved it since, and its position is now more correct than ours.
+            if FocusDepthAtPushedRect(hwnd, orig)
+                try RS_SetPos(hwnd, orig.x, orig.y, orig.w, orig.h, RS_PRI_USER)
+            try RS_ClearAlphaLayer(hwnd, "depth", RS_PRI_USER)
         }
     }
     PushedBackWindows := Map()
+}
+
+; Is this window still sitting at the rect we pushed it back to?
+;
+; PushBackWindow captures the pre-shrink rect and BringForwardWindow restores to
+; it. If a snap, a glide, a layout key or the app itself moved or resized the
+; window while it was pushed back, restoring that captured rect teleports it to
+; a position the user has not seen for minutes. Comparing against the rect we
+; actually left it at is what tells the two cases apart.
+FocusDepthAtPushedRect(hwnd, orig) {
+    try WinGetPos(&cx, &cy, &cw, &ch, hwnd)
+    catch
+        return false
+    if (cx = "" || cw = "")
+        return false
+    return (Abs(cx - orig.px) <= 2 && Abs(cy - orig.py) <= 2
+         && Abs(cw - orig.pw) <= 2 && Abs(ch - orig.ph) <= 2)
 }
 
 ApplyFocusDepth(newActive) {
@@ -8003,90 +8284,110 @@ ApplyFocusDepth(newActive) {
 ; band it belongs in, and RestoreFocusDepth keeps USER because that IS explicit.
 PushBackWindow(hwnd) {
     global PushedBackWindows
+    ; Never fight a motion that is already running. A glide, bounce or layout
+    ; move owns this window's geometry, and activating another window mid-slide
+    ; used to resize it out from under the animation.
+    if Anim_Owner(hwnd, "geom")
+        return
+    ; A maximized window cannot be scaled down and put back sensibly - the OS
+    ; owns its rect - so it gets the alpha cue only.
+    try {
+        if (WinGetMinMax(hwnd) != 0)
+            return
+    } catch
+        return
     try WinGetPos(&x, &y, &w, &h, hwnd)
     catch
         return
     if (w = 0 || h = 0)
         return
-        
-    PushedBackWindows[hwnd] := {x: x, y: y, w: w, h: h}
-    
+
+    ; The rect we will leave it at, computed once so the settle frame, the
+    ; staleness test and the restore all agree on it.
+    pw := Round(w * 0.98)
+    ph := Round(h * 0.98)
+    px := x + Round((w - pw) / 2)
+    py := y + Round((h - ph) / 2)
+    PushedBackWindows[hwnd] := {x: x, y: y, w: w, h: h, px: px, py: py, pw: pw, ph: ph}
+
     animKey := "FocusDepth_" hwnd
-    CancelAnimation(animKey)
     start := QPC()
     ms := 150
-    
+
     PushBackStep(dt, now) {
         if (!DllCall("IsWindow", "ptr", hwnd))
             return false
         t := (now - start) / ms
         if (t >= 1) {
-            nw := Round(w * 0.98)
-            nh := Round(h * 0.98)
-            nx := x + Round((w - nw) / 2)
-            ny := y + Round((h - nh) / 2)
-            RS_SetPos(hwnd, nx, ny, nw, nh, RS_PRI_ANIM)
-            try RS_SetAlpha(hwnd, 210, RS_PRI_ANIM)
+            RS_SetPos(hwnd, px, py, pw, ph, RS_PRI_ANIM)
+            try RS_SetAlphaLayer(hwnd, "depth", 210 / 255.0, RS_PRI_ANIM)
             return false
         }
-        
+
         ease := 1 - (1 - t) ** 2
         scale := 1.0 - (0.02 * ease)
         nw := Round(w * scale)
         nh := Round(h * scale)
         nx := x + Round((w - nw) / 2)
         ny := y + Round((h - nh) / 2)
-        alpha := Round(255 - (45 * ease))
-        
+
         RS_SetPos(hwnd, nx, ny, nw, nh, RS_PRI_ANIM)
-        try RS_SetAlpha(hwnd, alpha, RS_PRI_ANIM)
+        try RS_SetAlphaLayer(hwnd, "depth", (255 - (45 * ease)) / 255.0, RS_PRI_ANIM)
         return true
     }
-    RegisterAnimation(animKey, PushBackStep)
+    Anim_Claim(hwnd, "geom", animKey, PushBackStep)
 }
 
 BringForwardWindow(hwnd) {
     global PushedBackWindows
+    if (!PushedBackWindows.Has(hwnd))
+        return
+
+    orig := PushedBackWindows[hwnd]
+    PushedBackWindows.Delete(hwnd)
+
+    animKey := "FocusDepth_" hwnd
+
+    ; The window has been moved or resized since we pushed it back, so the rect
+    ; we captured is stale and restoring it would teleport the window. Give the
+    ; opacity back and leave the geometry to whoever owns it now.
+    if !FocusDepthAtPushedRect(hwnd, orig) {
+        CancelAnimation(animKey)
+        try RS_ClearAlphaLayer(hwnd, "depth", RS_PRI_ANIM)
+        RS_Commit()                    ; one-shot: no animation will flush this
+        return
+    }
+
     try WinGetPos(&x, &y, &w, &h, hwnd)
     catch
         return
     if (w = 0 || h = 0)
         return
-        
-    if (!PushedBackWindows.Has(hwnd))
-        return
-        
-    orig := PushedBackWindows[hwnd]
-    PushedBackWindows.Delete(hwnd)
-    
-    animKey := "FocusDepth_" hwnd
-    CancelAnimation(animKey)
+
     start := QPC()
     ms := 150
-    
+
     BringForwardStep(dt, now) {
         if (!DllCall("IsWindow", "ptr", hwnd))
             return false
         t := (now - start) / ms
         if (t >= 1) {
             RS_SetPos(hwnd, orig.x, orig.y, orig.w, orig.h, RS_PRI_ANIM)
-            try RS_SetAlpha(hwnd, "Off", RS_PRI_ANIM)
+            try RS_ClearAlphaLayer(hwnd, "depth", RS_PRI_ANIM)
             return false
         }
-        
+
         ease := 1 - (1 - t) ** 2
         curW := w + Round((orig.w - w) * ease)
         curH := h + Round((orig.h - h) * ease)
         curX := orig.x + Round((orig.w - curW) / 2)
         curY := orig.y + Round((orig.h - curH) / 2)
-        
-        alpha := 210 + Round(45 * ease)
-        
+
         RS_SetPos(hwnd, curX, curY, curW, curH, RS_PRI_ANIM)
-        try RS_SetAlpha(hwnd, alpha, RS_PRI_ANIM)
+        try RS_SetAlphaLayer(hwnd, "depth", (210 + 45 * ease) / 255.0, RS_PRI_ANIM)
         return true
     }
-    RegisterAnimation(animKey, BringForwardStep)
+    Anim_Claim(hwnd, "geom", animKey, BringForwardStep)
 }
 
 NotchAnim(hwnd, startY, destY, fadeIn := true, onDone := "") {
@@ -8309,7 +8610,7 @@ CurtainDropDown(hwnd, x, y, w, h) {
         RS_SetPos(hwnd, x, curY, -1, -1, RS_PRI_USER)
         return true
     }
-    RegisterAnimation(animKey, DropStep)
+    Anim_Claim(hwnd, "geom", animKey, DropStep)
 }
 
 CurtainBounceUp(hwnd, x, y, w, h) {
@@ -8337,7 +8638,7 @@ CurtainBounceUp(hwnd, x, y, w, h) {
         RS_SetPos(hwnd, x, curY, -1, -1, RS_PRI_USER)
         return true
     }
-    RegisterAnimation(animKey, UpStep)
+    Anim_Claim(hwnd, "geom", animKey, UpStep)
 }
 
 #HotIf CarouselAltTabEnabled && !CarouselActive
@@ -9562,6 +9863,10 @@ SyncHotCornersTimer()
 SyncCursorWrapTimer()
 SyncActiveBorderTimer()
 SyncTextExpander()
+; Missing from this block until now, so a saved [taskbar] customclock=1 loaded
+; the flag but never armed the 1000 ms timer: the clock only appeared once the
+; user opened the settings window, because ApplyUi was its sole caller.
+SyncCustomClockTimer()
 UpdateKeyboardHook()
 ; Last of all. ShellEvent is the widest-reaching callback in the file - window
 ; created, destroyed, activated and minimised - so nothing else may still be

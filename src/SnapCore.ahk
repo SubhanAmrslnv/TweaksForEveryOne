@@ -11,21 +11,69 @@
 ; ComputeSnap only retries the perpendicular axis once this returns true, so a
 ; window already hugging the left edge (L exactly on the line) reported "no
 ; snap" and never got the boosted pull into the corner.
-SnapAxis(lo, hi, lines, threshold, &newLo) {
+; `dir` is the sign of travel on this axis (-1, 0, +1) and `hyst` is how strongly
+; an edge the window is already flush with holds on to it. Both default to the
+; old behaviour, so a caller that passes neither gets exactly the previous
+; nearest-line result.
+;
+; Candidates are scored rather than measured, and the score is what the two extra
+; parameters bend:
+;
+;   * a line that would pull the window BACKWARDS against the direction it was
+;     thrown is penalised. Without this, a line the window is visibly moving away
+;     from competes on equal terms with the one it is heading for, which is what
+;     made a fast drag past a neighbour occasionally stick to the wrong side.
+;   * a line the window's edge is already sitting on is discounted, so nudging an
+;     already-snapped window a few pixels keeps it where it is instead of letting
+;     a neighbour half a pixel closer steal it.
+;
+; Scores only ever reorder candidates; the accept test at the end is still a
+; plain distance against `threshold`, so nothing outside the reach can be pulled
+; in by a bias.
+SnapAxis(lo, hi, lines, threshold, &newLo, dir := 0, hyst := 0) {
     size := hi - lo
     newLo := lo
-    bestD := threshold + 1
+    ; Not threshold+1: acceptance is decided by the `d > threshold` test below, so
+    ; the score only has to order what already qualifies. Seeding this with the
+    ; threshold would let the directional penalty push a perfectly good candidate
+    ; back out of range, which is the opposite of what the bias is for.
+    bestScore := 999999
     locked := false
     for v in lines {
-        if (Abs(lo - v) < bestD) {
-            bestD := Abs(lo - v)
-            newLo := v
-            locked := true
-        }
-        if (Abs(hi - v) < bestD) {
-            bestD := Abs(hi - v)
-            newLo := v - size
-            locked := true
+        loop 2 {
+            ; Edge 1 is the leading edge, edge 2 the trailing one.
+            if (A_Index = 1) {
+                d      := Abs(lo - v)
+                cand   := v
+                moving := v - lo
+            } else {
+                d      := Abs(hi - v)
+                cand   := v - size
+                moving := v - hi
+            }
+            if (d > threshold)
+                continue
+            score := d
+            ; Against the throw: real, but it has to beat a forward candidate by
+            ; a clear margin to win.
+            if (dir != 0 && moving != 0 && ((moving > 0) != (dir > 0)))
+                score *= 1.6
+            ; Already flush with this line: hold on to it.
+            ;
+            ; The bonus tapers with distance (score becomes 2d - hyst inside the
+            ; band) rather than being a flat subtraction. A flat one is not
+            ; monotonic: with hyst 6, a line 6 px away would score 0 and beat a
+            ; line 1 px away scoring 1, so "stickiness" would have pulled the
+            ; window to the FURTHER of two nearby edges. This way the ordering
+            ; inside the band still runs closest-first, and it joins the
+            ; unbiased scores continuously at d = hyst.
+            if (hyst > 0 && d <= hyst)
+                score -= (hyst - d)
+            if (score < bestScore) {
+                bestScore := score
+                newLo     := cand
+                locked    := true
+            }
         }
     }
     return locked
@@ -34,16 +82,17 @@ SnapAxis(lo, hi, lines, threshold, &newLo) {
 ; cornerBoost > 1 retries the perpendicular axis with a larger threshold once
 ; one axis has locked, so a window hugging an edge drops into the corner from
 ; noticeably further away than a plain edge would catch it.
-ComputeSnap(L, T, R, B, vLines, hLines, threshold, &newL, &newT, cornerBoost := 1.0) {
-    sx := SnapAxis(L, R, vLines, threshold, &newL)
-    sy := SnapAxis(T, B, hLines, threshold, &newT)
+ComputeSnap(L, T, R, B, vLines, hLines, threshold, &newL, &newT, cornerBoost := 1.0
+          , dirX := 0, dirY := 0, hyst := 0) {
+    sx := SnapAxis(L, R, vLines, threshold, &newL, dirX, hyst)
+    sy := SnapAxis(T, B, hLines, threshold, &newT, dirY, hyst)
 
     if (cornerBoost > 1.0) {
         boosted := Round(threshold * cornerBoost)
         if (sx && !sy)
-            sy := SnapAxis(T, B, hLines, boosted, &newT)
+            sy := SnapAxis(T, B, hLines, boosted, &newT, dirY, hyst)
         else if (sy && !sx)
-            sx := SnapAxis(L, R, vLines, boosted, &newL)
+            sx := SnapAxis(L, R, vLines, boosted, &newL, dirX, hyst)
     }
 
     return sx || sy

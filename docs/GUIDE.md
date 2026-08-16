@@ -57,19 +57,29 @@ top-left corner from far further away than a normal edge would catch it.
 > Windows already snaps to *screen edges* by itself. The genuinely new thing here
 > is windows sticking **to each other** — that's what to try when judging it.
 
-**Settings:** Snap distance (how close before it grabs), Corner boost (how much
-stronger corners are), Neighbour reach (how far away another window can be and
-still attract).
+How close it has to be before it grabs depends on how fast you let go: place a
+window slowly and the reach shrinks, so you can park it a few pixels off an edge
+on purpose; flick it and the reach grows. An edge the window already touches
+keeps it, and an edge it is moving away from stops competing with the one it is
+heading for.
+
+**Settings:** Snap distance (the reach at an average drag speed), Snap speed
+response (`0` = one fixed reach, as it used to be), Edge stickiness (how hard an
+edge you already touch holds on), Corner boost (how much stronger corners are),
+Neighbour reach (how far away another window can be and still attract).
 
 ### 2. Ice glide
 
 Let go mid-drag and the window keeps sliding, slowing down, then settles onto
 whatever edge it drifts near — like sliding something across ice.
 
-Flick harder and it travels further. It never flies off-screen.
+Flick harder and it travels further. If the throw was still going when an edge
+stopped it, the window overshoots slightly and springs back instead of stopping
+dead. It never flies off-screen.
 
 **Settings:** Throw strength (`0` = stop dead where you let go), Slide time (how
-long the longest slide may take).
+long the longest slide may take), Throw distance, Settle overshoot (`0` = land
+without the spring-back).
 
 > Needs "Show window contents while dragging" — see `ANIMATIONS.md`.
 
@@ -206,7 +216,7 @@ Seven pages down the left:
 
 | Page | What's on it |
 |---|---|
-| **Window Management** | Snapping (distance, corner boost, neighbour reach, seam flash), ice glide (throw, slide time, throw distance), drag opacity floor, tiling grid gap, rubber-band travel, alt-drag, fly-to-mouse minimize, grab & pan, roll-up, position memory |
+| **Window Management** | Snapping (distance, speed response, edge stickiness, corner boost, neighbour reach, seam flash), ice glide (throw, slide time, throw distance, settle overshoot), drag opacity floor, tiling grid gap, rubber-band travel, alt-drag, fly-to-mouse minimize, grab & pan, roll-up, position memory |
 | **Power Features** | Spotlight, live PiP, ghost window (opacity, fade range, click range), always on bottom, middle-click close, minimize to tray, quick folder jump, Quick Look |
 | **System & Media** | Taskbar volume scroll, volume OSD (step, hold time, opacity), mic kill-switch, boss key, text expander, smart CapsLock, plain-text paste, "never dim these apps" |
 | **Multi-Monitor** | Cursor wrap (tolerance, hold time, approach speed, cooldown), focus dimmer strength, active border (thickness, opacity, colour), breathing (delay, opacity), shake to find, cursor yawn, focus pulse, new-window animation |
