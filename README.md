@@ -57,6 +57,12 @@ Drag a window and let go near a screen edge, a corner, or **another window's
 edge** and it jumps flush. Each axis resolves independently, so a window can
 stick to a screen edge sideways and to another window vertically in one motion.
 
+The pull scales with how fast you let go. Place a window slowly and the reach
+shrinks, so you can park it a few pixels off an edge on purpose; flick it and
+the reach grows, so momentum increases attraction. An edge the window is
+already flush with holds on to it, and an edge it is moving away from stops
+competing with the one it is heading for.
+
 Corners pull harder than plain edges: once one axis grabs, the other is retried
 with a much larger reach, so a window hugging the left edge drops into the
 corner from far further away.
@@ -67,7 +73,9 @@ corner from far further away.
 ### Ice glide
 Let go mid-drag and the window keeps sliding, decelerating on a quintic
 ease-out, then settles onto whatever edge it drifts near. Flick harder and it
-travels further. It never flies off-screen.
+travels further. If the throw was still going when the edge stopped it, the
+window overshoots slightly and springs back rather than stopping dead. It
+never flies off-screen.
 
 ### Always on top
 `Shift + Alt + O` pins the active window above everything else.

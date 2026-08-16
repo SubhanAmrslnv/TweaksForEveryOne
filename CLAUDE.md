@@ -64,8 +64,8 @@ Every toggle fires `Notify()` → `TrayTip`, so state changes are always visible
 
 | Feature | Behaviour | INI section / keys | Globals |
 |---|---|---|---|
-| **Magnetic snapping** | On drag-release, each axis independently snaps to a screen edge, a monitor work-area edge, or another window's edge. Corners pull harder: once one axis grabs, the other is retried with `CORNER_BOOST` × the reach | `[snap]` `enabled`, `flash`, `distance`, `cornerBoost`, `neighbour` | `SnapEnabled`, `SNAP_DISTANCE` (30), `CORNER_BOOST` (2.2), `NEIGHBOUR_PROX` (90) |
-| **Ice glide** | Release mid-drag and the window keeps sliding on a quintic ease-out, then snaps to whatever it drifts near. Never leaves the screen | `[glide]` `enabled`, `throw`, `ms` | `GlideEnabled`, `GLIDE_THROW` (0.9), `GLIDE_MS` (650), `GLIDE_MAX` (500) |
+| **Magnetic snapping** | On drag-release, each axis independently snaps to a screen edge, a monitor work-area edge, or another window's edge. The reach SCALES WITH RELEASE SPEED (`adapt`): slow and deliberate reaches less so a window can be parked near an edge on purpose, a hard flick reaches further. A line the window is moving away from is penalised, and one it is already flush with wins ties by `hyst` px. Corners pull harder: once one axis grabs, the other is retried with `CORNER_BOOST` × the reach | `[snap]` `enabled`, `flash`, `distance`, `adapt`, `hyst`, `cornerBoost`, `neighbour` | `SnapEnabled`, `SNAP_DISTANCE` (30), `CORNER_BOOST` (2.2), `NEIGHBOUR_PROX` (90) |
+| **Ice glide** | Release mid-drag and the window keeps sliding on a quintic ease-out, then snaps to whatever it drifts near. If the throw was still heading somewhere when the snap stopped it, the window overshoots the edge by up to `settle` px and springs back. Never leaves the screen | `[glide]` `enabled`, `throw`, `ms`, `settle` | `GlideEnabled`, `GLIDE_THROW` (0.9), `GLIDE_MS` (650), `GLIDE_MAX` (500) |
 | **Always on top** | Toggles `WS_EX_TOPMOST` on the active window. Hotkey only — no persisted setting, and it self-excludes by PID so it can't pin its own GUI | — | — |
 | **Position memory** | Each app reopens at its last size/position, keyed on `exe_class`. Dialogs, owned windows, `WS_EX_TOOLWINDOW`, anything without `WS_THICKFRAME`, and Picture-in-Picture (PiP) windows are excluded | `[memory]` `enabled` | `RestoreEnabled`, `POS_FILE` |
 
@@ -181,6 +181,8 @@ Hot Corners uses the same dwell model (`[corners] size`, `[corners] delay`) for 
 Add a new layout action by computing a frame rect and handing it to `ApplyLayout` — do not queue `RS_SetPos` directly.
 
 `ToggleMaximize` is the deliberate exception: it uses `WinMaximize`/`WinRestore` and **cannot** use `IsRestorable()` as its gate, because that goes through `IsSnappable()`, which rejects maximized windows — the one window it exists to un-maximize.
+
+**Morph Maximize** (`MorphMaximize`) runs *after* the state change, not instead of it. `RS_*` has no concept of a maximize state - it queues explicit rects, and a window that merely covers the work area is not maximized to the OS or to the app. So Windows performs the state change, `MorphMaximize` reads where it landed, seeds one frame at the old rect and glides to the new one on the `"geom"` channel. The window is genuinely maximized throughout; only its rect is animated. It is skipped entirely when ice glide is off, so it inherits that preference rather than adding a setting.
 
 Work areas are read live via `MonitorGetWorkArea` rather than cached in `ScreenMetrics()`: the work area changes when the taskbar auto-hides and that raises no `WM_DISPLAYCHANGE`, so a cached copy would be stale exactly when Smart Auto-Hide is on. Only the *monitor* rects come from the cache (`MonitorIndexAt`). This is a hotkey path, so the ~3 µs is irrelevant.
 
@@ -309,6 +311,43 @@ RS_SetRegion(hwnd, regionStr, pri)       ; "" clears
 RS_SetZOrder(hwnd, insertAfter, flags, pri)
 ```
 
+**Opacity on a FOREIGN window is composed, never absolute.** Several unrelated features can
+want to dim the same window at once, and priorities only arbitrate *within one flush* - across
+flushes an absolute write is simply last-writer-wins. So RenderCore keeps one persistent record
+per window, `RS_AlphaState`, holding a base the user chose times any number of named modifier
+layers, and it is the only thing that computes the committed value:
+
+```
+RS_SetBaseAlpha(hwnd, alpha, pri)              ; the user's wheel, and nothing else
+RS_SetAlphaLayer(hwnd, "breathe", 0.7, pri)    ; factor 0.0 - 1.0
+RS_ClearAlphaLayer(hwnd, "breathe", pri)       ; cannot touch the base or another layer
+RS_ResetAlphaState(hwnd, pri)                  ; teardown only
+RS_ResetAllAlphaState(pri)                     ; teardown only - Bye() and the panic key
+```
+
+`final = base * product(layers)`. `RS_SetAlpha` stays, but **only for windows we created**,
+where one owner is guaranteed by construction and composition would be overhead for a value
+that could only ever have one contributor.
+
+**One owner per layer name**, and the language cannot enforce it, so the list lives in
+`RenderCore.ahk`'s header: `"drag"`, `"ghost"`, `"breathe"`, `"depth"`, `"open"`, `"gravity"`.
+Two owners of one name reproduce the oscillation bug this replaced, inside a single layer,
+where it is harder to see.
+
+Before this, every producer wrote an absolute including a hard `"Off"`, and three hand-rolled
+compositions had grown to work around it. The user-visible symptom: set a window to 50% with
+`Shift+Alt+Wheel`, click away and back - Focus Depth wrote 210 and then `"Off"`, so the 50% was
+gone while `CustomTrans` still claimed 128. Dragging, ghosting or idling the window did the
+same. `CustomTrans` survives as a *predicate and registry*, not as the source of truth, and
+breathing's `WinTargetAlpha`/`WinCurrentAlpha` now hold that layer's numerator rather than an
+absolute opacity.
+
+**`"Off"` (256, which strips `WS_EX_LAYERED`) is emitted only for a STRUCTURALLY neutral
+record** - base 255 and zero layers - never because the arithmetic rounded up to 255.
+`ToggleGhostMode` installs its layer at factor `1.0` for exactly this reason: a numeric rule
+would strip `WS_EX_LAYERED` and re-add it 40 times a second while the cursor rests on a ghost,
+and in between the window is opaque, click-through and always-on-top with no visible cue.
+
 Priorities (`RS_PRI_AMBIENT` 10 < `RS_PRI_ANIM` 20 < `RS_PRI_DRAG` 30 < `RS_PRI_USER` 40) arbitrate *within one flush*: a lower-priority write is dropped, a higher one overwrites. Queued entries are deleted as they are applied, so the pending Maps only ever hold outstanding work — that is what bounds their size and what makes arbitration per-flush with no reset pass.
 
 **Who flushes matters, and getting it wrong is silent.**
@@ -328,7 +367,7 @@ Deliberately **not** cached: window positions. A cache is only valid when the ca
 
 `StopScheduler()` **re-checks `ActiveAnimations.Count` and refuses to stop while work is queued.** `RenderFrame` tests the count and then calls it, and those two steps are not atomic: anything that interrupts in between and calls `RegisterAnimation` saw `SchedulerRunning` still true (so `StartScheduler` was a no-op) and then had its timer killed underneath it. `Bye()` passes `StopScheduler(true)` to override, because it is about to undo every animation anyway.
 
-**Two animations must not share a window at the same priority — and the shell hook is a producer too.** `Pulse_<hwnd>` and `Glide_<hwnd>` both wrote `RS_Pos[hwnd]` at `RS_PRI_ANIM`; Map keys enumerate sorted, so `Pulse_` was produced last and won every frame, and `PulseStep` had captured a *mid-glide* rect that it then restored on its final frame — activating a window mid-snap discarded the snap. `PulseWindow` now declines while a glide or bounce is registered, the same guard `VerifySnap` uses. Focus Depth was worse: it wrote at `RS_PRI_USER`, out-ranking every glide, bounce and pulse on any window the user switched away from. It is an ambient depth cue, so it belongs at `RS_PRI_ANIM`; only `RestoreFocusDepth` stays `USER`, because that one *is* an explicit command.
+**Two animations must not share a window at the same priority — and the shell hook is a producer too.** `Pulse_<hwnd>` and `Glide_<hwnd>` both wrote `RS_Pos[hwnd]` at `RS_PRI_ANIM`; Map keys enumerate sorted, so `Pulse_` was produced last and won every frame, and `PulseStep` had captured a *mid-glide* rect that it then restored on its final frame — activating a window mid-snap discarded the snap. `PulseWindow` declines while anything owns the window's `"geom"` channel, the same guard `VerifySnap` uses - both used to name `Glide_` and `Bounce_` explicitly, which is why neither noticed `Jello_`. Focus Depth was worse: it wrote at `RS_PRI_USER`, out-ranking every glide, bounce and pulse on any window the user switched away from. It is an ambient depth cue, so it belongs at `RS_PRI_ANIM`; only `RestoreFocusDepth` stays `USER`, because that one *is* an explicit command.
 
 ### Performance: what things actually cost
 
@@ -406,6 +445,15 @@ stall cannot teleport an animation to its end.
 
 **Never derive a duration from a frame count.** `ms := 12 * 16` was silently a
 frame-count assumption; those are all plain millisecond values now.
+**Velocity is pixels per SECOND, and every consumer is calibrated in that unit.**
+`SampleVelocityStep(dt, now)` was handed `dt` and ignored it, smoothing the raw per-frame
+displacement instead - so the throw gain, the monitor-throw and tilt thresholds, the parallax
+opacity ramp and the magnetic-group break were all silently calibrated to a 15 ms frame, and
+under load the same hand motion reported up to 3x the velocity. The smoothing constant is a
+time constant (`k := 1 - Exp(-dt / 30.0)`) for the same reason. `AltDragMove` samples on a
+`Sleep(10)` cadence rather than the frame clock, so it measures its own elapsed time and
+publishes the same unit - which is what makes an alt-drag and a title-bar drag of the same
+speed finally throw the same distance.
 
 **Two animations must never drive the same property of the same window at the same
 priority.** `RS_*` arbitration is per-flush and ties are broken by Map order, and
@@ -416,6 +464,19 @@ that should happen *when a window lands* has to be scheduled for after the glide
 which is what `BounceOnLanding` and `FlashSeams` do. The same applied to the seam
 flash, which used to hang in empty space at the destination for up to 650 ms
 before the window arrived.
+**Ownership is enforced, not remembered.** `AnimationScheduler.ahk` owns a channel
+registry: `Anim_Claim(hwnd, channel, key, cb)` gives one animation sole ownership of a
+`(window, channel)` slot and cancels whoever held it, `Anim_Release(hwnd, channel)` clears it,
+and `Anim_Owner(hwnd, channel)` answers "is anything driving this?". Channels are `"geom"`,
+`"alpha"` and `"region"`. An animation that ends of its own accord releases its channel, so a
+feature cannot forget to.
+
+This replaced **five hand-maintained `CancelAnimation` lists** - in `ApplyLayout`,
+`UndoLayout`, `ToggleMaximize`, `AltDragMove` and the MOVESIZESTART hook - which had drifted
+apart and between them named only six of the ten animations that write `RS_Pos`. None of them
+named `Jello_`, so grabbing a window during a 400 ms momentum wobble left the wobble resizing
+it underneath the drag. Every window-motion animator now claims `"geom"`; `PulseWindow` and
+`VerifySnap` decline on `Anim_Owner(hwnd, "geom")` instead of naming specific competitors.
 
 **One animation key per window per effect, covering both directions.** The OSD
 fades were `OSDIn_<hwnd>` and `OSDOut_<hwnd>` — different keys, so both could run

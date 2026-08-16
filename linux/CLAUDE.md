@@ -85,12 +85,29 @@ The three pillars were ported deliberately; keep them aligned when changing eith
 | `RenderQueue` | `src/RenderCore.ahk` | Nothing outside this layer mutates window state. Priority arbitration is **per flush**: `Ambient(0) < Animation(1) < Drag(2) < User(3)` mirrors `RS_PRI_*` 10/20/30/40. |
 | `AnimationScheduler` | `src/AnimationScheduler.ahk` | Produce from every callback, then flush **exactly once** per frame. A callback that always returns `true` is a polling monitor and does not belong here. |
 | `SnapGeometry` | `src/SnapCore.ahk` | Pure geometry, no side effects. Axes resolve independently. |
-| `Physics` | `Glide()` in `src/WindowTweaks.ahk` | Parameterise on elapsed time, never on frame count. |
+| `Physics` | `Glide()` in `src/WindowTweaks.ahk` | Parameterise on elapsed time, never on frame count. Velocity is **pixels per second** on both sides, and the throw gain (0.18 px per px/s at unit gain) is shared. |
 
-Two invariants from the Windows side are **not yet expressible here** and will matter as soon
-as the backend is real: two animations must never drive the same property of the same window at
-the same priority, and any window handle we touched must be evicted from cached state when the
-window dies.
+Both of the invariants that used to be listed here as "not yet expressible" now are, and both
+were ported from the Windows side rather than invented:
+
+- **Two animations must never drive the same property of the same window.**
+  `AnimationScheduler::claim(windowId, channel, key, cb)` gives one animation sole ownership of
+  a `(window, channel)` slot and cancels whoever held it; `release()` and `owner()` are the
+  other half. Channels are `Geometry`, `Alpha`, `Region`. On Windows this replaced five
+  hand-written cancel lists that had drifted apart, and the absence of it there produced real
+  bugs - the worst being a 400 ms wobble that kept resizing a window the user had already
+  grabbed again, because no list named it.
+- **A window handle we touched must be evicted when the window dies.**
+  `RenderQueue::removeWindow(id)` drops both the pending state and the composed alpha record.
+  Without it a recycled window id inherits a stranger`s opacity.
+
+A third invariant came with them. **Opacity is composed, never absolute.** `RenderQueue` holds
+a base the user chose times any number of named modifier layers, and only it computes the
+committed value; `setAlpha()` remains for surfaces we own ourselves, where one owner is
+guaranteed by construction. Every feature used to write an absolute, so anything that finished
+by clearing transparency silently destroyed the opacity another feature had asked for.
+**One owner per layer name** - the compiler cannot enforce it. Names in use on both platforms:
+`drag`, `ghost`, `breathe`, `depth`, `open`, `gravity`.
 
 ### Wayland strategy
 
@@ -156,17 +173,25 @@ names `kpackagetool5` and `qdbus`; on KDE Neon (Plasma 6) these are `kpackagetoo
 
 ## Defects to be aware of
 
-Documented rather than fixed, so they are not rediscovered. Full list with reproduction in
+Recorded so they are not rediscovered. Struck-through entries have been fixed and are kept
+because the fix is easy to undo by accident. Full list with reproduction in
 `docs/IMPLEMENTATION-AUDIT.md`.
 
-- **`Physics.h` easing is mathematically wrong.** `1.0f - (--t)*t*t*t*t` is `1 + (1-t)^5`,
-  returning **2.0 at t=0**. Windows uses `1 - (1-t)**5`. The fix is the sign:
-  `1.0f + (--t)*t*t*t*t`.
-- **`Physics.cpp` uses `std::sqrt` with no `<cmath>` include** — a compile error on its own.
-- **`Physics::calculateGlide` implements the wrong model** — kinetic friction with a hardcoded
-  `friction = 500.0f`, where Windows lerps toward a known target over a computed duration.
-- **`SnapGeometry` has no `cornerBoost`**, so the corner-pull behaviour that defines the
-  Windows feel is absent.
+- ~~**`Physics.h` easing is mathematically wrong.**~~ **Fixed.** It was
+  `1.0f - (--t)*t*t*t*t`, which is `1 + (1-t)^5` and returns **2.0 at t=0**. It is now
+  `1.0f + (--t)*t*t*t*t`. Kept in this list, struck through, so nobody "corrects" the sign
+  back after reading the expression without evaluating it.
+- ~~**`Physics.cpp` uses `std::sqrt` with no `<cmath>` include.**~~ **Fixed.**
+- ~~**`Physics::calculateGlide` implements the wrong model.**~~ **Replaced.** The kinetic-friction
+  resting-position solver is gone. `predictThrow()` extrapolates a release ballistically in px/s
+  with a tunable gain, and `glideDurationMs()` sizes the animation from the distance, which is
+  what the Windows side does. Neither has a caller yet: nothing captures drag-release velocity.
+- ~~**`SnapGeometry` has no `cornerBoost`.**~~ **Fixed**, along with three other gaps against
+  `SnapCore.ahk`: like-edge alignment (it only ever matched a window edge to the OPPOSITE
+  obstacle edge, so two windows could never be aligned flush along the same side),
+  perpendicular-overlap gating (every obstacle contributed to both axes, so a window at the top
+  of the screen could snap to a window at the bottom), speed-adaptive reach, and edge hysteresis.
+  Obstacle collection is still missing - nothing enumerates windows.
 - **`main.cpp` never constructs a `PlatformAdapter`**, so nothing can reach a window.
 - **`install.sh`'s KDE branch aborts** under `set -e`, copying from an empty directory.
 

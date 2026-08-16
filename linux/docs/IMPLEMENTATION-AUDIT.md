@@ -16,14 +16,14 @@
 Every claim below is reproducible from the repository root:
 
 ```bash
-# Empty directories -> nothing implemented for KDE, the settings UI, or config
-find linux -type d -empty
+# Missing directories -> nothing implemented for KDE, the settings UI, or config.
+# NOTE: `find linux -type d -empty` used to be the recipe here, and on a fresh
+# clone it returns NOTHING - which reads as a pass. Git does not track empty
+# directories, so these three are ABSENT rather than empty: worse, not better.
+ls linux/src/ui linux/src/platform/kde linux/config    # No such file or directory
 
 # X11 backend: every method body is a comment
 grep -c '//' linux/src/platform/x11/X11Adapter.cpp
-
-# Sources CMake requires that do not exist
-ls linux/src/ui/            # empty; CMakeLists.txt names SettingsWindow.cpp + TrayIcon.cpp
 
 # There is no test suite
 find linux -type d -name tests
@@ -33,10 +33,10 @@ find linux -type d -name tests
 
 | Component | File | State |
 | --- | --- | --- |
-| Animation scheduler | `src/core/AnimationScheduler.cpp` | **Implemented.** Faithful port of the Windows scheduler: keyed callbacks, `bool(float dt)` return retires the animation, one `flush()` per frame. Runs its own `std::thread`. |
-| Render arbitration | `src/core/RenderQueue.cpp` | **Implemented.** Per-window coalescing with `Ambient < Animation < Drag < User` priority, wrapped in `beginBatch()`/`commitBatch()`. |
-| Snap math | `src/core/SnapGeometry.cpp` | **Partial.** Independent X/Y resolution against work area and obstacles is correct. Missing `cornerBoost`, obstacle collection, and all window-eligibility filtering. |
-| Glide physics | `src/core/Physics.cpp` | **Partial and incorrect.** Uses a kinetic-friction resting-position model, not the Windows duration-lerp. The easing helper is mathematically wrong — see *Known defects*. |
+| Animation scheduler | `src/core/AnimationScheduler.cpp` | **Implemented.** Keyed callbacks, `bool(float dt)` retires the animation, one **unconditional** `flush()` per frame, `dt` clamped to three frames, and per-window channel ownership (`claim`/`release`/`owner`). Runs its own `std::thread` and parks when idle. |
+| Render arbitration | `src/core/RenderQueue.cpp` | **Implemented.** Per-window coalescing with `Ambient < Animation < Drag < User` priority held **per attribute**, composed alpha (a user base times named modifier layers), and `removeWindow()` eviction. Wrapped in `beginBatch()`/`commitBatch()`. |
+| Snap math | `src/core/SnapGeometry.cpp` | **Partial.** Independent X/Y resolution, `cornerBoost`, like-edge alignment, perpendicular-overlap gating, speed-adaptive reach and edge hysteresis are all present and aligned with `SnapCore.ahk`. Still missing obstacle collection (nothing enumerates windows) and all window-eligibility filtering. |
+| Glide physics | `src/core/Physics.cpp` | **Partial.** Easing sign corrected, `<cmath>` included, and the kinetic-friction model replaced with the Windows pair: `predictThrow()` (ballistic, px/s, tunable gain) plus `glideDurationMs()`, with `settleBump()` for the landing overshoot. Still has no caller: nothing captures drag-release velocity. |
 | Weather fetch | `src/core/WeatherFetcher.cpp` | **Implemented.** `QNetworkAccessManager` on a `QTimer`, emits `weatherUpdated`. |
 | D-Bus service | `src/platform/wayland/DBusDaemon.cpp` | **Implemented.** Registers `org.tweakforeveryone.Daemon`, re-emits weather. Declares the geometry/alpha signals but never emits them. |
 | Backend interface | `src/core/PlatformAdapter.h` | **Interface only** — by design. |
@@ -59,8 +59,8 @@ a backend exists:
 
 | Feature | What exists | What is missing |
 | --- | --- | --- |
-| **Magnetic snapping** | `SnapGeometry::computeSnap` resolves each axis independently against the work area and a supplied obstacle list. | Obstacle collection (nothing enumerates windows), `cornerBoost`, eligibility filtering, and a backend able to apply the result. |
-| **Ice glide** | `Physics::calculateGlide` computes a resting position; `AnimationScheduler` can drive frames. | Correct easing, drag-release velocity capture, configuration, and a backend able to move a window. |
+| **Magnetic snapping** | `SnapGeometry::computeSnap` resolves each axis independently, with `cornerBoost`, like-edge alignment, overlap gating, speed-adaptive reach and hysteresis. | Obstacle collection (nothing enumerates windows), eligibility filtering, and a backend able to apply the result. |
+| **Ice glide** | `Physics::predictThrow` extrapolates a release, `glideDurationMs` sizes the animation and `quinticEaseOut`/`settleBump` shape it; `AnimationScheduler` can drive frames. | Drag-release velocity capture, configuration, and a backend able to move a window. |
 
 One feature works end to end, and only on GNOME:
 
@@ -77,12 +77,12 @@ stealth panic — exists only as a row in `FEATURE-MATRIX.md`.
 
 These are recorded so they are not rediscovered. Fixing them is a code task, not a docs task.
 
-1. **`Physics.h` — the easing function is wrong.**
-   `return 1.0f - (--t) * t * t * t * t;` evaluates to `1 + (1-t)^5`, which returns **2.0 at
-   t=0** and 1.0 at t=1. The Windows original is `e := 1 - (1 - t) ** 5`. The fix is the
-   sign: `1.0f + (--t) * t * t * t * t`.
-2. **`Physics.cpp` calls `std::sqrt` without including `<cmath>`** (and `Physics.h` does not
-   include it either). This alone is a compile error.
+1. ~~**`Physics.h` easing function is wrong.**~~
+   **Fixed.** It was `1.0f - (--t) * t * t * t * t`, which evaluates to `1 + (1-t)^5` and
+   returns **2.0 at t=0**. It is now `1.0f + (--t) * t * t * t * t`, matching the Windows
+   `e := 1 - (1 - t) ** 5`. Left in this list, struck through, so the sign is not
+   "corrected" back by someone reading the expression without evaluating it.
+2. ~~**`Physics.cpp` calls `std::sqrt` without including `<cmath>`.**~~ **Fixed.**
 3. **`CMakeLists.txt` names two sources that do not exist** — `src/ui/SettingsWindow.cpp` and
    `src/ui/TrayIcon.cpp`. CMake fails at configure time with "Cannot find source file".
 4. **`find_package(XCB)` has no finder module.** CMake does not ship `FindXCB.cmake` and the
