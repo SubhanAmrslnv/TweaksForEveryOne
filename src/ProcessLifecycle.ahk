@@ -102,3 +102,161 @@ Boot() {
     ; still be uninitialised when the shell starts delivering to it.
     RegisterShellHook()
 }
+
+global VERSION := "1.0"
+
+; Registered by Boot(), not here: across a Reload() a top-level OnExit would be
+; installed by the new process while the old one still holds the original, and
+; Bye() hands every foreign window's state back.
+Bye(*) {
+    global TrayIcons, BossKeyActive, BossKeyWindows, BossKeyMuteState
+    global WinEventHook, WinEventCb, RolledUpWindows, CustomTrans
+    global OriginalTaskbarState, SmartTaskbarEnabled, DimmerGuis, OsdGui, PipGuis, MicOsdGui, SpotlightGui
+    global WinCurrentAlpha, GhostWindows, BottomWindows, FocusGuis
+
+    ; Stop producing before we start undoing, so no timer or animation frame can
+    ; re-apply a state we have just cleaned up. Bye also runs on tray -> Restart,
+    ; so everything below has to be correct for a reload, not just a shutdown.
+    try StopScheduler(true)
+    try SetTimer(BreathingMonitorStep, 0)
+    try SetTimer(GhostMonitorStep, 0)
+    try SetTimer(ActiveBorderMonitorStep, 0)
+    try SetTimer(MonitorDimmerTickStep, 0)
+    try SetTimer(SmartTaskbarMonitorStep, 0)
+    try SetTimer(HotCornersMonitorStep, 0)
+    try SetTimer(CursorWrapMonitorStep, 0)
+    try SetTimer(FocusMonitorStep, 0)
+    try SetTimer(PiPMonitorStep, 0)
+    try SetTimer(CheckQuickLookFocusStep, 0)
+    try SetTimer(MC_Tick, 0)
+    ; The rest of the timers in the program. Every one of these was left running
+    ; through the whole teardown, and several of them re-create the very overlays
+    ; and window state Bye() exists to undo - CheckTaskbarAndUI can build a fresh
+    ; full-screen Start-menu blur AFTER RS_Shutdown() has run. Bye() is also the
+    ; tray -> Restart path, so this is not academic.
+    try SetTimer(CheckTaskbarAndUI, 0)
+    try SetTimer(ShakeDetector, 0)
+    try SetTimer(RenderShakeFind, 0)
+    try SetTimer(CheckMouseIdle, 0)
+    try SetTimer(CheckElasticDrag, 0)
+    try SetTimer(CheckMagDrag, 0)
+    ; The custom clock repeats every second and was the only timer still
+    ; running through teardown. Bye() is also the tray -> Restart path, so it
+    ; survived past RS_Shutdown() with a live Gui behind it.
+    try SetTimer(UpdateCustomClock, 0)
+    try HideCustomClock()
+
+    ; Rubber-band scroll parks a foreign window at an offset from its own base.
+    ; Nothing else puts it back, so exiting mid-lean left it displaced.
+    global ElasticHwnd, ElasticBaseX, ElasticBaseY
+    if (ElasticHwnd && DllCall("IsWindow", "ptr", ElasticHwnd))
+        try WinMove(ElasticBaseX, ElasticBaseY, , , ElasticHwnd)
+    ElasticHwnd := 0
+
+    try MC_Shutdown()
+
+    try DestroyActiveBorder()
+
+    for layer in FocusGuis
+        try GuiDestroy(layer.gui)
+    FocusGuis := []
+
+    if (SpotlightGui)
+        try SpotlightGui.Destroy()
+
+    for src, pip in PipGuis.Clone()
+        try ClosePiP(src)
+
+    if (OsdGui)
+        try OsdGui.Destroy()
+        
+    if (MicOsdGui)
+        try MicOsdGui.Destroy()
+
+    for k, g in DimmerGuis
+        try GuiDestroy(g)      ; .Hwnd throws on an already-destroyed Gui
+    DimmerGuis.Clear()
+
+    ; The smart-grid zone overlays are +AlwaysOnTop tool windows. Nothing else
+    ; destroys them, so exiting mid-drag used to leave them on screen.
+    global SmartGridGuis
+    for g in SmartGridGuis
+        try GuiDestroy(g)
+    SmartGridGuis := []
+
+    if (SmartTaskbarEnabled && OriginalTaskbarState != -1)
+        SetTaskbarAutoHide(OriginalTaskbarState & 1)
+
+    if (BossKeyActive) {
+        for hwnd in BossKeyWindows {
+            if DllCall("IsWindow", "ptr", hwnd)
+                try WinShow(hwnd)
+        }
+        try SoundSetMute(BossKeyMuteState)
+    }
+
+    for hwnd in TrayIcons {
+        cbSize := A_PtrSize == 8 ? 976 : 956
+        nid := Buffer(cbSize, 0)
+        NumPut("uint", cbSize, nid, 0)
+        NumPut("ptr", A_ScriptHwnd, nid, A_PtrSize == 8 ? 8 : 4)
+        NumPut("uint", hwnd, nid, A_PtrSize == 8 ? 16 : 8)
+        DllCall("shell32\Shell_NotifyIconW", "uint", 2, "ptr", nid)
+        try WinShow(hwnd)
+    }
+
+    ; Nothing here is left behind for the next process to trip over. Everything we
+    ; changed about a foreign window has to be changed back, through the map that
+    ; recorded it - a rolled-up window keeps its clipping region until something
+    ; clears it, a dimmed one keeps its alpha, a ghost stays click-through and
+    ; topmost, and a desktop-pinned widget stays a child of WorkerW.
+    for hwnd in RolledUpWindows {
+        if DllCall("IsWindow", "ptr", hwnd)
+            try RS_SetRegion(hwnd, "", RS_PRI_USER)
+    }
+    for hwnd, info in GhostWindows.Clone()
+        try UnGhostWindow(hwnd)
+    for hwnd, info in BottomWindows.Clone()
+        try RestoreFromBottom(hwnd)
+
+    ; Three more maps that record foreign-window state we have to hand back, and
+    ; that nothing else can. Each of these used to outlive the process:
+    ;   Focus Depth  - windows left at 98% size and alpha 210, forever
+    ;   Curtain Drop - every window on the desktop parked below the screen
+    ;   Shatter      - the target window alive and invisible at x = -19999
+    try RestoreFocusDepth()
+    try RestoreCurtain()
+    try RestoreShatters()
+
+    ; Last, and after every restorer above, because those clear their own layers
+    ; and a record that has gone neutral has already pruned itself. This is the
+    ; sweep for anything they missed. It replaces two hand-written loops over
+    ; CustomTrans and WinCurrentAlpha, which between them knew about only two of
+    ; the six things that can dim a window.
+    try RS_ResetAllAlphaState(RS_PRI_USER)
+
+    RS_Commit()
+    RS_Flush()
+    RS_Shutdown()
+
+    ; Unhook before the callback goes away - the OS must not be left holding a
+    ; pointer into a freed thunk.
+    if (WinEventHook)
+        try DllCall("UnhookWinEvent", "ptr", WinEventHook)
+    if (WinEventCb)
+        try CallbackFree(WinEventCb)
+        
+    if (MenuEventHook)
+        try DllCall("UnhookWinEvent", "ptr", MenuEventHook)
+    if (MenuEventCb)
+        try CallbackFree(MenuEventCb)
+        
+    try DllCall("DeregisterShellHookWindow", "ptr", A_ScriptHwnd)
+
+    ; Both of these are normally deferred to an idle timer. On the way out there
+    ; is no idle, so write straight through - a queued timer would never fire.
+    try WriteSettings()
+    try WritePositions()
+    try FlushLog()
+    Return 0
+}
