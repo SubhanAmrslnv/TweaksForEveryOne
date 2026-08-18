@@ -116,6 +116,11 @@ global TaskbarWaveEnabled := false        ; OFF-BY-DEFAULT: never rendered until
 global CustomClockEnabled := false
 global CustomClockWeather := ""
 global LastWeatherFetch := 0
+global WeatherNextMs := 900000             ; ms until the next attempt; set by the outcome
+global WeatherFailMs := 0                  ; current backoff, tripled per consecutive failure
+global ClockLocation := ""                 ; required: open-meteo takes coordinates, not an IP
+global ClockUnits := "Celsius"
+global WeatherWarnedFor := "-"             ; last location we complained about, so it is said once
 global StartMenuBlurEnabled := true
 global ToastBounceEnabled := true
 global MonitorThrowEnabled := true
@@ -187,6 +192,7 @@ global CAPS_ACTIONS   := ["Escape", "Backspace"]
 global CORNER_ACTIONS := ["None", "Task View", "Show Desktop", "Action Center", "Start Menu", "Lock Screen", "Mute Volume"]
 global EP_STYLES      := ["Win10", "Win11"]
 global EP_ICON_SIZES  := ["Small", "Large"]
+global CLOCK_UNITS    := ["Celsius", "Fahrenheit"]
 
 ; =========================================================== Tuning registry ===========================================================
 ; One row per user-tunable NUMBER. Loading, clamping, persistence, the settings
@@ -234,6 +240,8 @@ global TUNE_SPEC := [
 , TS("glideMax"     , "glide"    , "max"         ,    500,   100,   2000,    50, 0, "win"    , "Throw distance"         , "px a flick can carry a window")
 , TS("glideSettle"  , "glide"    , "settle"      ,      6,     0,     30,     1, 0, "win"    , "Settle overshoot"       , "px past the target on a hard landing, 0 = none")
 , TS("parallaxMin"  , "memory"   , "parallaxmin" ,     24,    10,    100,     5, 0, "win"    , "Drag opacity floor"     , "% at full drag speed")
+, TS("parallaxFrom" , "memory"   , "parallaxfrom",    120,     0,   2000,    10, 0, "win"    , "Drag fade starts at"    , "px/s of drag speed before it fades at all")
+, TS("parallaxFull" , "memory"   , "parallaxfull",   1000,   100,   6000,    50, 0, "win"    , "Drag fade full at"      , "px/s where the opacity floor is reached")
 , TS("gridGap"      , "snap"     , "smartgap"    ,      8,     0,     40,     2, 0, "win"    , "Tiling grid gap"        , "px between tiled windows")
 , TS("elasticAmt"   , "snap"     , "elasticamt"  ,     18,     4,     60,     2, 0, "win"    , "Rubber-band travel"     , "px the window leans")
 , TS("ghostAlpha"   , "ghost"    , "alpha"       ,     16,     5,     60,     1, 0, "power"  , "Ghost opacity"          , "% when the mouse is far away")
@@ -272,6 +280,7 @@ global TUNE_SPEC := [
 , TS("focusRadius"  , "focus"    , "radius"      ,     40,     0,    200,     5, 0, "anim"   , "Focus mode corners"     , "px corner radius")
 , TS("transStep"    , "trans"    , "step"        ,     25,     5,     64,     1, 0, "anim"   , "Transparency step"      , "alpha per Shift+Alt+wheel notch")
 , TS("transMin"     , "trans"    , "min"         ,     20,     5,     90,     5, 0, "anim"   , "Transparency floor"     , "% the wheel will not go below")
+, TS("clockFont"    , "taskbar"  , "clockfont"   ,      7,     6,     14,     1, 0, "general", "Clock text size"        , "pt; two lines of it have to fit the taskbar height")
 ]
 
 global TUNE_VAL       := Map()      ; key -> validated value
@@ -359,6 +368,17 @@ IniStr(section, key, defaultVal) {
 ; a string that is not in the list, which happens inside BuildWin and leaves
 ; Shift+Alt+W permanently dead, and a value the dropdown cannot show leaves the
 ; GUI displaying one thing while the engine uses another.
+; The weather location is validated by SHAPE, not by range or membership, for the
+; same reason BorderColor is: it is not a number and there is no list to check it
+; against. What survives is pasted into a URL, so anything that is not plausibly
+; part of a place name is dropped rather than escaped, and the length is capped.
+CleanClockLocation(s) {
+    s := RegExReplace(Trim(s), "[^A-Za-z0-9 ,.+-]", "")
+    s := Trim(RegExReplace(s, " {2,}", " "))
+    return (StrLen(s) > 60) ? Trim(SubStr(s, 1, 60)) : s
+}
+
+
 IniPick(section, key, allowed, defaultVal) {
     v := IniStr(section, key, defaultVal)
     for a in allowed {
@@ -536,6 +556,10 @@ LoadSettings() {
     MotionBlurScrollEnabled := IniStr("mouse", "motionblur", "0") = "1"
     TaskbarWaveEnabled := IniStr("taskbar", "wave", "0") = "1"
     CustomClockEnabled := IniStr("taskbar", "customclock", "0") = "1"
+    ClockLocation := CleanClockLocation(IniStr("taskbar", "clocklocation", ""))
+    ; Membership, not range - see the note on IniPick. A hand-edited value the
+    ; dropdown cannot display would throw inside BuildWin and kill Shift+Alt+W.
+    ClockUnits := IniPick("taskbar", "clockunits", CLOCK_UNITS, "Celsius")
     StartMenuBlurEnabled := IniStr("taskbar", "startblur", "1") = "1"
     ToastBounceEnabled := IniStr("taskbar", "toastbounce", "1") = "1"
     MonitorThrowEnabled := IniStr("mouse", "monthrow", "1") = "1"
@@ -660,6 +684,8 @@ WriteSettings() {
     PutIni(MotionBlurScrollEnabled ? 1 : 0, "mouse", "motionblur")
     PutIni(TaskbarWaveEnabled ? 1 : 0, "taskbar", "wave")
     PutIni(CustomClockEnabled ? 1 : 0, "taskbar", "customclock")
+    PutIni(ClockLocation, "taskbar", "clocklocation")
+    PutIni(ClockUnits, "taskbar", "clockunits")
     PutIni(StartMenuBlurEnabled ? 1 : 0, "taskbar", "startblur")
     PutIni(ToastBounceEnabled ? 1 : 0, "taskbar", "toastbounce")
     PutIni(MonitorThrowEnabled ? 1 : 0, "mouse", "monthrow")
@@ -864,7 +890,7 @@ BuildWin() {
     global GlideEnabled, GLIDE_THROW, GLIDE_MS
     global BlackHoleMinimizeEnabled, MomentumTiltEnabled, FocusDepthEnabled
     global CurtainDropEnabled, SparkTypingEnabled, CarouselAltTabEnabled, MotionBlurScrollEnabled
-    global TaskbarWaveEnabled, CustomClockEnabled, StartMenuBlurEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled, CursorYawnEnabled, ShatterEnabled, LightsaberSeamEnabled
+    global TaskbarWaveEnabled, CustomClockEnabled, ClockLocation, ClockUnits, StartMenuBlurEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled, CursorYawnEnabled, ShatterEnabled, LightsaberSeamEnabled
     global RestoreEnabled, BreathingEnabled, PulseEnabled, OpenAnim, FlyMinimizeEnabled, RollUpEnabled, TrayMinimizeEnabled, BossKeyEnabled, AltDragEnabled, TaskbarScrollEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, SmartCapsEnabled, SmartCapsAction, ParallaxEnabled, EP_Style, EP_IconSize, PrivacyBlurEnabled
     global NAV, SEL, SELF, FG
 
@@ -959,6 +985,9 @@ BuildWin() {
     TuneRow(pg, "glideSettle", FG, cSub)
 
     C["parallax"] := Box(pg, CW, FG, "Parallax Dragging (Velocity Transparency)", ParallaxEnabled, "xm y+16")
+    Sub(pg, CW, cSub, "A window fades while you drag it and springs back to solid when you let go.", "xm y+8")
+    TuneRow(pg, "parallaxFrom", FG, cSub)
+    TuneRow(pg, "parallaxFull", FG, cSub)
     TuneRow(pg, "parallaxMin", FG, cSub)
     C["altdrag"] := Box(pg, CW, FG, "Linux-Style Alt-Drag (Move & Resize)", AltDragEnabled, "xm y+12")
     
@@ -1198,8 +1227,17 @@ BuildWin() {
     C["twave"] := Box(pg, CW, FG, "Taskbar Icon Wave", TaskbarWaveEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Hovering over the taskbar creates a magnifying glass bubble that tracks your mouse.", "xm y+8")
     
-    C["customclock"] := Box(pg, CW, FG, "Small Taskbar Custom Clock", CustomClockEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Overlays a custom clock with Date and Weather when using Small Icons.", "xm y+8")
+    C["customclock"] := Box(pg, CW, FG, "Taskbar Temperature", CustomClockEnabled, "xm y+16")
+    Sub(pg, CW, cSub, "Adds the temperature just left of the system tray. It does not redraw the clock,", "xm y+8")
+    Sub(pg, CW, cSub, "the date or the tray icons - Windows keeps drawing those, in their own places.", "xm y+2")
+    TuneRow(pg, "clockFont", FG, cSub)
+
+    Lbl(pg, FG, "Weather location", "xm y+12", 190)
+    C["clockloc"] := pg.AddEdit("x196 yp-3 w120", ClockLocation)
+    Sub(pg, 250, cSub, "required, e.g. Baku or Baku, Azerbaijan", "x+12 yp+3")
+
+    Lbl(pg, FG, "Temperature units", "xm y+12", 190)
+    C["clockunits"] := pg.AddDropDownList("x196 yp-3 w120 Choose" IndexOf(CLOCK_UNITS, ClockUnits), CLOCK_UNITS)
     
     C["startblur"] := Box(pg, CW, FG, "Start Menu Blur (Cinematic Focus)", StartMenuBlurEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Heavily blurs the background when the Start Menu is open.", "xm y+8")
@@ -1416,6 +1454,11 @@ ApplyUi(writeBack := false) {
     uiOldBottom := AlwaysOnBottomEnabled
     uiOldPip := LivePipEnabled
     uiOldFocusDepth := FocusDepthEnabled
+    ; Same class of problem, one step smaller. The drag layer is installed by a
+    ; frame callback that stops running the moment the flag is false, so unticking
+    ; the box mid-drag left the window it was fading stuck at that opacity with
+    ; nothing left in the program that would ever clear it.
+    uiOldParallax := ParallaxEnabled
     try {
         SnapEnabled    := C["snap"].Value
         MagneticGroupsEnabled := C["magnetic"].Value
@@ -1455,6 +1498,10 @@ ApplyUi(writeBack := false) {
         MotionBlurScrollEnabled := C["motionblur"].Value
         TaskbarWaveEnabled := C["twave"].Value
         CustomClockEnabled := C["customclock"].Value
+        ClockUnits := C["clockunits"].Text
+        ; Shape validation, like BorderColor above - it is not a number, so it is
+        ; not a TUNE_SPEC row. Whatever survives goes straight into a URL.
+        ClockLocation := CleanClockLocation(C["clockloc"].Value)
         StartMenuBlurEnabled := C["startblur"].Value
         ToastBounceEnabled := C["toast"].Value
         MonitorThrowEnabled := C["monthrow"].Value
@@ -1538,6 +1585,10 @@ ApplyUi(writeBack := false) {
     }
     if (uiOldFocusDepth && !FocusDepthEnabled)
         try RestoreFocusDepth()
+    if (uiOldParallax && !ParallaxEnabled && DragHwnd) {
+        try RS_ClearAlphaLayer(DragHwnd, "drag", RS_PRI_DRAG)
+        try RS_Commit()
+    }
 
     try UpdateKeyboardHook()         ; start/stop the keyboard hook to match the boxes
     try SyncTray()
@@ -2811,15 +2862,13 @@ AltDragMove() {
 
                 global GhostWindows
                 if (ParallaxEnabled && !GhostWindows.Has(hwnd)) {
-                    ; Same floor as the title-bar drag path in
-                    ; SampleVelocityStep. It used to be a separate hard-coded
-                    ; 100 here against 60 there, so an alt-drag and a title-bar
-                    ; drag of the same window at the same speed did not match.
-                    ; Same gain as the title-bar path now, not a separate 3.
+                    ; Both drag paths share one ramp function now, so an alt-drag
+                    ; and a title-bar drag of the same window at the same speed
+                    ; agree by construction. Each used to write the floor and the
+                    ; gain out longhand, which is how they drifted before - a
+                    ; hard-coded 100 here against 60 there, then 3 against 0.06.
                     vel := Sqrt(dragVX**2 + dragVY**2)
-                    RS_SetAlphaLayer(hwnd, "drag"
-                        , Clamp(255 - Round(vel * 0.06), TuneAlpha("parallaxMin"), 255) / 255.0
-                        , RS_PRI_DRAG)
+                    RS_SetAlphaLayer(hwnd, "drag", ParallaxAlpha(vel).alpha / 255.0, RS_PRI_DRAG)
                 }
 
                 try WinGetPos(&wX, &wY,,, hwnd)
@@ -2839,8 +2888,15 @@ AltDragMove() {
                 k := 1 - Exp(-sampleDt / 30.0)
                 dragVX -= dragVX * k
                 dragVY -= dragVY * k
-                if (ParallaxEnabled && !GhostWindows.Has(hwnd))
+                if (ParallaxEnabled && !GhostWindows.Has(hwnd)) {
                     RS_SetAlphaLayer(hwnd, "drag", 1.0, RS_PRI_DRAG)
+                    ; AltDragMove is a Sleep(10) loop, not a registered animation,
+                    ; so it is a one-shot producer and has to flush its own writes.
+                    ; Only the branch above committed, so holding Alt+LButton still
+                    ; left this write sitting in RS_Alpha and the window stuck at
+                    ; its last committed transparency instead of going back solid.
+                    RS_Commit()
+                }
             }
             ; Sleep, not PreciseSleep: this yields, so the frame loop keeps
             ; running other animations instead of being starved by a spin.
@@ -4045,9 +4101,61 @@ WinEvent(hook, event, hwnd, idObject, idChild, thread, time) {
     SetTimer(() => FinishDrag(hwnd, sL, sT, sR, sB, sAlpha), -50)    ; defer: FinishDrag enumerates windows
 }
 
+; The drag-transparency ramp, in one place. Both drag paths call it: the gain used
+; to be written out longhand at each of them, which is exactly how they drifted
+; apart before (see the note in AltDragMove).
+;
+; It is a ramp between two SPEEDS rather than a gain per px/s, because a gain
+; cannot be calibrated by eye. The old form, 255 - speed * 0.06, returned 225/255
+; at an ordinary 400 px/s drag - 88% opacity, which nobody can see - and reached
+; the floor only past 3200 px/s, so an honest description of the feature was "does
+; nothing unless you flick". Naming both ends makes "invisible at a normal drag
+; speed" a value that can be read off the settings page instead of a constant
+; buried on a 15 ms path.
+;
+; Returns the fraction as well as the alpha: the caller needs to know whether the
+; ramp is engaged at all, which it used to infer from a magic "alpha < 250".
+ParallaxAlpha(speed) {
+    lo := Tune("parallaxFrom")
+    hi := Tune("parallaxFull")
+    if (hi <= lo)
+        hi := lo + 1
+    f := Clamp((speed - lo) / (hi - lo), 0, 1)
+    return {alpha: Round(255 - f * (255 - TuneAlpha("parallaxMin"))), fade: f}
+}
+
+; DragFullWindows is a hard functional dependency of every drag-driven effect, and
+; the failure is completely silent: with it off Windows drags a hollow outline, so
+; the window rect does not move until release, SampleVelocityStep measures zero
+; speed on every frame, and parallax and the ice glide both do nothing at all.
+; That was documented in CLAUDE.md and checked by Install.ps1, neither of which
+; helps someone who turned the Windows setting off afterwards.
+CheckDragFullWindows() {
+    global ParallaxEnabled, GlideEnabled
+    if (!ParallaxEnabled && !GlideEnabled)
+        return
+    on := 1
+    try {
+        buf := Buffer(4, 0)
+        if DllCall("SystemParametersInfoW", "uint", 0x26, "uint", 0, "ptr", buf, "uint", 0)
+            on := NumGet(buf, 0, "int")
+    }
+    if (on)
+        return
+    WriteLog("DragFullWindows is off - drag transparency and ice glide cannot work")
+    Notify("Windows is dragging window outlines only.`nTurn on Show window contents while dragging, or the drag effects do nothing.")
+}
+
 SampleVelocityStep(dt, now) {
     global DragHwnd, VelX, VelY, PrevX, PrevY, ParallaxEnabled, CurrentDragAlpha, FRAME_MS
     if !DragHwnd {
+        return false
+    }
+    ; A window destroyed mid-drag never delivers MOVESIZEEND, so DragHwnd stays set
+    ; and GetRects fails on every frame from then on. Returning true there held the
+    ; 15 ms frame loop and timeBeginPeriod(1) open for the rest of the session.
+    if !DllCall("IsWindow", "ptr", DragHwnd) {
+        DragHwnd := 0
         return false
     }
     if !GetRects(DragHwnd, &L, &T, &R, &B, &x, &y)
@@ -4101,12 +4209,20 @@ SampleVelocityStep(dt, now) {
     global GhostWindows
     if (ParallaxEnabled && !GhostWindows.Has(DragHwnd)) {
         speed := Sqrt(VelX * VelX + VelY * VelY)
-        ; 4 alpha units per px/frame is 0.06 per px/s at the nominal frame.
-        targetAlpha := Clamp(Round(255 - (speed * 0.06)), TuneAlpha("parallaxMin"), 255)
-        
-        CurrentDragAlpha := CurrentDragAlpha * 0.7 + targetAlpha * 0.3
-        
-        if (CurrentDragAlpha < 250) {
+        p := ParallaxAlpha(speed)
+
+        ; dt-based, like the velocity EMA above it. The old 0.7/0.3 blend was the
+        ; last frame-rate-dependent term left on this path: a ~45 ms lag at the
+        ; nominal frame and three times that once frames get heavy, which on top of
+        ; an already-weak ramp meant a short drag ended before the fade had gone
+        ; anywhere at all.
+        ka := 1 - Exp(-dt / 45.0)
+        CurrentDragAlpha := CurrentDragAlpha + (p.alpha - CurrentDragAlpha) * ka
+
+        ; Engaged, not "close enough to solid". The ramp itself says whether it
+        ; wants this window dimmed; the old alpha < 250 test threw away the first
+        ; five units of every fade and left the layer installed on the way out.
+        if (p.fade > 0 || CurrentDragAlpha < 254) {
             RS_SetAlphaLayer(DragHwnd, "drag", CurrentDragAlpha / 255.0, RS_PRI_DRAG)
         } else {
             RS_ClearAlphaLayer(DragHwnd, "drag", RS_PRI_DRAG)
@@ -4168,7 +4284,7 @@ FinishDrag(hwnd, startL, startT, startR, startB, startA) {
 StartFadeBackAlpha(hwnd, startA) {
     if !DllCall("IsWindow", "ptr", hwnd)
         return
-    if (startA >= 250) {
+    if (startA >= 254) {
         RS_ClearAlphaLayer(hwnd, "drag", RS_PRI_DRAG)
         RS_Commit()
         return
@@ -9219,19 +9335,48 @@ SyncTaskbarUiTimer() {
 }
 
 ; ----------------------------------------------------------------------------
-; Custom Taskbar Clock Overlay
+; Taskbar Temperature
 ; ----------------------------------------------------------------------------
+; This draws ONE thing that Windows does not: the temperature. It deliberately
+; does not render the time, the date or anything else the shell already renders.
+;
+; The first version of this overlay did. It was 110 px wide, anchored on
+; TrayClockWClass and grown leftward, so it covered the native clock and the
+; Control Center button and redrew the time and date itself - which looked like a
+; corrupted tray: the notification icon appeared to have moved, the spacing was
+; wrong, and a failed weather lookup printed "no data" where the time belongs.
+; Nothing in Explorer had actually changed; it was all covered, not moved.
+;
+; So the rule now is that the overlay may never intersect TrayNotifyWnd. It sits
+; entirely to its left, it is sized to its own content, and if the tray cannot be
+; located at all it does not draw - because then there is no way to guarantee it
+; is not sitting on top of something.
 global CustomClockGui := 0
 global CustomClockText := 0
-global CustomClockReq := 0 ; Store COM object to prevent GC during async
+global CustomClockReq := 0        ; held so the async request is not collected mid-flight
+global WeatherReqAt := 0
+global WeatherStage := ""         ; "geo" or "now" - which request is in flight
+global GeoFor := "-"              ; the location string GeoLat/GeoLon were resolved for
+global GeoLat := "", GeoLon := ""
+global CustomClockBuiltFor := ""  ; theme + font the current Gui was built for
+global CustomClockRect := ""      ; last rect actually queued, so unchanged ticks cost nothing
+
+; Gap between the block and the tray, and the width of the block itself. A
+; temperature is at most "+100F" - five glyphs - so this is content sizing rather
+; than a setting: a width control would only ever be used to make it wrong.
+global CLOCK_GAP := 6
 
 SyncCustomClockTimer() {
-    global CustomClockEnabled, LastWeatherFetch, CustomClockWeather
+    global CustomClockEnabled, LastWeatherFetch, CustomClockWeather, WeatherNextMs
+    global WeatherWarnedFor
     if (CustomClockEnabled) {
-        ; Force immediate fetch on enable
+        ; Re-arming forces an immediate fetch, which is also how a changed location
+        ; or unit takes effect: ApplyUi calls this after reading the controls.
         LastWeatherFetch := 0
-        CustomClockWeather := "Updating..."
-        SetTimer(UpdateCustomClock, 1000)
+        WeatherNextMs := 900000
+        CustomClockWeather := ""
+        WeatherWarnedFor := "-"
+        SetTimer(UpdateCustomClock, 250)
         UpdateCustomClock()
     } else {
         SetTimer(UpdateCustomClock, 0)
@@ -9240,98 +9385,338 @@ SyncCustomClockTimer() {
 }
 
 HideCustomClock() {
-    global CustomClockGui
+    global CustomClockGui, CustomClockText, CustomClockBuiltFor, CustomClockRect
     if (CustomClockGui) {
-        CustomClockGui.Destroy()
-        CustomClockGui := 0
+        ; Mandatory, not tidiness: a -Caption +ToolWindow overlay raises no shell
+        ; destroy notification, so nothing else would ever prune its RS_* entries.
+        try RS_RemoveHwnd(CustomClockGui.Hwnd)
+        try CustomClockGui.Destroy()
     }
+    CustomClockGui := 0
+    ; This referenced a control of the destroyed Gui. Left dangling, the next tick
+    ; wrote .Value into a dead control and threw - inside a timer callback.
+    CustomClockText := 0
+    CustomClockRect := ""
+    CustomClockBuiltFor := ""
 }
 
+; The left edge of the system tray, which is the one boundary this feature must
+; never cross. Returns 0 when it cannot be found, and the caller then draws
+; nothing rather than guessing.
+;
+; Measured on this build: TrayNotifyWnd moves as icons are added and removed
+; (1577 with a quiet tray, 1529 with two more icons), so it is read every tick
+; rather than cached.
+FindTrayLeft(tbHwnd) {
+    try {
+        notify := DllCall("FindWindowExW", "ptr", tbHwnd, "ptr", 0
+            , "str", "TrayNotifyWnd", "ptr", 0, "ptr")
+        if (notify && DllCall("IsWindowVisible", "ptr", notify)) {
+            WinGetPos(&nx, &ny, &nw, &nh, "ahk_id " notify)
+            if (nw > 0)
+                return nx
+        }
+    }
+    return 0
+}
+
+; The taskbar follows the SYSTEM theme. AppsUseLightTheme - the key the settings
+; window reads - is a different setting and gets this backwards for anyone running
+; a mixed theme, which is a supported combination in Windows 11.
+IsTaskbarDark() {
+    v := 0
+    try v := RegRead("HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+        , "SystemUsesLightTheme", 0)
+    return (v = 0)
+}
+
+; One line, with the whole body behind a try, because this is a 1000 ms SetTimer
+; callback: a throw here pops an error dialog and kills the timer for the rest of
+; the session. That is not hypothetical - the version this replaces called
+; ControlGetHwnd("TrayClockWClass", ...) with a bare class name, which is not a
+; valid ClassNN, and AHK throws TargetError rather than returning 0. It died on
+; its first tick, every time, so the feature had never once drawn anything.
 UpdateCustomClock() {
-    global CustomClockGui, CustomClockText, CustomClockWeather, LastWeatherFetch, EP_IconSize
-    
-    if (EP_IconSize != "Small") {
+    try UpdateCustomClockImpl()
+}
+
+UpdateCustomClockImpl() {
+    global CustomClockGui, CustomClockText, CustomClockBuiltFor, CustomClockRect, CLOCK_GAP
+    global CustomClockWeather, LastWeatherFetch, WeatherNextMs
+
+    ; Read the network first, so the fetch keeps running on its own schedule even
+    ; on the ticks where nothing is drawn.
+    PollWeather()
+    if (LastWeatherFetch == 0 || (A_TickCount - LastWeatherFetch > WeatherNextMs))
+        FetchWeather()
+
+    ; Nothing to say: draw nothing. A failed lookup used to put "no data" on the
+    ; taskbar, which is not information the taskbar should ever be carrying.
+    if (CustomClockWeather == "") {
         HideCustomClock()
         return
     }
-    
+
     tbHwnd := WinExist("ahk_class Shell_TrayWnd")
-    if (!tbHwnd) {
+    ; The visibility test is the one that matters most: a full-screen app hides the
+    ; taskbar, and an AlwaysOnTop overlay would otherwise sit on top of the game.
+    if (!tbHwnd || !DllCall("IsWindowVisible", "ptr", tbHwnd)) {
         HideCustomClock()
         return
     }
 
     WinGetPos(&tx, &ty, &tw, &th, "ahk_id " tbHwnd)
-    if (ty >= A_ScreenHeight - 2) {
+    if (tw < 200 || th < 12) {
         HideCustomClock()
         return
     }
-    
-    clockHwnd := ControlGetHwnd("TrayClockWClass", "ahk_id " tbHwnd)
-    if (!clockHwnd) {
+
+    ; Auto-hidden: Windows parks the bar two pixels inside its own monitor rather
+    ; than moving it off-screen. This used to compare against A_ScreenHeight, which
+    ; is the PRIMARY monitor - wrong the moment the taskbar is on a different one.
+    monB := A_ScreenHeight, monR := A_ScreenWidth
+    try {
+        sm := ScreenMetrics()
+        m := sm.mons[MonitorIndexAt(tx + tw // 2, ty + th // 2)]
+        monB := m.b, monR := m.r
+    }
+    if (ty >= monB - 2 || tx >= monR - 2) {
         HideCustomClock()
         return
     }
-    
-    if (!DllCall("IsWindowVisible", "Ptr", clockHwnd)) {
+
+    ; Get out of the way while the pointer is on the taskbar. The block is
+    ; click-through, so it never blocks a button - but it can sit in front of one
+    ; when the task list is long, and the moment the user looks down there they
+    ; should see the shell exactly as the shell drew it.
+    if (IsMouseOverTaskbar()) {
         HideCustomClock()
         return
     }
-    
-    WinGetPos(&cx, &cy, &cw, &ch, "ahk_id " clockHwnd)
-    
+
+    trayLeft := FindTrayLeft(tbHwnd)
+    if (!trayLeft) {
+        ; No tray to measure against, so no way to prove we are not covering it.
+        HideCustomClock()
+        return
+    }
+
+    ; Content width, from the font. Five glyphs plus padding; digits in Segoe UI
+    ; run about 0.6 em, and em is about 4/3 of the point size at 96 dpi.
+    fpt := Integer(Tune("clockFont"))
+    boxW := 16 + Ceil(fpt * 4 / 3 * 0.6 * 5)
+    x := trayLeft - CLOCK_GAP - boxW
+    if (x < tx) {
+        HideCustomClock()
+        return
+    }
+
+    ; Colours and font are fixed at creation, so a change to either has to rebuild
+    ; rather than restyle: Gui.SetFont only affects controls added after it.
+    stamp := (IsTaskbarDark() ? "d" : "l") "|" fpt "|" boxW "|" th
+    if (CustomClockGui && CustomClockBuiltFor != stamp)
+        HideCustomClock()
+
     if (!CustomClockGui) {
+        dark := SubStr(stamp, 1, 1) == "d"
         CustomClockGui := Gui("-Caption +AlwaysOnTop +ToolWindow +E0x20 -DPIScale")
         CustomClockGui.MarginX := 0
         CustomClockGui.MarginY := 0
-        CustomClockGui.BackColor := "111111"
-        CustomClockGui.SetFont("s6 cWhite q5", "Segoe UI")
-        CustomClockText := CustomClockGui.Add("Text", "x0 y0 w" cw " h" ch " Center", "Loading...")
-        CustomClockGui.Show("NA x" cx " y" cy " w" cw " h" ch)
-    } else {
-        CustomClockGui.Move(cx, cy, cw, ch)
-        CustomClockText.Move(0, 0, cw, ch)
+        CustomClockGui.BackColor := dark ? "1F1F1F" : "F3F3F3"
+        CustomClockGui.SetFont("s" fpt " c" (dark ? "FFFFFF" : "1A1A1A") " q5", "Segoe UI")
+        ; 0x200 is SS_CENTERIMAGE: one line, centred in the taskbar height, whatever
+        ; that height is. Nothing here assumes 30 px or 48 px.
+        CustomClockText := CustomClockGui.Add("Text"
+            , "x0 y0 w" boxW " h" th " Center 0x200", CustomClockWeather)
+        CustomClockBuiltFor := stamp
+        ; Text set before Show. Showing first costs one frame of an unpainted
+        ; rectangle sitting on the taskbar.
+        CustomClockGui.Show("NA x" x " y" ty " w" boxW " h" th)
     }
-    
-    now := A_TickCount
-    ; Only fetch if 15 minutes have passed since last attempt (or 0)
-    if (LastWeatherFetch == 0 || (now - LastWeatherFetch > 15 * 60 * 1000)) {
-        LastWeatherFetch := now
-        FetchWeather()
+
+    ; A one-shot producer: nothing else flushes for it, so it commits itself.
+    ;
+    ; The rect is diffed first. RenderCore deliberately does not cache positions -
+    ; the user can move a window behind its back - but this window is ours alone, so
+    ; the cache is valid here, and it is what lets the tick run at 250 ms instead of
+    ; 1000 ms for nothing. That matters because TrayNotifyWnd's left edge MOVES:
+    ; adding one tray icon shifted it 24 px and left this block overlapping the tray
+    ; until the next tick - measured, and exactly the defect this feature is being
+    ; fixed for. Four times a second, the worst case is a quarter of a second of it.
+    rect := x "," ty "," boxW "," th
+    if (rect != CustomClockRect) {
+        RS_SetPos(CustomClockGui.Hwnd, x, ty, boxW, th, RS_PRI_AMBIENT)
+        CustomClockRect := rect
     }
-    
-    t := FormatTime(, "HH.mm.ss")
-    d := FormatTime(, "dd.MM.yyyy")
-    w := CustomClockWeather
-    
-    CustomClockText.Value := t "`n" d "`n" w
+    ; Z-order is re-asserted every tick regardless: the taskbar is topmost too and
+    ; comes to the front whenever it is clicked. On our own 45 px window that is one
+    ; SetWindowPos with NOMOVE | NOSIZE, nothing like the 260 us a real move costs on
+    ; a foreign window.
+    RS_SetZOrder(CustomClockGui.Hwnd, -1, 0x0013, RS_PRI_AMBIENT)
+    RS_Commit()
+
+    try CustomClockText.Value := CustomClockWeather
 }
 
+ClockUrlPart(s) {
+    ; CleanClockLocation has already reduced this to [A-Za-z0-9 ,.+-], so these
+    ; three are the whole encoding problem. Nothing that could change the shape of
+    ; the query - & = ? % / - can reach here.
+    s := StrReplace(s, "+", "%2B")
+    s := StrReplace(s, ",", "%2C")
+    return StrReplace(s, " ", "+")
+}
+
+ForecastUrl() {
+    global GeoLat, GeoLon, ClockUnits
+    u := "https://api.open-meteo.com/v1/forecast?current=temperature_2m"
+        . "&latitude=" GeoLat "&longitude=" GeoLon
+    if (ClockUnits == "Fahrenheit")
+        u .= "&temperature_unit=fahrenheit"
+    return u
+}
+
+; WinHttp rather than Msxml2.XMLHTTP, and that is not a preference.
+;
+; Measured on this build: MSXML (3.0 and 6.0) returns status 200 with an EMPTY
+; responseText for an application/json body - it will not decode a content type it
+; does not consider text - so every reading came back blank. WinHttpRequest returns
+; the body. It is opened async and polled with WaitForResponse(0), which returns
+; immediately, so nothing on this path blocks; a bare WaitForResponse() would block
+; the frame loop and every timer in the process.
+StartWeatherRequest(stage, url) {
+    global CustomClockReq, WeatherReqAt, WeatherStage
+    try {
+        req := ComObject("WinHttp.WinHttpRequest.5.1")
+        ; resolve, connect, send, receive - in ms. Async still needs these, or a
+        ; dead route keeps the object alive until the process exits.
+        req.SetTimeouts(4000, 8000, 8000, 12000)
+        req.Open("GET", url, true)
+        req.Send()
+        CustomClockReq := req
+        WeatherStage := stage
+        WeatherReqAt := A_TickCount
+        return
+    }
+    CustomClockReq := 0
+    WeatherStage := ""
+    WeatherFailed("the request could not be started")
+}
+
+; Two requests, because open-meteo takes coordinates rather than a place name: the
+; geocoder resolves the city once and the result is cached for as long as the
+; setting does not change, so the steady state is one request every 15 minutes.
+;
+; This replaced wttr.in, which was not dependable enough to build on: it answers
+; 200 with its HTML landing page instead of an error status whenever it will not
+; serve a reading, it did that for /Baku while answering /Berlin in plain text, it
+; did it for ?format=%t on its own, and after roughly twenty requests in a few
+; minutes it did it for everything - and then began timing out entirely. Every one
+; of those is indistinguishable from success at the HTTP level.
 FetchWeather() {
-    global CustomClockReq, CustomClockWeather
-    try {
-        CustomClockReq := ComObject("Msxml2.XMLHTTP")
-        CustomClockReq.open("GET", "http://wttr.in/?format=%c+%t+%w", true)
-        CustomClockReq.onreadystatechange := WeatherCallback
-        CustomClockReq.send()
-    } catch {
-        CustomClockWeather := "Net Err"
+    global CustomClockReq, LastWeatherFetch, ClockLocation, GeoFor
+    if (CustomClockReq)
+        return                        ; one in flight is enough
+    ; Stamp the attempt BEFORE sending, or a slow endpoint would be re-requested on
+    ; every tick. The interval itself is set by the outcome - see WeatherFailed and
+    ; the success path in PollWeather - so this only records that we tried.
+    LastWeatherFetch := A_TickCount
+    if (ClockLocation == "") {
+        WeatherFailed("no location is set")
+        return
     }
+    if (GeoFor != ClockLocation)
+        StartWeatherRequest("geo", "https://geocoding-api.open-meteo.com/v1/search"
+            . "?count=1&language=en&format=json&name=" ClockUrlPart(ClockLocation))
+    else
+        StartWeatherRequest("now", ForecastUrl())
 }
 
-WeatherCallback() {
-    global CustomClockReq, CustomClockWeather
-    try {
-        if (CustomClockReq.readyState == 4) {
-            if (CustomClockReq.status == 200) {
-                CustomClockWeather := StrReplace(CustomClockReq.responseText, "`n", "")
-                CustomClockWeather := StrReplace(CustomClockWeather, "`r", "")
-            } else {
-                CustomClockWeather := "API Err"
-            }
-            CustomClockReq := 0 ; Free the object
-        }
+; Polled from the clock tick rather than driven by an event handler. A handler is
+; one more thing that has to work for the feature to work at all, and with MSXML it
+; also forced the request object to be released from inside its own callback, while
+; the library was still on the stack. The tick is already running, so this costs
+; nothing and cannot fail in a way that is invisible.
+PollWeather() {
+    global CustomClockReq, WeatherStage, WeatherReqAt, CustomClockWeather
+    global WeatherNextMs, WeatherFailMs, ClockLocation, ClockUnits
+    global GeoFor, GeoLat, GeoLon
+    if !CustomClockReq
+        return
+    ready := false
+    try ready := CustomClockReq.WaitForResponse(0)
+    catch {
+        CustomClockReq := 0, WeatherStage := ""
+        WeatherFailed("the connection failed")
+        return
     }
+    if (!ready) {
+        if (A_TickCount - WeatherReqAt > 20000) {
+            CustomClockReq := 0, WeatherStage := ""
+            WeatherFailed("the request timed out")
+        }
+        return
+    }
+    status := 0, body := ""
+    try status := CustomClockReq.Status
+    try body := CustomClockReq.ResponseText
+    stage := WeatherStage
+    CustomClockReq := 0, WeatherStage := ""
+    if (status != 200) {
+        WeatherFailed("the server answered " status)
+        return
+    }
+
+    if (stage == "geo") {
+        ; results[0] first, so the first latitude/longitude in the body is the match.
+        ; An unknown name comes back as 200 with {"generationtime_ms":...} and no
+        ; results at all, which is why this is a parse failure rather than a status.
+        if (!RegExMatch(body, '"latitude"\s*:\s*(-?[0-9.]+)', &mLa)
+            || !RegExMatch(body, '"longitude"\s*:\s*(-?[0-9.]+)', &mLo)) {
+            WeatherFailed("that place name was not found")
+            return
+        }
+        GeoLat := mLa[1], GeoLon := mLo[1], GeoFor := ClockLocation
+        StartWeatherRequest("now", ForecastUrl())     ; straight on to the reading
+        return
+    }
+
+    ; The forecast body carries temperature_2m twice: once in current_units as the
+    ; STRING "C, and once in current as the number. Requiring a digit right after
+    ; the colon is what picks the second one.
+    if !RegExMatch(body, '"temperature_2m"\s*:\s*(-?[0-9.]+)', &mT) {
+        WeatherFailed("no temperature in the reply")
+        return
+    }
+    n := Round(Number(mT[1]))
+    ; Chr(176) rather than a literal degree sign: .ahk sources here stay pure ASCII,
+    ; because AutoHotkey reads a BOM-less file in the system codepage and a literal
+    ; would arrive as mojibake on a machine with a different one.
+    CustomClockWeather := (n > 0 ? "+" : "") n Chr(176) (ClockUnits == "Fahrenheit" ? "F" : "C")
+    WeatherFailMs := 0
+    WeatherNextMs := 900000
+}
+
+; Failure never reaches the taskbar: the block hides instead. It is said once per
+; location in the log, and once in a tray tip when the user typed the location
+; themselves, because "that city name does not work" is something only they can fix.
+WeatherFailed(why) {
+    global CustomClockWeather, ClockLocation, WeatherWarnedFor
+    global WeatherNextMs, WeatherFailMs
+    ; Back OFF rather than retrying at a fixed minute. The likeliest reason for a
+    ; refusal is a rate limit at the far end - twenty wttr.in requests in a few
+    ; minutes was enough to trip one, measured - and a fixed retry keeps you there.
+    WeatherFailMs := Min(Max(WeatherFailMs * 3, 60000), 900000)
+    WeatherNextMs := WeatherFailMs
+    CustomClockWeather := ""
+    key := ClockLocation == "" ? "(unset)" : ClockLocation
+    if (WeatherWarnedFor == key)
+        return
+    WeatherWarnedFor := key
+    WriteLog("Taskbar temperature: " why " (location: " key ")")
+    Notify(ClockLocation == ""
+        ? "Taskbar temperature needs a city.`nSet one in Shift+Alt+W, General."
+        : "No temperature for " ClockLocation ".`n" why ".")
 }
 
 ; ----------------------------------------------------------------------------
@@ -9867,6 +10252,9 @@ SyncTextExpander()
 ; the flag but never armed the 1000 ms timer: the clock only appeared once the
 ; user opened the settings window, because ApplyUi was its sole caller.
 SyncCustomClockTimer()
+; Not a Sync: a one-off probe of a Windows setting that the drag effects cannot
+; work without. It only ever logs and notifies, so it belongs after the flags.
+CheckDragFullWindows()
 UpdateKeyboardHook()
 ; Last of all. ShellEvent is the widest-reaching callback in the file - window
 ; created, destroyed, activated and minimised - so nothing else may still be

@@ -129,7 +129,8 @@ mouse is over it.
 - **Breathing Backgrounds**: Inactive background windows slowly fade to 70% opacity after 6 seconds of inactivity, waking up instantly when hovered.
 - **Focus Pulse**: Switching to a window via Alt+Tab makes it pulse (expand by 2-3% and bounce back) to immediately draw your attention.
 - **Ghost Slide-In**: New apps slide up from 30px below while fading in, similar to modern smartphone app launches.
-- **Parallax Dragging**: Windows become transparent based on how fast you drag them, fading back to solid when you stop.
+- **Parallax Dragging**: Windows become transparent based on how fast you drag them, fading back to solid when you stop. The two speeds that define the ramp are settings: it starts fading at `[memory] parallaxfrom` px/s and reaches `parallaxmin` opacity at `parallaxfull` px/s.
+- **Taskbar Temperature**: adds the current temperature to the taskbar, just left of the system tray. It never draws over the clock, the date or the tray icons - Windows keeps drawing those. Off by default; it is the only feature that makes a network request (`https://wttr.in`, every 15 minutes).
 - **Magnetic Seam Flash**: A brief neon flash effect appears exactly on the seam when two windows magnetically snap together.
 - **Theater Spotlight**: A soft, circular vignette shadow follows your active window like a stage spotlight, dimming the rest of the screen.
 - **Fly-to-Mouse Minimize**: Minimized windows spin and vacuum directly into your mouse cursor instead of dropping to the taskbar.

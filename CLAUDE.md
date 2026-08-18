@@ -121,7 +121,7 @@ Hot Corners uses the same dwell model (`[corners] size`, `[corners] delay`) for 
 - **Breathing Backgrounds**: Inactive background windows slowly fade to 70% opacity after 6 seconds of inactivity, waking up instantly when hovered.
 - **Focus Pulse**: Switching to a window via Alt+Tab makes it pulse (expand by 2-3% and bounce back) to immediately draw your attention.
 - **Ghost Slide-In**: New apps slide up from 30px below while fading in, similar to modern smartphone app launches.
-- **Parallax Dragging**: Windows become transparent based on how fast you drag them, fading back to solid when you stop.
+- **Parallax Dragging**: Windows become transparent based on how fast you drag them, fading back to solid when you stop. The two speeds that define the ramp are settings: it starts fading at `[memory] parallaxfrom` px/s and reaches `parallaxmin` opacity at `parallaxfull` px/s.
 - **Magnetic Seam Flash**: A brief neon flash effect appears exactly on the seam when two windows magnetically snap together.
 - **Theater Spotlight**: A soft, circular vignette shadow follows your active window like a stage spotlight, dimming the rest of the screen.
 - **Fly-to-Mouse Minimize**: Minimized windows spin and vacuum directly into your mouse cursor instead of dropping to the taskbar.
@@ -443,6 +443,16 @@ spotlight), scale by `dt`: rates are written as `perFrameValue / FRAME_MS` so th
 still look identical at the nominal cadence. `dt` is clamped to 3 frames so a
 stall cannot teleport an animation to its end.
 
+**A ramp calibrated by gain rather than by endpoints cannot be checked by eye.**
+Drag parallax was `alpha := 255 - speed * 0.06` with speed in px/s, so an ordinary
+400 px/s drag landed at 225/255 - 88% opacity, a change nobody can see - and the
+24% floor was only reached past 3200 px/s. It was doing exactly what it said and
+was still indistinguishable from switched off. `ParallaxAlpha()` names both ends
+instead (`[memory] parallaxfrom`, `parallaxfull`), so "invisible at a normal drag
+speed" is a number on the settings page rather than a constant on a 15 ms path.
+Both drag paths call that one function; the gain used to be written out longhand in
+each of them, which is how they had drifted apart before.
+
 **Never derive a duration from a frame count.** `ms := 12 * 16` was silently a
 frame-count assumption; those are all plain millisecond values now.
 **Velocity is pixels per SECOND, and every consumer is calibrated in that unit.**
@@ -566,16 +576,64 @@ Two rules for that module: nothing in it may throw (it runs from a top-level ini
 
 `settings.ini`, `window-positions.ini`, `snap.log` (+ `.old`, rotated at 256 KB) are written to `A_ScriptDir` — so running from source writes into `src\`, not the installed copy at `%LOCALAPPDATA%\Window Tweaks`. Stealth Panic adds `StealthPanic.ini` and `StealthPanicApps.txt` next to whichever copy is running. All gitignored. Nothing is written outside the program folder except a Startup `.lnk`; the registry is read-only (`AppsUseLightTheme`) — there is no `Run` key, service, or scheduled task.
 
-### Custom Taskbar Clock — uncommitted, and the first network egress
+### Taskbar Temperature - the one network egress
 
-`src\WindowTweaks.ahk` carries an **uncommitted** feature (~127 lines) adding a clock overlay: `CustomClockEnabled`, ini key `[taskbar] customclock`, wired through `LoadSettings` / `WriteSettings` / `BuildWin` / `ApplyUi` and driven by `SyncCustomClockTimer()` → `UpdateCustomClock()`. It parents a borderless `+E0x20` (click-through) GUI over the `TrayClockWClass` control and rewrites it as time / date / weather.
+`src\WindowTweaks.ahk` carries a small overlay that adds the current temperature to
+the taskbar: `CustomClockEnabled`, ini key `[taskbar] customclock` (default `0`),
+plus `[taskbar] clocklocation`, `clockunits` and `clockfont`. Wired through
+`LoadSettings` / `WriteSettings` / `BuildWin` / `ApplyUi`, armed by
+`SyncCustomClockTimer()`, drawn by a 1000 ms `UpdateCustomClock()` timer.
 
-Two things about it contradict statements elsewhere in this file, so they are called out rather than buried:
+**It draws only the temperature, and that constraint is load-bearing.** It used to
+draw the time and the date as well, in a 110 px block anchored on `TrayClockWClass`
+and grown leftward - which covered the native clock and the Control Center button.
+The result read as a corrupted system tray: the notification icon looked like it
+had moved, the spacing was wrong, and a failed weather lookup printed `no data`
+where the time belongs. Nothing in Explorer had changed; it was all *covered*, not
+moved. So:
 
-- **`FetchWeather()` performs an outbound HTTP request** — `ComObject("Msxml2.XMLHTTP")` against `http://wttr.in`, async, refreshed every 15 minutes, with the response written into `CustomClockWeather` by `WeatherCallback`. This is the **only** network call in the program, and the paragraph above ("nothing is written outside the program folder") was written when none existed. It is plain HTTP, not HTTPS, and there is no opt-out beyond the feature's own checkbox. If privacy or offline behaviour matters, this is the one place to look.
-- **It is invisible in the default configuration.** `UpdateCustomClock` returns early unless `EP_IconSize = "Small"` *and* the taskbar is not at the bottom of the screen, so with stock settings the feature can be switched on and appear to do nothing.
+- **The overlay may never intersect `TrayNotifyWnd`.** `FindTrayLeft()` reads that
+  window's left edge every tick (it moves as tray icons come and go - measured 1577
+  with a quiet tray, 1529 with two more), the block is sized to its own content and
+  placed to the left of it with a 6 px gap, and if the tray cannot be found the
+  feature draws nothing rather than guessing.
+- **It hides itself rather than reporting.** No reading, no taskbar, taskbar
+  auto-hidden off its own monitor, no room left of the tray, or the pointer over the
+  taskbar - each of those hides the block. Failures go to `snap.log`, and to one
+  `Notify()` when the user typed the location themselves. Nothing about the
+  program's state is ever rendered onto the taskbar.
+- **Windows keeps drawing the clock, the date and the tray.** There is no
+  `EP_IconSize` gate any more: it mirrors `TaskbarSmallIcons`, which
+  `docs\TASKBAR-AND-INTERNALS.md` records as inert on the Win11 shell and which
+  defaults to `Large`, so gating on it made the feature unreachable on a stock
+  install however the box was ticked.
 
-The COM request object is held in the global `CustomClockReq` specifically so it is not garbage-collected mid-flight, and cleared in the callback — do not "tidy" that into a local.
+Three things that are easy to reintroduce:
+
+- **`ControlGetHwnd("TrayClockWClass", ...)` throws.** The clock is a *grandchild*
+  of `Shell_TrayWnd` via `TrayNotifyWnd`, and a bare class name is not a valid
+  ClassNN - AHK wants `TrayClockWClass1`. Measured on 26200: the bare form raises
+  `TargetError: Target control not found.`, and `ControlGetHwnd` throws rather than
+  returning 0, so the `if (!clockHwnd)` guard under it was unreachable. Inside a
+  timer callback that throw pops an error dialog and kills the timer, so the
+  feature had never once drawn anything. Use `FindWindowExW`, and keep the whole
+  tick body behind the `try` in `UpdateCustomClock()`.
+- **`FetchWeather()` is the only outbound request in the program** -
+  `ComObject("Msxml2.XMLHTTP")` against `https://wttr.in` (HTTPS), off by default,
+  every 15 minutes, and it carries the configured place name. The reply is *polled*
+  from the clock tick rather than driven by `onreadystatechange`: the event handler
+  is one more thing that has to work for the feature to work at all, and it forced
+  the request object to be released from inside its own callback while MSXML was
+  still on the stack. `CustomClockReq` is held in a global so it is not collected
+  mid-flight - do not "tidy" that into a local - and `Bye()` clears it.
+- **wttr.in answers 200 with its HTML landing page instead of an error status**
+  whenever it will not serve a reading. Measured: `/Berlin` and the blank
+  geolocated form answer in plain text, `/Baku` answers with the page, `?format=%t`
+  on its own answers with the page, and roughly twenty requests inside a few
+  minutes gets *everything* answered with the page. So the body is the only signal,
+  `%C+%t` is requested (the condition is thrown away - it is there because `%t`
+  alone does not work), and `WeatherFailed()` triples the retry interval up to 15
+  minutes rather than retrying every minute into a rate limit.
 
 ## Packaging
 

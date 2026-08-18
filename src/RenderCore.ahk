@@ -561,13 +561,22 @@ RS_Apply() {
                 RS_LastAlpha[hwnd] := entry.value
                 continue
             }
+            ; Record the value ONLY when the call actually landed. WinSetTransparent
+            ; throws on a window this process may not touch - an elevated one, with
+            ; AHK unelevated - and recording it anyway poisoned the cache: the diff
+            ; above then skipped every later identical write, so drag parallax,
+            ; breathing and the ghost silently never worked on that window again,
+            ; with nothing logged and no way to tell from the outside.
+            okAlpha := false
             try {
                 if (entry.value >= 256)
                     WinSetTransparent("Off", hwnd)
                 else
                     WinSetTransparent(entry.value, hwnd)
+                okAlpha := true
             }
-            RS_LastAlpha[hwnd] := entry.value
+            if okAlpha
+                RS_LastAlpha[hwnd] := entry.value
         }
     }
 
