@@ -1,16 +1,57 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
+
+; Window Tweaks - magnetic window snapping, inertial ice glide, window
+; animations and ~40 power-user tweaks for Windows 11.
+;
+; Shift+Alt+W opens the settings window. docs\HOTKEYS.md is the source of truth
+; for the key bindings; docs\GUIDE.md is the user guide.
+;
+; THIS FILE IS THE ENTRY POINT AND NOTHING ELSE: process directives, the
+; #Include manifest, and one Boot() call. It holds no globals, no functions and
+; no other top-level statement, and scripts\Check-Split.ps1 check 8 fails any
+; that reappear.
+;
+; MANIFEST ORDER IS DOCUMENTATION, NOT SEMANTICS - Boot() is what made that
+; true. AHK v2 runs all top-level code in file order as one auto-execute thread,
+; so before Boot() existed a startup call could fire while declarations below it
+; had not run. Now every declaration in the program has run before the last line
+; of this file executes. Two orderings are still real:
+;
+;   FeatureFlags.ahk comes first. Hotkeys are live from load time and a #HotIf
+;   expression is evaluated against those globals from the first keypress.
+;
+;   ProcessLifecycle.ahk comes last, so Boot() and Bye() sit next to the
+;   manifest they drive.
+;
+; EVERY #Include LIVES HERE. A nested include would rebase relative paths, and
+; the modules stay flat in src\ with no underscore in any filename - both
+; installers glob src\*.ahk, and build\Setup.cs unflattens '_' to '\' when it
+; extracts, so Window_Commands.ahk would install as Window\Commands.ahk and fail
+; to load on end-user machines and nowhere else.
+
+; ----- Infrastructure: no feature knowledge -----
 #Include SnapCore.ahk
 #Include RenderCore.ahk
 #Include AnimationScheduler.ahk
 #Include MediaCore.ahk
+
+; ----- Substrate: settings, flags, logging -----
 #Include FeatureFlags.ahk
 #Include TuningRegistry.ahk
 #Include DiagnosticsLog.ahk
 #Include SettingsStore.ahk
+
+; ----- Shared services -----
+#Include MonitorGeometry.ahk
+#Include OverlayGui.ahk
+
+; ----- UI and input -----
 #Include SettingsWindow.ahk
 #Include FeatureToggles.ahk
 #Include InputBindings.ahk
+
+; ----- Features -----
 #Include WindowCommands.ahk
 #Include DragPipeline.ahk
 #Include DropPlacement.ahk
@@ -25,10 +66,13 @@
 #Include ShellSurfaceWatcher.ahk
 #Include TaskbarClock.ahk
 #Include WindowSpectacleFx.ahk
-#Include MonitorGeometry.ahk
-#Include OverlayGui.ahk
+
+; ----- Bolt-on: also runs standalone, so it keeps its own config and GUI -----
 #Include StealthPanic.ahk
+
+; ----- Boot() and Bye(). Last, so it sits beside the manifest it drives -----
 #Include ProcessLifecycle.ahk
+
 Persistent
 DetectHiddenWindows false
 SetWinDelay -1
@@ -47,378 +91,9 @@ ListLines False
 KeyHistory 0
 ProcessSetPriority "BelowNormal"
 
-; Window Tweaks - snapping, ice glide, always-on-top, position memory, taskbar.
-; Shift+Alt+W opens the settings window. See GUIDE.md.
-
-
-
-
-
-
-
-
-
-; There is no startup code here any more. LoadSettings(), RotateLog(),
-; SyncTray(), BuildTray() and the first WriteLog() all run from Boot() in
-; ProcessLifecycle.ahk, which the last line of this file calls once every
-; declaration in the program has run. scripts\Check-Split.ps1 check 8 fails any
-; top-level call that reappears here.
-
-; =========================================================== Settings ===========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-; Written values, so an unchanged key is never written again.
-;
-; Measured: one IniWrite costs 771 us, and SaveSettings writes 45 keys - 34.6 ms
-; of blocking disk I/O. It runs on every checkbox click, every debounced keystroke
-; in the settings window, and every toggle hotkey, so Shift+Alt+S used to stall the
-; whole process for 35 ms. A toggle changes exactly one key; writing only that one
-; costs 0.8 ms, and SaveSettings() no longer writes at all - it queues.
-
-
-
-
-
-
-
-
-; =========================================================== Start with Windows ===========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-global PendingTransMsg := ""
-
-
-
-
-
-
-
-
-
-
-; Boot() registers OnMessage(0x1000) for the icons this Map holds.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-; The shell tells us when a window is created, so there is no polling timer.
-; Boot() registers both SHELLHOOK and TaskbarCreated, and calls
-; RegisterShellHook() as the very last thing it does. Two reasons, both learned
-; the hard way: ShellEvent is the widest-reaching callback in the program, so
-; nothing may still be uninitialised when the shell starts delivering to it; and
-; the registration does NOT survive an Explorer restart, so without the
-; TaskbarCreated handler an Explorer crash - or this app's own "Restart Explorer"
-; button - silently killed position memory, the open animations, focus pulse,
-; breathing seeding, fly-to-mouse minimize and per-window cleanup for the rest of
-; the session, with no error anywhere.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-; Boot() registers the ten OnMessage handlers these functions need: WM_NCHITTEST,
-; WM_NCMBUTTONDOWN and the eight mouse messages. Each one runs for every message
-; of its kind that reaches ANY window this process owns, which is why every
-; handler's first act is to test the hwnd against PipGuis and return unhandled.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-; ============================================================================
-; Mouse & Cursors FX
-; ============================================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-; ============================================================================
-; Startup - MUST stay the last statement in this file
-; ============================================================================
-; One call. Boot() lives in ProcessLifecycle.ahk and runs the whole startup
-; sequence in one place: settings, tray, the drag hooks, every OnMessage handler,
-; OnExit(Bye), and each feature's Sync*. It has to be here rather than beside any
-; of those functions because AHK v2 runs all top-level code in file order, so a
-; startup call placed higher up fires while declarations below it have not run
-; yet - see the ProcessLifecycle.ahk header for the two bugs that produced.
+; MUST STAY THE LAST STATEMENT IN THIS FILE. Boot() is in ProcessLifecycle.ahk
+; and runs the whole startup sequence in one place: settings, tray, the drag
+; hooks, every OnMessage handler, OnExit(Bye), and each feature's Sync*. It is
+; here rather than beside any of those functions because a startup call placed
+; higher up fires while declarations below it have not run yet.
 Boot()
-
-

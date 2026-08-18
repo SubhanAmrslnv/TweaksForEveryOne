@@ -975,3 +975,5 @@ ToggleBossKey() {
     }
     busy := false
 }
+
+global PendingTransMsg := ""
