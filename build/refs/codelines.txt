@@ -425,13 +425,14 @@
                 return
                 return 0
                 return 1 ; HTCLIENT
+                return ex
                 return false
                 return false
                 return false
                 return false
                 return false
                 return fullPath
-                return nx
+                return h
                 return p
                 return p "Common7\IDE\devenv.exe"
                 return p32
@@ -558,6 +559,8 @@
             . "|Splash Screen|Boot Screen"
             . "|Steam Login|Discord Login|Slack Login|Teams Login|Zoom Login|Adobe Login|Epic Login|Battle\.net Login|Riot Login|Dropbox Login|OneDrive Login|Google Login|Apple Login"
             . "|Visual Studio Installer|JetBrains Toolbox|Creative Cloud Installer|Office Installer|Epic Installer|Steam Installer|Riot Installer|EA Installer"
+            : "Shift+Alt+W  opens this"
+            ? "Scroll for more settings"
             || !RegExMatch(body, '"longitude"\s*:\s*(-?[0-9.]+)', &mLo)) {
             || LightsaberSeamEnabled || (PrivacyBlurEnabled && PrivacyBlurWindows.Count > 0)
             }
@@ -709,6 +712,7 @@
             CleanShatter(animKey)
             Cleanup()
             Cleanup()
+            ClockWarnedNoCity := true
             ClosePiP(s)
             ClosePiP(srcHwnd)
             cls := ""
@@ -903,6 +907,8 @@
             H := B - Y
             h := baseSize + (45 * ease)
             h := baseSize + 45 - (55 * ease)
+            h := DllCall("FindWindowExW", "ptr", notify, "ptr", 0, "str", cls, "ptr", 0, "ptr")
+            h := DllCall("FindWindowExW", "ptr", tbHwnd, "ptr", 0, "str", cls, "ptr", 0, "ptr")
             hdwp := DllCall("BeginDeferWindowPos", "int", list.Length, "ptr")
             hLines.Push(oTop, oBottom)
             hovered := A_Index
@@ -974,7 +980,9 @@
             if (ElasticAwayCounts[hwnd] >= threshold) {
             if (ElasticAwayCounts[hwnd] >= threshold) {
             if (endQuote) {
+            if (ew > 0)
             if (FocusDepthEnabled) {
+            if (h && DllCall("IsWindowVisible", "ptr", h))
             if (hwnd == aHwnd || hwnd == mHwnd || (anyMedia && MC_IsMediaHwnd(hwnd))) {
             if (hyst > 0 && d <= hyst)
             if (isEdge) {
@@ -988,7 +996,6 @@
             if (mm == 1 || wy + wh > tbActiveTop) {
             if (mm == -1) ; Minimized
             if (mx >= L && mx <= R - 1 && my >= T && my <= B - 1) {
-            if (nw > 0)
             if (nX != mX || nY != mY) {
             if (obj.active) {
             if (pid == ownPid)
@@ -1148,6 +1155,7 @@
             NotchAnim(MicOsdGui.Hwnd, y, visibleY, true)
             NotchAnim(OsdGui.Hwnd, cy, visibleY, true)
             NotchAnim(OsdGui.Hwnd, y, visibleY, true)
+            Notify("Taskbar clock: set a Location in Shift+Alt+W, Taskbar Clock`nto show the temperature.")
             NumPut("char", alpha, props, 36)
             NumPut("int", 0, props, 4)
             NumPut("int", 0, props, 8)
@@ -1292,6 +1300,7 @@
             return "Transient"
             return "Transient"
             return "Transient"
+            return (h && DllCall("IsWindowVisible", "ptr", h)) ? h : 0
             return ; Don't animate maximized windows to save performance
             return 1
             return 1
@@ -1356,6 +1365,7 @@
             return false
             return false
             return false
+            return h
             return i
             return i
             return i
@@ -1423,12 +1433,12 @@
             RS_SetPos(hwnd, x, y + shrink, w, h - shrink*2, RS_PRI_ANIM)
             RS_SetPos(hwnd, x, y, -1, -1, RS_PRI_USER)
             RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
-            RS_SetPos(hwnd, X, Y, W, H, RS_PRI_ANIM)
             RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
+            RS_SetPos(hwnd, X, Y, W, H, RS_PRI_ANIM)
             RS_SetRegion(ActiveBorderGui.Hwnd, rect1 "  " rect2 "  " rect3 "  " rect4, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "", RS_PRI_ANIM)
-            RS_SetRegion(hwnd, "0-0 w" w " h" curH, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
+            RS_SetRegion(hwnd, "0-0 w" w " h" curH, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
             RS_SetRegion(MicOsdGui.Hwnd, "0-0 w240 h70 r20-20", RS_PRI_ANIM)
             RS_SetRegion(OsdGui.Hwnd, "0-0 w280 h64 r20-20", RS_PRI_ANIM)
@@ -1591,13 +1601,14 @@
             try WinGetPos(&cx, &cy, &cw, &ch, OsdGui.Hwnd)
             try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
             try WinGetPos(&wx, &wy, &ww, &wh, hwndToMin)
-            try WinGetPos(&x, &y, &w, &h, hwnd)
-            try WinGetPos(&x, &y, &w, &h, hwnd)
             try WinGetPos(&X, &Y, &W, &H, hwnd)
+            try WinGetPos(&x, &y, &w, &h, hwnd)
+            try WinGetPos(&x, &y, &w, &h, hwnd)
             try WinHide(hwnd)
             try WinMove(ElasticBaseX, ElasticBaseY,,, ElasticHwnd)
             try WinSetAlwaysOnTop(1, OsdGui.Hwnd)
             try WinSetRegion(entry.value, hwnd)
+            try WinSetTransColor(keyColor " 255", CustomClockGui.Hwnd)
             try WinSetTransparent(alpha, guiObj.Hwnd)
             tx := gx + Clamp(Round(dragVX * GLIDE_THROW * 0.18), -GLIDE_MAX, GLIDE_MAX)
             ty := gy + Clamp(Round(dragVY * GLIDE_THROW * 0.18), -GLIDE_MAX, GLIDE_MAX)
@@ -1625,10 +1636,10 @@
             WinCurrentAlpha[hwnd] := 255
             winCx := wx + ww/2
             winCy := wy + wh/2
+            WinGetPos(&ex, &ey, &ew, &eh, "ahk_id " h)
             WinGetPos(&gx, &gy, &gw, &gh, hwnd)
-            WinGetPos(&nx, &ny, &nw, &nh, "ahk_id " notify)
-            WinGetPos(&wx, &wy, &ww, &wh, hwnd)
             WinGetPos(&wX, &wY, &wW, &wH, hwnd)
+            WinGetPos(&wx, &wy, &ww, &wh, hwnd)
             WinGetPos(&wx, &wy, &ww, &wh, mHwnd)
             WinGetPos(&X, &Y, &W, &H, hwnd)
             WinLastActive.Delete(hwnd)
@@ -1665,15 +1676,21 @@
         && Abs(eR - startR) < MIN_DRAG && Abs(eB - startB) < MIN_DRAG)
         , "SystemUsesLightTheme", 0)
         . "&latitude=" GeoLat "&longitude=" GeoLon
+        . "|" (seeThrough ? "t" : "o")
         . (s.step != 1 ? ", step " s.step : "") ")", "x+12 yp+3")
         : "No temperature for " ClockLocation ".`n" why ".")
         : (state = 1)
+        : ["TrayClockWClass", "TrayNotifyWnd"]
         ? "Taskbar temperature needs a city.`nSet one in Shift+Alt+W, General."
+        ? ["TrayNotifyWnd"]
         ? MC_Qualifies(state, peak, muted, MC_PEAK_EPS)
         || (MC_FallbackExe.Count && (MC_LiveSessionExe.Count || !MC_FALLBACK_NEEDS_SESSION)))
         || cls == "Progman" || cls == "Shell_TrayWnd") {
         || GetKeyState("MButton", "P")) {
         || vk = 0xA0 || vk = 0xA1 || vk = 0xA2 || vk = 0xA3 || vk = 0xA4 || vk = 0xA5)
+        }
+        }
+        }
         }
         }
         }
@@ -2050,8 +2067,11 @@
         ChangeVolumeOSD(1)
         ChangeVolumeOSD(-1)
         CheckToasts()
+        ClockAnchor := C["clockanchor"].Text
         ClockLocation := CleanClockLocation(C["clockloc"].Value)
         ClockUnits := C["clockunits"].Text
+        ClockWarnedNoCity := false
+        ClockWeatherEnabled := C["clockweather"].Value
         ClosePiP(srcHwnd)
         CloseQuickLook()
         CloseQuickLook()
@@ -2134,7 +2154,7 @@
         CustomClockBuiltFor := stamp
         CustomClockEnabled := C["customclock"].Value
         CustomClockGui := Gui("-Caption +AlwaysOnTop +ToolWindow +E0x20 -DPIScale")
-        CustomClockGui.BackColor := dark ? "1F1F1F" : "F3F3F3"
+        CustomClockGui.BackColor := seeThrough ? keyColor : (dark ? "1F1F1F" : "F3F3F3")
         CustomClockGui.MarginX := 0
         CustomClockGui.MarginY := 0
         CustomClockGui.OnEvent("Close", (*) => ExitApp())
@@ -2144,6 +2164,7 @@
         CustomClockReq := 0, WeatherStage := ""
         CustomClockReq := req
         CustomClockTimeText := CustomClockGui.Add("Text"
+        CustomClockWeather := ""
         CustomClockWeather := ""
         CustomClockWeather := ""
         CustomTrans.Delete(hwnd)
@@ -2398,6 +2419,8 @@
         gy := Round(ph * e)
         h := 1
         h := baseSize
+        h := DllCall("FindWindowExW", "ptr", tbHwnd, "ptr", 0, "str", cls, "ptr", 0, "ptr")
+        h := FindTrayElement(tbHwnd, cls)
         h := Round(250 * scale)
         hbm := DllCall("CreateCompatibleBitmap", "ptr", hdcDest, "int", w, "int", h, "ptr")
         hbm := DllCall("CreateCompatibleBitmap", "ptr", hdcDest, "int", w, "int", h, "ptr")
@@ -2495,6 +2518,7 @@
         if (!ActiveDeleteGuis.Has(animKey))
         if (!approachOk && prevAt && now > prevAt) {
         if (!BreatheCursorActive) {
+        if (!ClockWarnedNoCity) {
         if (!DllCall("IsWindow", "ptr", hwnd))
         if (!DllCall("IsWindow", "ptr", hwnd))
         if (!DllCall("IsWindow", "ptr", hwnd))
@@ -2536,6 +2560,7 @@
         if (BreathingEnabled && IsRestorable(hwnd)) {
         if (candidate != "")
         if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd")
+        if (cls == "TrayNotifyWnd") {
         if (cmdLine != "" && RegExMatch(cmdLine, cmdLineArgs))
         if (ComCall(0, pCtl, "Ptr", MC_Iid(MC_IID_IAudioSessionControl2), "Ptr*", &pCtl2, "Int") != 0 || !pCtl2)
         if (ComCall(14, pCtl2, "UInt*", &pid, "Int") != 0 || !pid)
@@ -2589,7 +2614,9 @@
         if (gotIt) {
         if (GridHoverZone > 0)
         if (GridHoverZone > 0) {
+        if (h && DllCall("IsWindowVisible", "ptr", h))
         if (h < 2)
+        if (h) {
         if (hbm && hdcMem) {
         if (hbm && hdcMem) {
         if (hmon) {
@@ -2607,7 +2634,7 @@
         if (key == "BreathingEnabled" && IsSet(BreathingEnabled)) {
         if (key == "ContextMenuAnimEnabled" && IsSet(ContextMenuAnimEnabled)) {
         if (key == "CursorYawnEnabled" && IsSet(CursorYawnEnabled)) {
-        if (key == "epStyle" || key == "epIconSize")
+        if (key == "epStyle" || key == "epIconSize" || key == "clockanchor" || key == "clockunits")
         if (key == "LivePipEnabled" && IsSet(LivePipEnabled)) {
         if (key == "OpenAnim" && IsSet(OpenAnim)) {
         if (key == "PrivacyBlurEnabled" && IsSet(PrivacyBlurEnabled)) {
@@ -2631,7 +2658,7 @@
         if (needsAnimation)
         if (newL != pL) {
         if (newT != pT) {
-        if (notify && DllCall("IsWindowVisible", "ptr", notify)) {
+        if (notify) {
         if (numAlpha >= 255)
         if (nx != lastX || ny != lastY || nw != lastW || nh != lastH) {
         if (nx != lastX || ny != lastY || nw != lastW || nh != lastH) {
@@ -2669,6 +2696,7 @@
         if (resolvedPath != "") {
         if (Ripples.Length >= 5)
         if (s.page == "" || !C.Has(s.key))
+        if (seeThrough)
         if (SF_Hwnd && DllCall("IsWindow", "ptr", SF_Hwnd))
         if (SF_Phase == 1) {
         if (shouldHide != SmartTaskbarLastState) {
@@ -2826,6 +2854,7 @@
         iv := 256
         iv := Integer(v + 0.5)
         ka := 1 - Exp(-dt / 45.0)
+        keyColor := "FF00FF"
         keys := []
         keys.Push(hwnd)
         keys.Push(key)
@@ -3053,6 +3082,7 @@
         p2 := EnvGet("ProgramFiles") "\Microsoft VS Code\Code.exe"
         p2 := localAppData "\Microsoft\Teams\Teams.exe"
         pad := (A_Index - 1) * FocusFeather
+        Pages[CurPage].GetPos(, , , &pageH)
         Pages[name] := pg
         PaintCustomClock()
         ParallaxEnabled := C["parallax"].Value
@@ -3153,6 +3183,8 @@
         RestoreFromBottom(hwnd)
         RestoreFromTray(hwnd)
         RestoreStealthPanic()
+        return
+        return
         return
         return
         return
@@ -3920,7 +3952,7 @@
         try cls := WinGetClass(ahwnd)
         try cls := WinGetClass(hwnd)
         try CustomClockGui.Destroy()
-        try CustomClockTempText.Value := CustomClockWeather
+        try CustomClockTempText.Value := (CustomClockWeather == "") ? "--" : CustomClockWeather
         try CustomClockTimeText.Value := FormatTime(, "HH:mm") "`n" FormatTime(, "dd.MM.yyyy")
         try DirCreate(dirOnly)
         try DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", thumbId)
@@ -4049,6 +4081,8 @@
         WeatherStage := stage
         WeatherWarnedFor := "-"
         Win := ""                    ; stale handle - fall through and rebuild
+        Win.GetClientPos(, , , &clientH)
+        Win.HintLbl.Text := (pageH > clientH)
         WinCurrentAlpha[hwnd] := 255
         WinCurrentAlpha[hwnd] := current
         WindowCmdLineCache[hwnd] := cmdLine
@@ -4102,6 +4136,9 @@
     , step: step, dec: dec, page: page, label: label, hint: hint}
     {
     {key: key, sec: sec, ini: ini, def: def, lo: lo, hi: hi
+    }
+    }
+    }
     }
     }
     }
@@ -4605,6 +4642,7 @@
     alpha := Round(80 * (1 - ease))
     AltDragEnabled := IniStr("memory", "altdrag", "1") = "1"
     AlwaysOnBottomEnabled := IniStr("memory", "bottom", "1") = "1"
+    anchorLeft := ResolveClockAnchor(tbHwnd)
     angleStep := (2 * PI) / num
     Anim_Claim(hwnd, "alpha", animKey, FadeBackStep)
     Anim_Claim(hwnd, "geom", animKey, BounceStep)
@@ -4727,8 +4765,10 @@
     C["breath"] := Box(pg, CW, FG, "Breathing (dim inactive windows)", BreathingEnabled, "xm y+16")
     C["breathe"] := Box(pg, CW, FG, "Breathe Cursor (Idle glow effect)", BreatheCursorEnabled, "xm y+16")
     C["carousel"] := Box(pg, CW, FG, "3D Carousel Alt-Tab", CarouselAltTabEnabled, "xm y+16")
+    C["clockanchor"] := pg.AddDropDownList("x196 yp-3 w120 Choose" IndexOf(CLOCK_ANCHORS, ClockAnchor), CLOCK_ANCHORS)
     C["clockloc"] := pg.AddEdit("x196 yp-3 w120", ClockLocation)
     C["clockunits"] := pg.AddDropDownList("x196 yp-3 w120 Choose" IndexOf(CLOCK_UNITS, ClockUnits), CLOCK_UNITS)
+    C["clockweather"] := Box(pg, CW, FG, "Show the temperature", ClockWeatherEnabled, "xm y+16")
     C["contextanim"] := Box(pg, CW, FG, "Context Menu Unfold (Origami open animation)", ContextMenuAnimEnabled, "xm y+16")
     C["corner_bl"] := pg.AddDropDownList("x140 yp-3 w130 Choose" IndexOf(CORNER_ACTIONS, HotCornerBL), CORNER_ACTIONS)
     C["corner_br"] := pg.AddDropDownList("x+10 yp-3 w130 Choose" IndexOf(CORNER_ACTIONS, HotCornerBR), CORNER_ACTIONS)
@@ -4737,7 +4777,7 @@
     C["corners_en"] := Box(pg, CW, FG, "Enable Hot Corners (Shift+Alt+C)", HotCornersEnabled, "xm y+16")
     C["cursoryawn"] := Box(pg, CW, FG, "Cursor Yawn (Wakes up after idle)", CursorYawnEnabled, "xm y+16")
     C["curtain"] := Box(pg, CW, FG, "Curtain Drop (Win+Alt+D)", CurtainDropEnabled, "xm y+16")
-    C["customclock"] := Box(pg, CW, FG, "Custom Taskbar Clock (time, date, temperature)", CustomClockEnabled, "xm y+16")
+    C["customclock"] := Box(pg, CW, FG, "Show a clock block on the taskbar", CustomClockEnabled, "xm y+16")
     C["debuglog"] := Box(pg, CW, FG, "Write a debug log (snap.log)", DEBUG, "xm y+16")
     C["deletehole"] := Box(pg, CW, FG, "Recycle Bin Black Hole (Delete Animation)", BlackHoleDeleteEnabled, "xm y+16")
     C["elastic"] := Box(pg, CW, FG, "Rubber-Band Scroll (Kinetic lean)", ElasticScrollEnabled, "xm y+16")
@@ -4866,8 +4906,10 @@
     ClipSaved := ClipboardAll()
     ClipWait(1, false)
     cloaked := 0
+    ClockAnchor := IniPick("taskbar", "clockanchor", CLOCK_ANCHORS, "TrayEdge")
     ClockLocation := CleanClockLocation(IniStr("taskbar", "clocklocation", ""))
     ClockUnits := IniPick("taskbar", "clockunits", CLOCK_UNITS, "Celsius")
+    ClockWeatherEnabled := IniStr("taskbar", "clockweather", "1") = "1"
     cls := ""
     cls := ""
     cls := ""
@@ -5066,6 +5108,7 @@
     for a in allowed {
     for animKey, obj in ActiveShatters.Clone() {
     for ch in ANIM_CHANNELS
+    for cls in order {
     for dev in MC_Endpoints {
     for eh in grp {
     for g in SmartGridGuis
@@ -5119,7 +5162,7 @@
     for m in [RS_Alpha, RS_Pos, RS_Region, RS_ZOrder, RS_LastAlpha, RS_LastRegion, RS_AlphaState] {
     for m in [RS_LastAlpha, RS_LastRegion, RS_AlphaState] {
     for m in g.mons {
-    for name in ["🪟 Window Management", "⚡ Power Features", "🔊 System & Media", "🖥️ Multi-Monitor", "✨ Animation", "📐 Hot Corners", "⚙️ General"] {
+    for name in ["🪟 Window Management", "⚡ Power Features", "🔊 System & Media", "🖥️ Multi-Monitor", "✨ Animation", "🕒 Taskbar Clock", "📐 Hot Corners", "⚙️ General"] {
     for other in WinGetList() {
     for pid in dead {
     for pid, ts in MC_PidQualifiedAt {
@@ -5238,6 +5281,8 @@
     global CarouselGui, CarouselWindows, Thumbnails, CarouselIndex, CarouselAngleOffset, CarouselActive
     global CarouselIndex, CarouselWindows, CarouselAngleOffset
     global CarouselIndex, CarouselWindows, CarouselAngleOffset
+    global ClockAnchor
+    global ClockWeatherEnabled, ClockWarnedNoCity
     global ContextMenuAnimEnabled
     global CurPage, Pages
     global CurPage, Pages, Win
@@ -5256,7 +5301,7 @@
     global CustomClockReq, WeatherStage, WeatherReqAt, CustomClockWeather
     global CustomClockTimeText, CustomClockTempText, CustomClockWeather
     global CustomClockWeather, ClockLocation, WeatherWarnedFor
-    global CustomClockWeather, LastWeatherFetch, WeatherNextMs
+    global CustomClockWeather, LastWeatherFetch, WeatherNextMs, ClockWeatherEnabled, ClockAnchor
     global CustomTrans, PendingTransMsg
     global CustomTrans, WinCurrentAlpha, WinTargetAlpha
     global DEBUG, LogBuf, LOG_FLUSH_BYTES
@@ -5487,7 +5532,7 @@
     global StealthSuspendAnimations, StealthSuspendOverlays, StealthSuspendBackground
     global StealthSuspendedFeatures
     global StealthSuspendedFeatures
-    global TaskbarWaveEnabled, CustomClockEnabled, ClockLocation, ClockUnits, StartMenuBlurEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled, CursorYawnEnabled, ShatterEnabled, LightsaberSeamEnabled
+    global TaskbarWaveEnabled, CustomClockEnabled, ClockLocation, ClockUnits, ClockAnchor, ClockWeatherEnabled, StartMenuBlurEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled, CursorYawnEnabled, ShatterEnabled, LightsaberSeamEnabled
     global TaskbarWaveEnabled, StartMenuBlurEnabled, ToastBounceEnabled
     global TaskbarWaveEnabled, StartMenuBlurEnabled, ToastBounceEnabled, LightsaberSeamEnabled
     global TaskbarWaveGui, TaskbarWaveThumb, TaskbarWaveEnabled
@@ -5507,10 +5552,11 @@
     global VelX, VelY, GLIDE_THROW, GLIDE_MAX
     global WeatherNextMs, WeatherFailMs
     global WeatherNextMs, WeatherFailMs, ClockLocation, ClockUnits
-    global WeatherWarnedFor, GeoFor
+    global WeatherWarnedFor, GeoFor, ClockWarnedNoCity
     global Win
     global Win
     global Win, C
+    global Win, CurPage, Pages
     global Win, Pages, NavItems, C, CurPage, VERSION
     global WinCurrentAlpha, GhostWindows, BottomWindows, FocusGuis
     global WindowCmdLineCache
@@ -5552,6 +5598,7 @@
     Head(pg, CW, FG, "Multi-Monitor & Visuals")
     Head(pg, CW, FG, "Power Features")
     Head(pg, CW, FG, "System & Media")
+    Head(pg, CW, FG, "Taskbar Clock")
     Head(pg, CW, FG, "Window Management")
     hh := Round(spot.h)
     hi := Tune("parallaxFull")
@@ -5755,6 +5802,7 @@
     if (!(style & 0x10000000) || (style & 0x01000000) || (style & 0x20000000)) { ; Not visible OR Maximized OR Minimized
     if (!ActiveBorderEnabled)
     if (!ActiveBorderGui) {
+    if (!anchorLeft) {
     if (!approachOk)
     if (!BossKeyEnabled && !BossKeyActive)
     if (!BreatheCursorActive) {
@@ -5762,6 +5810,7 @@
     if (!BreatheGui) {
     if (!CarouselActive)
     if (!CarouselActive)
+    if (!ClockWeatherEnabled) {
     if (!ContextMenuAnimEnabled || !hwnd || idObject != 0 || idChild != 0)
     if (!CustomClockGui) {
     if (!DllCall("IsWindow", "ptr", ElasticHwnd) || DragHwnd == ElasticHwnd) {
@@ -5826,8 +5875,8 @@
     if (!TaskbarWaveEnabled || !IsMouseOverTaskbar()) {
     if (!TaskbarWaveGui) {
     if (!tbHwnd || !DllCall("IsWindowVisible", "ptr", tbHwnd)) {
-    if (!trayLeft) {
     if (!TrayMinimizeEnabled)
+    if (!Win || !CurPage || !Pages.Has(CurPage))
     if ((cursor == "SizeWE" || cursor == "SizeNS") && mHwnd) {
     if ((wParam & 0x7FFF) = 2) { ; HSHELL_WINDOWDESTROYED
     if ((wParam & 0x7FFF) = 4) { ; HSHELL_WINDOWACTIVATED
@@ -6285,15 +6334,16 @@
     Lbl(pg, FG, "Bottom Right:", "x+30 yp+3")
     Lbl(pg, FG, "Focus mode (Shift+Alt+F)", "xm y+20")
     Lbl(pg, FG, "Icon Size", "xm y+16")
+    Lbl(pg, FG, "Location", "xm y+16", 190)
     Lbl(pg, FG, "Never dim these apps", "xm y+20", 190)
     Lbl(pg, FG, "New window animation", "xm y+16")
     Lbl(pg, FG, "Overlays", "xm y+20")
+    Lbl(pg, FG, "Sit beside", "xm y+16", 190)
     Lbl(pg, FG, "Taskbar Style", "xm y+16")
-    Lbl(pg, FG, "Temperature units", "xm y+12", 190)
     Lbl(pg, FG, "Top Left:", "xm y+20")
     Lbl(pg, FG, "Top Right:", "x+30 yp+3")
     Lbl(pg, FG, "Transparency wheel (Shift+Alt+Wheel)", "xm y+20", 300)
-    Lbl(pg, FG, "Weather location", "xm y+12", 190)
+    Lbl(pg, FG, "Units", "xm y+16", 190)
     Lbl(pg, FG, "Window animations", "xm y+16")
     leftDist := mX - wX
     LightsaberSeamEnabled := IniStr("mouse", "lightsaber", "1") = "1"
@@ -6524,6 +6574,7 @@
     OnMessage(0x020A, OnMouseWheel)
     OnTypingSpark(ih, vk, sc)
     OpenAnim := IniPick("memory", "openanim", OPEN_ANIMS, "Ghost Slide-In")
+    order := (ClockAnchor == "TrayEdge")
     orig := GhostWindows[hwnd]
     orig := PushedBackWindows[hwnd]
     OriginalTaskbarState := GetTaskbarState()
@@ -6556,6 +6607,7 @@
     pg := CreatePage("⚙️ General")
     pg := CreatePage("📐 Hot Corners")
     pg := CreatePage("🔊 System & Media")
+    pg := CreatePage("🕒 Taskbar Clock")
     pg := CreatePage("🖥️ Multi-Monitor")
     pg := CreatePage("🪟 Window Management")
     pg := Pages[CurPage]
@@ -6622,8 +6674,10 @@
     PutIni(BreatheCursorEnabled ? 1 : 0,  "mouse", "breathe")
     PutIni(BreathingEnabled ? 1 : 0, "memory", "breathing")
     PutIni(CarouselAltTabEnabled ? 1 : 0, "memory", "carousel")
+    PutIni(ClockAnchor, "taskbar", "clockanchor")
     PutIni(ClockLocation, "taskbar", "clocklocation")
     PutIni(ClockUnits, "taskbar", "clockunits")
+    PutIni(ClockWeatherEnabled ? 1 : 0, "taskbar", "clockweather")
     PutIni(ContextMenuAnimEnabled ? 1 : 0,  "mouse", "contextanim")
     PutIni(CursorYawnEnabled ? 1 : 0, "mouse", "cursoryawn")
     PutIni(CurtainDropEnabled ? 1 : 0, "memory", "curtain")
@@ -6770,6 +6824,7 @@
     return {alpha: Round(255 - f * (255 - TuneAlpha("parallaxMin"))), fade: f}
     return 0
     Return 0
+    return 0
     return 0
     return 1
     return 1
@@ -6946,6 +7001,7 @@
     seams := []
     SeamStep(dt, now) {
     section := ""
+    seeThrough := (ClockAnchor == "TrayEdge")
     SEL  := dark ? "0F5FA6" : "CCE4F7"      ; selected nav
     SelectPage("🪟 Window Management")
     SELF := dark ? "FFFFFF" : "0A0A0A"      ; selected nav text
@@ -7139,8 +7195,9 @@
     str := ""
     StrPut(SubStr(title, 1, 63), nid.Ptr + (A_PtrSize == 8 ? 40 : 24), "UTF-16")
     Sub(pg, 220, cSub, "Win10 supports small icons", "x+16 yp+3")
+    Sub(pg, 250, cSub, "a city, e.g. Baku", "x+12 yp+3")
     Sub(pg, 250, cSub, "auto = Windows accent, or a hex RRGGBB", "x+12 yp+3")
-    Sub(pg, 250, cSub, "optional, e.g. Baku. Blank = no temperature, no network", "x+12 yp+3")
+    Sub(pg, 250, cSub, "TrayEdge covers nothing", "x+12 yp+3")
     Sub(pg, 250, subCol, s.hint " (" TuneFormat(s, s.lo) "-" TuneFormat(s, s.hi)
     Sub(pg, CW, cSub, "A fast, minimalist search bar for calculations, folders, and apps.", "xm y+8")
     Sub(pg, CW, cSub, "A window fades while you drag it and springs back to solid when you let go.", "xm y+8")
@@ -7149,13 +7206,13 @@
     Sub(pg, CW, cSub, "Applies a cinematic vertical motion blur to text when scrolling fast.", "xm y+8")
     Sub(pg, CW, cSub, "Audio, typing, and system-wide controls.", "xm y+10")
     Sub(pg, CW, cSub, "Automatically dims every monitor except the one your mouse is currently on.", "xm y+8")
-    Sub(pg, CW, cSub, "clock, the date or the tray icons - Windows keeps drawing those where they are.", "xm y+2")
+    Sub(pg, CW, cSub, "Clock puts it right beside the clock, but then it covers the tray buttons in", "xm y+8")
+    Sub(pg, CW, cSub, "clock, date and tray icons - this never replaces them, it sits next to them.", "xm y+2")
     Sub(pg, CW, cSub, "Closing a window drops it off the screen. Off leaves Alt+F4 entirely to Windows.", "xm y+8")
     Sub(pg, CW, cSub, "Cursor stretches and 'yawns' the first time you touch it after a long idle.", "xm y+8")
     Sub(pg, CW, cSub, "Deleting a file visually sucks it into a top-left singularity (spaghettification).", "xm y+8")
     Sub(pg, CW, cSub, "Draws a fast fading ripple when you left click.", "xm y+8")
     Sub(pg, CW, cSub, "Draws a sleek, accent-colored border around the currently active window.", "xm y+8")
-    Sub(pg, CW, cSub, "Draws in the free space to the LEFT of the system tray. It never covers the", "xm y+8")
     Sub(pg, CW, cSub, "Dual/Triple monitor optimizations and focus effects.", "xm y+10")
     Sub(pg, CW, cSub, "Executable names, comma or semicolon separated - used when no audio API reports playback.", "xm y+6")
     Sub(pg, CW, cSub, "Fluid, physics-based movement and snapping.", "xm y+10")
@@ -7173,6 +7230,7 @@
     Sub(pg, CW, cSub, "Notifications slide in elastically with an overshoot bounce.", "xm y+8")
     Sub(pg, CW, cSub, "Only hides taskbar when windows maximize or touch the bottom edge.", "xm y+8")
     Sub(pg, CW, cSub, "Only needed when reporting a problem. Buffered in memory, written when idle.", "xm y+8")
+    Sub(pg, CW, cSub, "outbound request this program makes: open-meteo.com, once every 15 minutes.", "xm y+2")
     Sub(pg, CW, cSub, "Overrides Roll-Up. Middle-click any window's title bar to close it.", "xm y+8")
     Sub(pg, CW, cSub, "Pins any window permanently to your desktop background, transforming it into a widget.", "xm y+8")
     Sub(pg, CW, cSub, "Press Ctrl+G in any File Dialog to jump to the last active Explorer folder.", "xm y+8")
@@ -7187,12 +7245,15 @@
     Sub(pg, CW, cSub, "Shake your mouse left and right rapidly to make the cursor temporarily grow.", "xm y+8")
     Sub(pg, CW, cSub, "Shift+Alt+R rolls a window up whether this is on or off - this is the mouse gesture.", "xm y+8")
     Sub(pg, CW, cSub, "Show a sleek, macOS-style volume indicator when scrolling the taskbar.", "xm y+8")
+    Sub(pg, CW, cSub, "Shows -- until a location is set below. Setting one is what starts the only", "xm y+8")
     Sub(pg, CW, cSub, "Shows a 2x zoom loupe when selecting text.", "xm y+8")
     Sub(pg, CW, cSub, "Shows a visual 3-zone layout grid. Drop the window into a zone to snap it.", "xm y+8")
     Sub(pg, CW, cSub, "Smoothly drops windows down off-screen instead of instantly vanishing.", "xm y+8")
     Sub(pg, CW, cSub, "Spawns neon sparks behind the text caret while typing.", "xm y+8")
+    Sub(pg, CW, cSub, "that space. TrayEdge sits left of every tray icon and hides nothing at all.", "xm y+2")
     Sub(pg, CW, cSub, "Throw a window forcefully towards another monitor to make it fly and land in the center.", "xm y+8")
     Sub(pg, CW, cSub, "Throw your mouse into the corners of the screen to trigger actions.", "xm y+10")
+    Sub(pg, CW, cSub, "Time over date, with the temperature beside it. Windows keeps drawing its own", "xm y+8")
     Sub(pg, CW, cSub, "Turns active window into an interactive ghost overlay that fades in as your mouse approaches.", "xm y+8")
     Sub(pg, CW, cSub, "Type @@mail, @@tel, @@date to auto-expand. Edit snippets in WindowTweaks.ini", "xm y+8")
     Sub(pg, CW, cSub, "Window jiggles elastically when you suddenly stop moving it.", "xm y+8")
@@ -7235,7 +7296,7 @@
     TaskbarScrollEnabled := IniStr("memory", "taskbarscroll", "1") = "1"
     TaskbarWaveEnabled := IniStr("taskbar", "wave", "0") = "1"
     tbHwnd := WinExist("ahk_class Shell_TrayWnd")
-    tempW := (CustomClockWeather == "") ? 0 : Ceil(glyph * 6) + CLOCK_GAP
+    tempW := ClockWeatherEnabled ? Ceil(glyph * 6) + CLOCK_GAP : 0
     text := LogBuf
     text := StrReplace(listStr, "`r`n", "`n")
     text := StrReplace(text, "`r", "`n")
@@ -7264,10 +7325,10 @@
     tol := Tune("wrapTol")
     topDist := mY - wY
     TrayIcons[hwnd] := true
-    trayLeft := FindTrayLeft(tbHwnd)
     TrayMinimizeEnabled := IniStr("memory", "traymin", "1") = "1"
     TriggerBlackHoleDelete(hwnd)
     try
+    try {
     try {
     try {
     try {
@@ -7477,10 +7538,10 @@
     try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
     try WinGetPos(&x, &cy, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&X, &Y, &W, &H, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(, , &bounceW, &bounceH, hwnd)
     try WinGetPos(, , &winW, &winH, hwnd)
@@ -7566,6 +7627,8 @@
     UnmaximizeFirst(hwnd)
     UnmaximizeFirst(hwnd)
     UnrollStep(dt, now) {
+    UpdatePageHint()
+    UpdatePageHint()
     UpStep(dt, now) {
     v := ""
     v := ""
@@ -7588,7 +7651,7 @@
     vx := SysGet(76), vy := SysGet(77), vw := SysGet(78), vh := SysGet(79)
     vY := T - PrevY
     w := 640, h := 140
-    W := 780, H := 560, SW := 196
+    W := 780, H := 700, SW := 196
     w := IniRead(POS_FILE, key, "w", "")
     w := Max(1, Round(150 * (vol / 100)))
     W := R - L
@@ -7625,11 +7688,11 @@
     WriteLog(Format("  settled at L={1} T={2}  (throw {3},{4})", newL, newT, tx, ty))
     WriteLog(Format("drag end hwnd={1} frame L={2} T={3} R={4} B={5}", hwnd, eL, eT, eR, eB))
     X := "", Y := "", W := "", H := ""
+    x := anchorLeft - CLOCK_GAP - boxW
     x := info.x, y := info.y, w := info.w, h := info.h
     x := IniRead(POS_FILE, key, "x", "")
     x := L + (R - L - w) // 2
     x := lParam << 48 >> 48
-    x := trayLeft - CLOCK_GAP - boxW
     x := WL + (WR - WL - 240) // 2
     x := WL + (WR - WL - 280) // 2
     y := IniRead(POS_FILE, key, "y", "")
@@ -8156,6 +8219,8 @@ $!F4::GravityClose()
 }
 }
 }
+}
+}
 ~Delete:: {
 ~Esc:: {
 ~Esc::CloseCarousel(false)
@@ -8293,7 +8358,7 @@ ExitStealthPanic(ExitReason, ExitCode) {
 FadeGui(guiObj, toAlpha, ms := 0, destroy := false, onDone := "") {
 FadeSeam(flashGui, x, y, w, h) {
 FetchWeather() {
-FindTrayLeft(tbHwnd) {
+FindTrayElement(tbHwnd, cls) {
 FindVisualStudio() {
 FinishDrag(hwnd, startL, startT, startR, startB, startA) {
 FlushLog() {
@@ -8351,10 +8416,14 @@ global CarouselAngleOffset := 0
 global CarouselGui := ""
 global CarouselIndex := 1
 global CarouselWindows := []
+global CLOCK_ANCHORS  := ["TrayEdge", "Clock"]
 global CLOCK_GAP := 6
 global CLOCK_UNITS    := ["Celsius", "Fahrenheit"]
+global ClockAnchor := "TrayEdge"           ; which element the block sits beside
 global ClockLocation := ""                 ; required: open-meteo takes coordinates, not an IP
 global ClockUnits := "Celsius"
+global ClockWarnedNoCity := false          ; the "set a city" tip is said once per session
+global ClockWeatherEnabled := true         ; the temperature column; a location gives it a value
 global ContextMenuAnimEnabled := false
 global CORNER_ACTIONS := ["None", "Task View", "Show Desktop", "Action Center", "Start Menu", "Lock Screen", "Mute Volume"]
 global CORNER_BOOST   := 2.2
@@ -8756,6 +8825,7 @@ RenderTaskbarWave() {
 ResetStealthEsc() {
 ResetTransparency() {
 ResolveAppPath(exeName, LogFunc) {
+ResolveClockAnchor(tbHwnd) {
 RestartExplorer() {
 RestoreAllWindows() {
 RestoreCurtain() {
@@ -8923,6 +8993,7 @@ UpdateKeyboardHook()
 UpdateKeyboardHook() {
 UpdateMicOSD(isMuted) {
 UpdateOSD(vol, isMuted) {
+UpdatePageHint() {
 UpdateSmartGrid() {
 VerifySnap(hwnd, newL, newT) {
 WeatherFailed(why) {

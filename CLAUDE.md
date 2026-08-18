@@ -578,47 +578,48 @@ Two rules for that module: nothing in it may throw (it runs from a top-level ini
 
 ### Custom Taskbar Clock - the one network egress
 
-`src\WindowTweaks.ahk` carries an overlay that puts the time, the date and the
-current temperature on the taskbar: `CustomClockEnabled`, ini key
-`[taskbar] customclock` (default `1`), plus `[taskbar] clocklocation`,
-`clockunits` and `clockfont`. Wired through `LoadSettings` / `WriteSettings` /
-`BuildWin` / `ApplyUi`, armed by `SyncCustomClockTimer()`, drawn by a 250 ms
-`UpdateCustomClock()` timer.
+Time over date with the temperature beside it, drawn on the taskbar.
+`CustomClockEnabled`, ini key `[taskbar] customclock` (default `1`), plus
+`clockanchor`, `clockweather`, `clocklocation`, `clockunits` and `clockfont`. Wired
+through `LoadSettings` / `WriteSettings` / `BuildWin` / `ApplyUi`, armed by
+`SyncCustomClockTimer()`, drawn by a 250 ms `UpdateCustomClock()` timer. It has a
+settings page of its own, registered as a `Taskbar Clock` entry in the sidebar nav
+list.
 
-**One rule shapes the whole feature: the block may never intersect
-`TrayNotifyWnd`.** The first version did. It was 110 px wide, anchored on
-`TrayClockWClass` and grown leftward, so it covered the native clock and the
-Control Center button. The result read as a corrupted system tray - the
-notification icon looked like it had moved, the spacing was wrong, and a failed
-weather lookup printed `no data` where the time belongs. Nothing in Explorer had
-changed; it was all *covered*, not moved. So:
+**There is no coordinate anywhere in this feature.** Position is
+`anchorLeft - gap - contentWidth`, where the anchor is resolved by CLASS NAME every
+tick and the width comes from the font. Both halves of that matter, and both were
+learned the hard way.
 
-- **It draws in the free strip to the LEFT of the tray.** `FindTrayLeft()` reads
-  that window's left edge every tick - it MOVES as tray icons come and go, measured
-  1577 with a quiet tray and 1553 / 1529 with one and two more - the block is sized
-  from its own content and placed 6 px to its left, and if the tray cannot be found
-  it draws nothing rather than guessing. Windows keeps drawing its own clock, date
-  and tray icons, untouched, to the right of it.
-- **The rect is diffed before it is queued.** RenderCore does not cache positions
-  on purpose, but this window is ours alone so the cache is valid here - which is
-  what makes a 250 ms tick free. The tick has to be that fast because one new tray
-  icon shifts the boundary 24 px.
-- **It hides rather than reporting.** No taskbar, taskbar not visible, taskbar
-  auto-hidden off its own monitor, or no room left of the tray - each of those hides
-  the block. Weather failures go to `snap.log` and to one `Notify()`; nothing about
-  the program's state is ever rendered onto the taskbar.
-- **Widths come from the font, not from a setting.** The content is known - five
-  glyphs of time over ten of date, at most six of temperature - so `glyph := fpt *
-  4/3 * 0.6` sizes the columns, and the feature follows the text size and the DPI
-  instead of assuming either. A width control could only ever be used to make it
-  wrong. Two stacked lines are centred by hand because the taskbar can be 30 px or
-  48 px tall.
-- **There is no `EP_IconSize` gate.** It mirrored `TaskbarSmallIcons`, which
-  `docs\TASKBAR-AND-INTERNALS.md` records as inert on the Win11 shell and which
-  defaults to `Large`, so gating on it made the feature unreachable on a stock
-  install however the box was ticked.
+**Anchors are a setting, not a constant, because the two options are a genuine
+trade-off.** `ResolveClockAnchor()` walks an ordered list and falls back:
 
-Three things that are easy to reintroduce:
+| `[taskbar] clockanchor` | Anchor window | Cost |
+|---|---|---|
+| `TrayEdge` (default) | `TrayNotifyWnd` - left of every tray element | Distance. That window is the whole notification area and its width moves with the icon count: measured 343 / 391 / 415 / 511 px in one session. At 511 px the block ends up 480 px from the clock. |
+| `Clock` | `TrayClockWClass` | Covers whatever is in those ~115 px - on this shell the Control Center button, the input indicator and part of the tray icons. |
+
+The first version had no choice: it was 110 px wide, anchored on `TrayClockWClass`,
+grown leftward, and it covered the native clock and the Control Center button. That
+read as a corrupted system tray - the notification icon looked like it had moved,
+the spacing was wrong, and a failed weather lookup printed `no data` where the time
+belongs. Nothing in Explorer had changed; it was all *covered*, not moved.
+
+**Chrome follows the anchor.** Over empty taskbar (`TrayEdge`) the block paints no
+panel at all - `WinSetTransColor` keys out `FF00FF`, the same technique
+`RenderTaskbarWave` uses - because an opaque rectangle in the middle of the taskbar
+reads as a floating box rather than as taskbar text. Over a tray button (`Clock`) it
+paints an opaque background, or that button's glyph shows through behind the text.
+Note `Gui.BackColor` reads BACK as a number, so the key colour is held in a local:
+handing the property to `WinSetTransColor` would give it a decimal where it wants
+`RRGGBB`.
+
+**The temperature column exists whenever the feature is on; only its VALUE is
+conditional.** It reads `--` until a location produces a reading. Sizing the column
+to zero when no reading had arrived yet is what made a merely *unconfigured* feature
+look like a *broken* one, and that is the whole reason the placeholder is there.
+
+Four things that are easy to reintroduce:
 
 - **`ControlGetHwnd("TrayClockWClass", ...)` throws.** The clock is a *grandchild*
   of `Shell_TrayWnd` via `TrayNotifyWnd`, and a bare class name is not a valid
@@ -626,14 +627,19 @@ Three things that are easy to reintroduce:
   `TargetError: Target control not found.`, and `ControlGetHwnd` throws rather than
   returning 0, so the `if (!clockHwnd)` guard under it was unreachable. Inside a
   timer callback that throw pops an error dialog and kills the timer, so the feature
-  had never once drawn anything. Use `FindWindowExW`, and keep the whole tick body
-  behind the `try` in `UpdateCustomClock()`.
-- **The default is ON, and that is only safe because a blank location makes no
-  request.** `FetchWeather()` returns immediately while `[taskbar] clocklocation` is
-  empty, so out of the box the block shows the time and the date and the program
-  makes no outbound call at all. The temperature column appears - and the network
-  egress begins - only once a city is typed. Do not "simplify" that early return
-  away.
+  had never once drawn anything. `FindTrayElement()` uses `FindWindowExW` at both
+  levels and returns 0; keep the tick body behind the `try` in `UpdateCustomClock()`.
+- **The overlay must forward `WM_CLOSE` to `ExitApp`.** `taskkill`, `Install.ps1`'s
+  `StopRunning` and a Windows shutdown all post `WM_CLOSE` to the process's
+  top-level windows. This is the first PERMANENTLY visible overlay in the program,
+  so it is found before the script's own hidden main window and absorbs the request.
+  Measured: the app then never exited, `Bye()` never ran, `settings.ini` was written
+  with 4 lines instead of 142, and the block stayed on screen. Any future
+  always-on overlay needs the same handler.
+- **The default is ON, and that is only safe because nothing is requested until a
+  city exists.** `FetchWeather()` returns immediately when `clockweather` is off or
+  `clocklocation` is empty, so out of the box the block shows time and date and the
+  program makes no outbound call at all. Do not "simplify" those early returns away.
 - **open-meteo over WinHttp, not wttr.in over MSXML.** Measured: MSXML (3.0 and
   6.0) returns status 200 with an EMPTY `responseText` for an `application/json`
   body, so every reading came back blank; and wttr.in answers 200 with its HTML
@@ -647,6 +653,25 @@ Three things that are easy to reintroduce:
   for as long as the setting holds, so the steady state is one request per 15
   minutes. `WeatherFailed()` triples the retry interval up to 15 minutes rather than
   retrying into a rate limit.
+
+### The settings window scrolls, and that used to be invisible
+
+`BuildWin` builds one long single column per page into a child Gui, and
+`OnMouseWheel` scrolls it by moving that Gui - there is **no scrollbar**. So a page
+taller than the client area is a page whose remaining controls the user has no
+reason to believe exist. Measured: the Window Management page is over 1000 px of
+content, and four drag-fade settings sat off screen with nothing to indicate it,
+which reads exactly like "those settings were never added".
+
+`UpdatePageHint()` turns the sidebar hint into that affordance - it flips to
+"Scroll for more settings" whenever the current page is taller than the client area,
+and is called from `SelectPage` and `Gui_Size`, the two things that can change the
+answer. The default window height is 700 (was 560), so most pages now fit outright.
+
+**Add a settings group as a PAGE, not as more rows.** The nav list at the top of
+`BuildWin` feeds `Pages`, `NavItems` and `CreatePage` declaratively; appending six
+rows to the already-full General page is what buried the clock settings in the
+first place.
 
 ## Packaging
 

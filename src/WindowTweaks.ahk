@@ -120,6 +120,9 @@ global WeatherNextMs := 900000             ; ms until the next attempt; set by t
 global WeatherFailMs := 0                  ; current backoff, tripled per consecutive failure
 global ClockLocation := ""                 ; required: open-meteo takes coordinates, not an IP
 global ClockUnits := "Celsius"
+global ClockAnchor := "TrayEdge"           ; which element the block sits beside
+global ClockWeatherEnabled := true         ; the temperature column; a location gives it a value
+global ClockWarnedNoCity := false          ; the "set a city" tip is said once per session
 global WeatherWarnedFor := "-"             ; last location we complained about, so it is said once
 global StartMenuBlurEnabled := true
 global ToastBounceEnabled := true
@@ -193,6 +196,16 @@ global CORNER_ACTIONS := ["None", "Task View", "Show Desktop", "Action Center", 
 global EP_STYLES      := ["Win10", "Win11"]
 global EP_ICON_SIZES  := ["Small", "Large"]
 global CLOCK_UNITS    := ["Celsius", "Fahrenheit"]
+; Which taskbar element the clock block sits beside. Resolved by CLASS NAME at
+; runtime, never by coordinate - see ResolveClockAnchor. It is a setting because
+; the two options are a real trade-off the user has to make, not an internal
+; detail. The block is about 115 px wide with the temperature column, so sitting it
+; next to the clock covers everything in those 115 px - on this shell the Control
+; Center button, the input indicator and part of the tray icons - which is the
+; "corrupted tray" complaint all over again. So "TrayEdge", which covers nothing,
+; is the default, and "Clock" is there for anyone who wants strict adjacency and
+; accepts the cost.
+global CLOCK_ANCHORS  := ["TrayEdge", "Clock"]
 
 ; =========================================================== Tuning registry ===========================================================
 ; One row per user-tunable NUMBER. Loading, clamping, persistence, the settings
@@ -560,6 +573,8 @@ LoadSettings() {
     ; Membership, not range - see the note on IniPick. A hand-edited value the
     ; dropdown cannot display would throw inside BuildWin and kill Shift+Alt+W.
     ClockUnits := IniPick("taskbar", "clockunits", CLOCK_UNITS, "Celsius")
+    ClockAnchor := IniPick("taskbar", "clockanchor", CLOCK_ANCHORS, "TrayEdge")
+    ClockWeatherEnabled := IniStr("taskbar", "clockweather", "1") = "1"
     StartMenuBlurEnabled := IniStr("taskbar", "startblur", "1") = "1"
     ToastBounceEnabled := IniStr("taskbar", "toastbounce", "1") = "1"
     MonitorThrowEnabled := IniStr("mouse", "monthrow", "1") = "1"
@@ -686,6 +701,8 @@ WriteSettings() {
     PutIni(CustomClockEnabled ? 1 : 0, "taskbar", "customclock")
     PutIni(ClockLocation, "taskbar", "clocklocation")
     PutIni(ClockUnits, "taskbar", "clockunits")
+    PutIni(ClockAnchor, "taskbar", "clockanchor")
+    PutIni(ClockWeatherEnabled ? 1 : 0, "taskbar", "clockweather")
     PutIni(StartMenuBlurEnabled ? 1 : 0, "taskbar", "startblur")
     PutIni(ToastBounceEnabled ? 1 : 0, "taskbar", "toastbounce")
     PutIni(MonitorThrowEnabled ? 1 : 0, "mouse", "monthrow")
@@ -890,7 +907,7 @@ BuildWin() {
     global GlideEnabled, GLIDE_THROW, GLIDE_MS
     global BlackHoleMinimizeEnabled, MomentumTiltEnabled, FocusDepthEnabled
     global CurtainDropEnabled, SparkTypingEnabled, CarouselAltTabEnabled, MotionBlurScrollEnabled
-    global TaskbarWaveEnabled, CustomClockEnabled, ClockLocation, ClockUnits, StartMenuBlurEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled, CursorYawnEnabled, ShatterEnabled, LightsaberSeamEnabled
+    global TaskbarWaveEnabled, CustomClockEnabled, ClockLocation, ClockUnits, ClockAnchor, ClockWeatherEnabled, StartMenuBlurEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled, CursorYawnEnabled, ShatterEnabled, LightsaberSeamEnabled
     global RestoreEnabled, BreathingEnabled, PulseEnabled, OpenAnim, FlyMinimizeEnabled, RollUpEnabled, TrayMinimizeEnabled, BossKeyEnabled, AltDragEnabled, TaskbarScrollEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, SmartCapsEnabled, SmartCapsAction, ParallaxEnabled, EP_Style, EP_IconSize, PrivacyBlurEnabled
     global NAV, SEL, SELF, FG
 
@@ -902,7 +919,7 @@ BuildWin() {
     SEL  := dark ? "0F5FA6" : "CCE4F7"      ; selected nav
     SELF := dark ? "FFFFFF" : "0A0A0A"      ; selected nav text
 
-    W := 780, H := 560, SW := 196
+    W := 780, H := 700, SW := 196
 
     g := Gui("+Resize +OwnDialogs", "Window Tweaks")
     g.OnEvent("Size", Gui_Size)
@@ -921,7 +938,7 @@ BuildWin() {
 
     g.SetFont("s10 norm", "Segoe UI")
     ny := 88
-    for name in ["🪟 Window Management", "⚡ Power Features", "🔊 System & Media", "🖥️ Multi-Monitor", "✨ Animation", "📐 Hot Corners", "⚙️ General"] {
+    for name in ["🪟 Window Management", "⚡ Power Features", "🔊 System & Media", "🖥️ Multi-Monitor", "✨ Animation", "🕒 Taskbar Clock", "📐 Hot Corners", "⚙️ General"] {
         t := g.AddText("x0 y" ny " w" SW " h42 +0x200 c" FG " Background" NAV, "    " name)
         t.OnEvent("Click", NavClick.Bind(name))
         NavItems[name] := t
@@ -1182,6 +1199,34 @@ BuildWin() {
     TuneRow(pg, "transStep", FG, cSub)
     TuneRow(pg, "transMin",  FG, cSub)
 
+    ; ---- Taskbar Clock
+    pg := CreatePage("🕒 Taskbar Clock")
+    Head(pg, CW, FG, "Taskbar Clock")
+
+    C["customclock"] := Box(pg, CW, FG, "Show a clock block on the taskbar", CustomClockEnabled, "xm y+16")
+    Sub(pg, CW, cSub, "Time over date, with the temperature beside it. Windows keeps drawing its own", "xm y+8")
+    Sub(pg, CW, cSub, "clock, date and tray icons - this never replaces them, it sits next to them.", "xm y+2")
+
+    Lbl(pg, FG, "Sit beside", "xm y+16", 190)
+    C["clockanchor"] := pg.AddDropDownList("x196 yp-3 w120 Choose" IndexOf(CLOCK_ANCHORS, ClockAnchor), CLOCK_ANCHORS)
+    Sub(pg, 250, cSub, "TrayEdge covers nothing", "x+12 yp+3")
+    Sub(pg, CW, cSub, "Clock puts it right beside the clock, but then it covers the tray buttons in", "xm y+8")
+    Sub(pg, CW, cSub, "that space. TrayEdge sits left of every tray icon and hides nothing at all.", "xm y+2")
+
+    TuneRow(pg, "clockFont", FG, cSub)
+
+    C["clockweather"] := Box(pg, CW, FG, "Show the temperature", ClockWeatherEnabled, "xm y+16")
+    Sub(pg, CW, cSub, "Shows -- until a location is set below. Setting one is what starts the only", "xm y+8")
+    Sub(pg, CW, cSub, "outbound request this program makes: open-meteo.com, once every 15 minutes.", "xm y+2")
+
+    Lbl(pg, FG, "Location", "xm y+16", 190)
+    C["clockloc"] := pg.AddEdit("x196 yp-3 w120", ClockLocation)
+    Sub(pg, 250, cSub, "a city, e.g. Baku", "x+12 yp+3")
+
+    Lbl(pg, FG, "Units", "xm y+16", 190)
+    C["clockunits"] := pg.AddDropDownList("x196 yp-3 w120 Choose" IndexOf(CLOCK_UNITS, ClockUnits), CLOCK_UNITS)
+
+
     ; ---- Hot Corners
     pg := CreatePage("📐 Hot Corners")
     Head(pg, CW, FG, "macOS Hot Corners")
@@ -1227,17 +1272,7 @@ BuildWin() {
     C["twave"] := Box(pg, CW, FG, "Taskbar Icon Wave", TaskbarWaveEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Hovering over the taskbar creates a magnifying glass bubble that tracks your mouse.", "xm y+8")
     
-    C["customclock"] := Box(pg, CW, FG, "Custom Taskbar Clock (time, date, temperature)", CustomClockEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Draws in the free space to the LEFT of the system tray. It never covers the", "xm y+8")
-    Sub(pg, CW, cSub, "clock, the date or the tray icons - Windows keeps drawing those where they are.", "xm y+2")
-    TuneRow(pg, "clockFont", FG, cSub)
-
-    Lbl(pg, FG, "Weather location", "xm y+12", 190)
-    C["clockloc"] := pg.AddEdit("x196 yp-3 w120", ClockLocation)
-    Sub(pg, 250, cSub, "optional, e.g. Baku. Blank = no temperature, no network", "x+12 yp+3")
-
-    Lbl(pg, FG, "Temperature units", "xm y+12", 190)
-    C["clockunits"] := pg.AddDropDownList("x196 yp-3 w120 Choose" IndexOf(CLOCK_UNITS, ClockUnits), CLOCK_UNITS)
+    ; The taskbar clock has its own page - see CreatePage("[clock]") above.
     
     C["startblur"] := Box(pg, CW, FG, "Start Menu Blur (Cinematic Focus)", StartMenuBlurEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Heavily blurs the background when the Start Menu is open.", "xm y+8")
@@ -1272,7 +1307,7 @@ BuildWin() {
     g.OnEvent("Escape", (*) => CloseWin(g))
 
     for key, ctl in C {
-        if (key == "epStyle" || key == "epIconSize")
+        if (key == "epStyle" || key == "epIconSize" || key == "clockanchor" || key == "clockunits")
             ctl.OnEvent("Change", (*) => ApplyUi(true))
         else if InStr(ctl.Type, "CheckBox")
             ctl.OnEvent("Click", (*) => ApplyUi(true))
@@ -1335,6 +1370,24 @@ Box(pg, w, col, txt, checked, pos := "xm y+16") {
     return ctl
 }
 
+; The pages scroll on the mouse wheel (OnMouseWheel) but there is no scrollbar, so
+; nothing tells the user that a long page continues below the fold. This turns the
+; sidebar hint into that affordance. Called whenever the page or the window size
+; changes - the two things that can alter whether anything is hidden.
+UpdatePageHint() {
+    global Win, CurPage, Pages
+    if (!Win || !CurPage || !Pages.Has(CurPage))
+        return
+    try {
+        Pages[CurPage].GetPos(, , , &pageH)
+        Win.GetClientPos(, , , &clientH)
+        Win.HintLbl.Text := (pageH > clientH)
+            ? "Scroll for more settings"
+            : "Shift+Alt+W  opens this"
+    }
+}
+
+
 NavClick(name, *) => SelectPage(name)
 
 SelectPage(name) {
@@ -1356,6 +1409,7 @@ SelectPage(name) {
         item.Redraw()
     }
     CurPage := name
+    UpdatePageHint()
 }
 
 Gui_Size(thisGui, minMax, width, height) {
@@ -1363,6 +1417,7 @@ Gui_Size(thisGui, minMax, width, height) {
         return
     try thisGui.SidebarBg.Move(,,, height)
     try thisGui.HintLbl.Move(, height - 40)
+    UpdatePageHint()
     
     global CurPage, Pages
     if CurPage && Pages.Has(CurPage) {
@@ -1499,6 +1554,8 @@ ApplyUi(writeBack := false) {
         TaskbarWaveEnabled := C["twave"].Value
         CustomClockEnabled := C["customclock"].Value
         ClockUnits := C["clockunits"].Text
+        ClockAnchor := C["clockanchor"].Text
+        ClockWeatherEnabled := C["clockweather"].Value
         ; Shape validation, like BorderColor above - it is not a number, so it is
         ; not a TUNE_SPEC row. Whatever survives goes straight into a URL.
         ClockLocation := CleanClockLocation(C["clockloc"].Value)
@@ -9380,7 +9437,7 @@ global CLOCK_GAP := 6
 
 SyncCustomClockTimer() {
     global CustomClockEnabled, LastWeatherFetch, CustomClockWeather, WeatherNextMs
-    global WeatherWarnedFor, GeoFor
+    global WeatherWarnedFor, GeoFor, ClockWarnedNoCity
     if (CustomClockEnabled) {
         ; Re-arming forces an immediate fetch, which is also how a changed location
         ; or unit takes effect: ApplyUi calls this after reading the controls. GeoFor
@@ -9390,6 +9447,7 @@ SyncCustomClockTimer() {
         WeatherNextMs := 900000
         CustomClockWeather := ""
         WeatherWarnedFor := "-"
+        ClockWarnedNoCity := false
         GeoFor := "-"
         SetTimer(UpdateCustomClock, 250)
         UpdateCustomClock()
@@ -9417,21 +9475,63 @@ HideCustomClock() {
     CustomClockRect := ""
 }
 
-; The left edge of the system tray: the one boundary this feature must not cross.
-; Returns 0 when it cannot be found, and the caller then draws nothing rather than
-; guessing.
+; Where the block's right edge goes, resolved from LIVE window geometry by class
+; name. There is no coordinate anywhere in this feature.
 ;
-; Measured on this build: TrayNotifyWnd MOVES as icons come and go - 1577 with a
-; quiet tray, 1529 with two more - so it is read every tick rather than cached.
-FindTrayLeft(tbHwnd) {
+; Two anchors, and the difference is a real trade-off rather than an internal
+; detail, which is why it is a setting:
+;
+;   "Clock"    - the left edge of TrayClockWClass. Adjacent to the native clock, so
+;                the block reads as part of the tray. It therefore sits ON TOP of
+;                whatever is immediately left of the clock, which on this shell is
+;                the Control Center button.
+;   "TrayEdge" - the left edge of TrayNotifyWnd, i.e. left of EVERY tray element.
+;                Covers nothing at all. The cost is distance: TrayNotifyWnd is the
+;                whole notification area and its width moves with the icon count -
+;                measured 343, 391, 415 and 511 px in one session - so the block
+;                drifts, and at 511 px it is 480 px away from the clock and reads
+;                as floating in the middle of the taskbar rather than integrated.
+;
+; Returns 0 when the requested element cannot be found AND neither can the
+; fallback, and the caller then draws nothing rather than guessing a position.
+ResolveClockAnchor(tbHwnd) {
+    global ClockAnchor
+    ; Ordered: the requested anchor first, then the safe one. A shell without a
+    ; TrayClockWClass - the stock Win11 XAML taskbar has none - falls through to
+    ; the tray edge instead of losing the feature.
+    order := (ClockAnchor == "TrayEdge")
+        ? ["TrayNotifyWnd"]
+        : ["TrayClockWClass", "TrayNotifyWnd"]
+    for cls in order {
+        h := FindTrayElement(tbHwnd, cls)
+        if (h) {
+            WinGetPos(&ex, &ey, &ew, &eh, "ahk_id " h)
+            if (ew > 0)
+                return ex
+        }
+    }
+    return 0
+}
+
+; Shell_TrayWnd -> TrayNotifyWnd -> the element. The clock is a GRANDCHILD of the
+; tray, so a direct-child search finds only TrayNotifyWnd itself; both levels are
+; tried. Never throws: an absent element is a normal outcome on the XAML shell.
+FindTrayElement(tbHwnd, cls) {
     try {
+        if (cls == "TrayNotifyWnd") {
+            h := DllCall("FindWindowExW", "ptr", tbHwnd, "ptr", 0, "str", cls, "ptr", 0, "ptr")
+            return (h && DllCall("IsWindowVisible", "ptr", h)) ? h : 0
+        }
         notify := DllCall("FindWindowExW", "ptr", tbHwnd, "ptr", 0
             , "str", "TrayNotifyWnd", "ptr", 0, "ptr")
-        if (notify && DllCall("IsWindowVisible", "ptr", notify)) {
-            WinGetPos(&nx, &ny, &nw, &nh, "ahk_id " notify)
-            if (nw > 0)
-                return nx
+        if (notify) {
+            h := DllCall("FindWindowExW", "ptr", notify, "ptr", 0, "str", cls, "ptr", 0, "ptr")
+            if (h && DllCall("IsWindowVisible", "ptr", h))
+                return h
         }
+        h := DllCall("FindWindowExW", "ptr", tbHwnd, "ptr", 0, "str", cls, "ptr", 0, "ptr")
+        if (h && DllCall("IsWindowVisible", "ptr", h))
+            return h
     }
     return 0
 }
@@ -9460,14 +9560,17 @@ PaintCustomClock() {
     global CustomClockTimeText, CustomClockTempText, CustomClockWeather
     if (CustomClockTimeText)
         try CustomClockTimeText.Value := FormatTime(, "HH:mm") "`n" FormatTime(, "dd.MM.yyyy")
+    ; "--" rather than blank: an empty column is indistinguishable from a column
+    ; that was never created, which is the confusion this feature already caused
+    ; once. A placeholder says "this part is here and has nothing to show yet".
     if (CustomClockTempText)
-        try CustomClockTempText.Value := CustomClockWeather
+        try CustomClockTempText.Value := (CustomClockWeather == "") ? "--" : CustomClockWeather
 }
 
 UpdateCustomClockImpl() {
     global CustomClockGui, CustomClockTimeText, CustomClockTempText
     global CustomClockBuiltFor, CustomClockRect, CLOCK_GAP
-    global CustomClockWeather, LastWeatherFetch, WeatherNextMs
+    global CustomClockWeather, LastWeatherFetch, WeatherNextMs, ClockWeatherEnabled, ClockAnchor
 
     ; Read the network first, so the fetch keeps its own schedule regardless of
     ; whether anything gets drawn this tick.
@@ -9503,24 +9606,29 @@ UpdateCustomClockImpl() {
         return
     }
 
-    trayLeft := FindTrayLeft(tbHwnd)
-    if (!trayLeft) {
-        ; No tray to measure against, so no way to prove we are not covering it.
+    anchorLeft := ResolveClockAnchor(tbHwnd)
+    if (!anchorLeft) {
+        ; Nothing to measure against, so no way to prove we are not covering
+        ; something. Draw nothing rather than guess.
         HideCustomClock()
         return
     }
 
     ; Widths from the font, not from a setting. The content is known - five glyphs
-    ; of time over ten of date, and at most six of temperature - so a width control
+    ; of time over ten of date, at most six of temperature - so a width control
     ; could only ever be used to make it wrong. Segoe UI digits run about 0.6 em and
-    ; em is about 4/3 of the point size at 96 dpi, which is what makes this scale
-    ; with the text size and with DPI instead of assuming either.
+    ; em is about 4/3 of the point size at 96 dpi, which is what makes this follow
+    ; the text size and the DPI instead of assuming either.
     fpt := Integer(Tune("clockFont"))
     glyph := fpt * 4 / 3 * 0.6
     dateW := Ceil(glyph * 10) + CLOCK_GAP
-    tempW := (CustomClockWeather == "") ? 0 : Ceil(glyph * 6) + CLOCK_GAP
+    ; The temperature column exists whenever the feature is on. Only its VALUE is
+    ; conditional: it reads "--" until a location produces a reading. Sizing the
+    ; column to zero when there was no reading yet is what made a feature that was
+    ; merely unconfigured look like a feature that was broken.
+    tempW := ClockWeatherEnabled ? Ceil(glyph * 6) + CLOCK_GAP : 0
     boxW := CLOCK_GAP + tempW + dateW + CLOCK_GAP
-    x := trayLeft - CLOCK_GAP - boxW
+    x := anchorLeft - CLOCK_GAP - boxW
     if (x < tx) {
         HideCustomClock()
         return
@@ -9533,10 +9641,19 @@ UpdateCustomClockImpl() {
     if (textY < 0)
         textY := 0
 
-    ; Colours, font and the column split are all fixed at creation, so a change to
-    ; any of them rebuilds rather than restyles: Gui.SetFont only affects controls
-    ; added after it, and a control cannot be resized into existence.
+    ; Chrome follows the anchor, and that is the whole answer to "it looks like a
+    ; floating box". Over empty taskbar the block must not paint a panel at all, or
+    ; it reads as a grey rectangle dropped on the bar; over the Control Center
+    ; button it must paint one, or that button's glyph shows through behind our
+    ; text. So TrayEdge renders colour-keyed - only the glyphs land on screen, the
+    ; same technique RenderTaskbarWave uses - and Clock renders opaque.
+    seeThrough := (ClockAnchor == "TrayEdge")
+
+    ; Colours, font, chrome and the column split are all fixed at creation, so a
+    ; change to any of them rebuilds rather than restyles: Gui.SetFont only affects
+    ; controls added after it, and a control cannot be resized into existence.
     stamp := (IsTaskbarDark() ? "d" : "l") "|" fpt "|" tempW "|" dateW "|" th
+        . "|" (seeThrough ? "t" : "o")
     if (CustomClockGui && CustomClockBuiltFor != stamp)
         HideCustomClock()
 
@@ -9545,7 +9662,12 @@ UpdateCustomClockImpl() {
         CustomClockGui := Gui("-Caption +AlwaysOnTop +ToolWindow +E0x20 -DPIScale")
         CustomClockGui.MarginX := 0
         CustomClockGui.MarginY := 0
-        CustomClockGui.BackColor := dark ? "1F1F1F" : "F3F3F3"
+        ; A key colour no glyph is ever drawn in, so keying it out cannot eat part
+        ; of the text. Not black or white: both appear in one theme or the other.
+        ; Held in a local because Gui.BackColor reads BACK as a number - handing
+        ; that to WinSetTransColor would give it a decimal where it wants RRGGBB.
+        keyColor := "FF00FF"
+        CustomClockGui.BackColor := seeThrough ? keyColor : (dark ? "1F1F1F" : "F3F3F3")
         CustomClockGui.SetFont("s" fpt " c" (dark ? "FFFFFF" : "1A1A1A") " q5", "Segoe UI")
         ; A WM_CLOSE arriving at a caption-less, click-through overlay is never a
         ; user closing a window. It is a process-wide close request - taskkill,
@@ -9568,9 +9690,12 @@ UpdateCustomClockImpl() {
             , "x" (CLOCK_GAP + tempW) " y" textY " w" (dateW - CLOCK_GAP)
             . " h" (2 * lineH) " Center", "")
         CustomClockBuiltFor := stamp
-        ; Text before Show: showing first costs one frame of an unpainted rectangle
-        ; sitting on the taskbar.
+        ; Text, then the colour key, then Show - in that order. Showing first costs
+        ; one frame of an unpainted rectangle sitting on the taskbar, and keying
+        ; after Show costs one frame of the key colour itself.
         PaintCustomClock()
+        if (seeThrough)
+            try WinSetTransColor(keyColor " 255", CustomClockGui.Hwnd)
         CustomClockGui.Show("NA x" x " y" ty " w" boxW " h" th)
     }
 
@@ -9579,10 +9704,9 @@ UpdateCustomClockImpl() {
     ; The rect is diffed first. RenderCore deliberately does not cache positions -
     ; the user can move a window behind its back - but this window is ours alone, so
     ; the cache is valid here, and it is what lets the tick run at 250 ms for
-    ; nothing. That matters because TrayNotifyWnd's left edge MOVES: adding one tray
-    ; icon shifted it 24 px and left the block overlapping the tray until the next
-    ; tick - measured, and exactly the defect this feature exists in order not to
-    ; have.
+    ; nothing. It has to be that fast because the anchor MOVES: one new tray icon
+    ; shifted TrayNotifyWnd 24 px and left the block overlapping the tray until the
+    ; next tick.
     rect := x "," ty "," boxW "," th
     if (rect != CustomClockRect) {
         RS_SetPos(CustomClockGui.Hwnd, x, ty, boxW, th, RS_PRI_AMBIENT)
@@ -9655,6 +9779,7 @@ StartWeatherRequest(stage, url) {
 ; of those is indistinguishable from success at the HTTP level.
 FetchWeather() {
     global CustomClockReq, LastWeatherFetch, ClockLocation, GeoFor, CustomClockWeather
+    global ClockWeatherEnabled, ClockWarnedNoCity
     if (CustomClockReq)
         return                        ; one in flight is enough
     ; Stamp the attempt BEFORE sending, or a slow endpoint would be re-requested on
@@ -9665,8 +9790,22 @@ FetchWeather() {
     ; draws - the temperature column simply is not there until a location is typed.
     ; This is also what makes the feature safe to default ON: out of the box it
     ; makes no outbound request whatsoever.
+    ; Switched off, or no city: no request at all. The block still draws - the time
+    ; and the date need nothing - and the temperature column shows "--". This is
+    ; also what keeps the feature safe to default ON: out of the box it makes no
+    ; outbound call whatsoever, and the egress begins only once a city is typed.
+    if (!ClockWeatherEnabled) {
+        CustomClockWeather := ""
+        return
+    }
     if (ClockLocation == "") {
         CustomClockWeather := ""
+        ; Said once per session, and only because the column is visibly showing
+        ; "--": the user can see something is missing, so tell them what fills it.
+        if (!ClockWarnedNoCity) {
+            ClockWarnedNoCity := true
+            Notify("Taskbar clock: set a Location in Shift+Alt+W, Taskbar Clock`nto show the temperature.")
+        }
         return
     }
     if (GeoFor != ClockLocation)
