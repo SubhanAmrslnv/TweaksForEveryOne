@@ -536,6 +536,8 @@
                 wX += vX
                 wY += vY
               MC_LivePid, MC_LiveExe, MC_LiveSessionExe, MC_MediaMonitor, MC_HwndInfo] {
+            "ptr", MenuEventCb, "uint", 0, "uint", 0, "uint", 0x0002, "ptr")
+            "ptr", WinEventCb, "uint", 0, "uint", 0, "uint", 0x0002, "ptr")
             , "int", 0, "int", 0, "int", 140, "int", 140
             , "ptr", MagHostGui.Hwnd, "ptr", 0, "ptr", DllCall("GetModuleHandle", "ptr", 0, "ptr"), "ptr", 0, "ptr")
             , "ptr", which, "ptr", 0, "uint", 2, "uint", 100, "ptr*", &res)
@@ -1601,9 +1603,9 @@
             try WinGetPos(&cx, &cy, &cw, &ch, OsdGui.Hwnd)
             try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
             try WinGetPos(&wx, &wy, &ww, &wh, hwndToMin)
+            try WinGetPos(&x, &y, &w, &h, hwnd)
+            try WinGetPos(&x, &y, &w, &h, hwnd)
             try WinGetPos(&X, &Y, &W, &H, hwnd)
-            try WinGetPos(&x, &y, &w, &h, hwnd)
-            try WinGetPos(&x, &y, &w, &h, hwnd)
             try WinHide(hwnd)
             try WinMove(ElasticBaseX, ElasticBaseY,,, ElasticHwnd)
             try WinSetAlwaysOnTop(1, OsdGui.Hwnd)
@@ -1671,8 +1673,6 @@
           , dirX := 0, dirY := 0, hyst := 0) {
          && Abs(cw - orig.pw) <= 2 && Abs(ch - orig.ph) <= 2)
          && Abs(st.r - fR) <= 2 && Abs(st.b - fB) <= 2)
-        "ptr", MenuEventCb, "uint", 0, "uint", 0, "uint", 0x0002, "ptr")
-        "ptr", WinEventCb, "uint", 0, "uint", 0, "uint", 0x0002, "ptr")
         && Abs(eR - startR) < MIN_DRAG && Abs(eB - startB) < MIN_DRAG)
         , "SystemUsesLightTheme", 0)
         . "&latitude=" GeoLat "&longitude=" GeoLon
@@ -2882,8 +2882,8 @@
         Loop count {
         Loop count {
         loop gridY {
-        loop MonitorGetCount() {
         Loop MonitorGetCount() {
+        loop MonitorGetCount() {
         loop nDev {
         Loop Reg, "HKLM\SOFTWARE\WOW6432Node\Microsoft\VisualStudio\SxS\VS7", "V" {
         lp := ((sY & 0xFFFF) << 16) | (sX & 0xFFFF)
@@ -3183,6 +3183,7 @@
         RestoreFromBottom(hwnd)
         RestoreFromTray(hwnd)
         RestoreStealthPanic()
+        return
         return
         return
         return
@@ -4744,6 +4745,7 @@
     BreathingEnabled := IniStr("memory", "breathing", "1") = "1"
     BringForwardStep(dt, now) {
     buf := Buffer(16, 0)
+    BuildTray()
     BuildWin()
     busy := false
     busy := false
@@ -4894,6 +4896,7 @@
     cbSize := A_PtrSize == 8 ? 976 : 956
     centerX := A_ScreenWidth / 2
     centerY := A_ScreenHeight / 2
+    CheckDragFullWindows()
     CheckLightsaber()
     CheckPrivacyBlur()
     CheckStartMenu()
@@ -5018,6 +5021,7 @@
     DllCall("SetWindowPos", "ptr", TaskbarWaveGui.Hwnd, "ptr", -1, "int", destX, "int", destY, "int", size, "int", size, "uint", 0x10 | 0x40)
     DllCall("shell32\Shell_NotifyIconW", "uint", 0, "ptr", nid)
     DllCall("user32\SetWindowCompositionAttribute", "ptr", guiObj.Hwnd, "ptr", data)
+    done := true
     dpiScale := 1.0
     dragged := false
     DragHwnd := 0
@@ -5560,6 +5564,7 @@
     global Win, Pages, NavItems, C, CurPage, VERSION
     global WinCurrentAlpha, GhostWindows, BottomWindows, FocusGuis
     global WindowCmdLineCache
+    global WinEventCb, WinEventHook, MenuEventCb, MenuEventHook
     global WinEventHook, WinEventCb, RolledUpWindows, CustomTrans
     glyph := fpt * 4 / 3 * 0.6
     GrabPanEnabled := !GrabPanEnabled
@@ -6217,6 +6222,7 @@
     if DllCall("GetWindow", "ptr", hwnd, "uint", 4, "ptr")        ; GW_OWNER
     if DllCall("GetWindow", "ptr", hwnd, "uint", 4, "ptr")     ; GW_OWNER
     if DllCall("IsWindow", "ptr", hwnd)
+    if done
     if FileExist(A_ScriptDir "\" exeName) {
     if FileExist(appsPath) {
     if FileExist(LOG_FILE)
@@ -6294,6 +6300,7 @@
     IniCache[section "`n" key] := v
     inset := tol + 8
     inside := false
+    InstallDragHooks()
     interval := ((now - MC_LastHitAt) > MC_IDLE_AFTER_MS) ? MC_IDLE_SWEEP_MS : MC_SWEEP_MS
     isHidden := GhostHiddenWindows.Has(hwnd)
     isPip := false
@@ -6354,6 +6361,7 @@
     list := WinGetList("New notification ahk_class Windows.UI.Core.CoreWindow")
     LivePipEnabled := IniStr("memory", "pip", "1") = "1"
     lo := Tune("parallaxFrom")
+    LoadSettings()
     localAppData := EnvGet("LOCALAPPDATA")
     locked := false
     LogBuf .= A_Now "  " s "`n"
@@ -6431,6 +6439,8 @@
     MC_Wanted := wanted
     MediaFallbackList := IniStr("memory", "media_fallback", "youtube.exe; spotify.exe; vlc.exe; potplayermini64.exe; mpc-hc64.exe; netflix.exe")
     MenuAnimStep(dt, now) {
+    MenuEventCb := CallbackCreate(MenuEvent, , 7)
+    MenuEventHook := DllCall("SetWinEventHook", "uint", 0x0006, "uint", 0x0006, "ptr", 0,
     MicKillSwitchEnabled := IniStr("memory", "mickill", "1") = "1"
     MicOsdGui := ""
     MicOsdHiding := false
@@ -6540,8 +6550,8 @@
     NumPut("Int", 0, props, 8)
     NumPut("int", 0, props, 8)
     NumPut("int", 0x88222222, accent, 8)
-    NumPut("Int", 1, props, 40)
     NumPut("int", 1, props, 40)
+    NumPut("Int", 1, props, 40)
     NumPut("Int", 1, props, 44)
     NumPut("int", 16, data, A_PtrSize + A_PtrSize)
     NumPut("int", 19, data, 0)
@@ -6571,7 +6581,22 @@
     ok := false
     ok := RegisterShellHook()
     on := 1
+    OnExit(Bye)
+    OnMessage(0x007E, InvalidateScreenMetrics)     ; WM_DISPLAYCHANGE
+    OnMessage(0x0084, WM_NCHITTEST_PiP)
+    OnMessage(0x00A7, PiP_NCMouseEvents) ; WM_NCMBUTTONDOWN
+    OnMessage(0x0200, PiP_MouseEvents) ; MOUSEMOVE
+    OnMessage(0x0201, PiP_MouseEvents) ; LBUTTONDOWN
+    OnMessage(0x0202, PiP_MouseEvents) ; LBUTTONUP
+    OnMessage(0x0204, PiP_MouseEvents) ; RBUTTONDOWN
+    OnMessage(0x0205, PiP_MouseEvents) ; RBUTTONUP
+    OnMessage(0x0207, PiP_MouseEvents) ; MBUTTONDOWN
+    OnMessage(0x0208, PiP_MouseEvents) ; MBUTTONUP
     OnMessage(0x020A, OnMouseWheel)
+    OnMessage(0x020A, PiP_MouseEvents) ; MOUSEWHEEL
+    OnMessage(0x1000, TrayIconClick)
+    OnMessage(DllCall("RegisterWindowMessage", "str", "SHELLHOOK", "uint"), ShellEvent)
+    OnMessage(DllCall("RegisterWindowMessage", "str", "TaskbarCreated", "uint"), TaskbarCreated)
     OnTypingSpark(ih, vk, sc)
     OpenAnim := IniPick("memory", "openanim", OPEN_ANIMS, "Ghost Slide-In")
     order := (ClockAnchor == "TrayEdge")
@@ -6790,6 +6815,7 @@
     RegisterAnimation(animKey, Step)
     RegisterAnimation(animKey, Step)
     RegisterAnimation(key, callback)
+    RegisterShellHook()
     RememberLayout(hwnd, winX, winY, winW, winH)
     RememberPosition(hwnd)
     RememberPosition(hwnd)
@@ -6913,6 +6939,7 @@
     rightDist := (wX + wW) - mX
     RippleClickEnabled := IniStr("mouse", "ripple", "0") = "1"
     RollUpEnabled := IniStr("memory", "rollup", "0") = "1"
+    RotateLog()
     RS_Alpha[hwnd] := {value: iv, pri: pri}
     RS_Alpha[hwnd] := {value: numAlpha, pri: pri}
     RS_AlphaState.Delete(hwnd)
@@ -7067,6 +7094,7 @@
     SnapEnabled := !SnapEnabled
     SnapWindow(hwnd, eL, eT, eR, eB, ex, ey)
     sourceHwnd := 0
+    SparkHook.OnKeyDown := OnObservedKeyDown
     SparkTypingEnabled := IniStr("mouse", "spark", "0") = "1"
     SpawnSpark(cx, cy)
     SplitPath(iniFile, , &dirOnly, , &nameNoExt)
@@ -7151,6 +7179,7 @@
     static contactAt := 0                          ; when the current contact began
     static contactSide := 0                        ; -1 left, +1 right, 0 none
     static cooldownUntil := 0
+    static done := false
     static freq := 0
     static HSHELL_GETMINRECT := 5
     static HSHELL_WINDOWCREATED := 1
@@ -7266,16 +7295,28 @@
     sx := SnapAxis(L, R, vLines, threshold, &newL, dirX, hyst)
     sy := SnapAxis(T, B, hLines, threshold, &newT, dirY, hyst)
     SyncActiveBorderTimer()
+    SyncActiveBorderTimer()
     SyncBreathingTimers()
+    SyncBreathingTimers()
+    SyncCursorFxTimer()
     SyncCursorWrapTimer()
+    SyncCursorWrapTimer()
+    SyncCustomClockTimer()
+    SyncDimmerTimer()
     SyncDimmerTimer()              ; also fades out and clears the dim overlays
+    SyncHotCornersTimer()
     SyncHotCornersTimer()
     SyncMediaCore()
     SyncMediaCore()
     SyncMediaCore()
     SyncMediaCore()
+    SyncShakeDetector()
+    SyncSmartTaskbar()
     SyncSmartTaskbar()
     SyncTaskbarUiTimer()
+    SyncTaskbarUiTimer()
+    SyncTextExpander()
+    SyncTray()
     SyncTray()
     SyncTray(), SaveSettings()
     SyncTray(), SaveSettings()
@@ -7537,11 +7578,11 @@
     try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
     try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
     try WinGetPos(&x, &cy, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&X, &Y, &W, &H, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(, , &bounceW, &bounceH, hwnd)
     try WinGetPos(, , &winW, &winH, hwnd)
@@ -7627,6 +7668,7 @@
     UnmaximizeFirst(hwnd)
     UnmaximizeFirst(hwnd)
     UnrollStep(dt, now) {
+    UpdateKeyboardHook()
     UpdatePageHint()
     UpdatePageHint()
     UpStep(dt, now) {
@@ -7675,12 +7717,15 @@
     winAppsPath := localAppData "\Microsoft\WindowsApps\" exeName
     winDestX := curWinX + (destX - L)
     winDestY := curWinY + (destY - T)
+    WinEventCb := CallbackCreate(WinEvent, , 7)
+    WinEventHook := DllCall("SetWinEventHook", "uint", 0x000A, "uint", 0x000B, "ptr", 0,
     WinGetClientPos(,, &pw, &ph, hwnd)
     WinGetPos(&tx, &ty, &tw, &th, "ahk_id " tbHwnd)
     WinSetTransColor("EEFFFF", guiObj.Hwnd)
     WinSetTransparent(0, guiObj.Hwnd)
     WinSetTransparent(220, guiObj.Hwnd)
     WinTargetAlpha.Clear(), WinCurrentAlpha.Clear(), WinLastActive.Clear()
+    WriteLog("=== Window Tweaks " VERSION " started ===")
     WriteLog("DragFullWindows is off - drag transparency and ice glide cannot work")
     WriteLog("explorer restarted - shell hook re-registered (" (ok ? "ok" : "FAILED") ")")
     WriteLog("Taskbar temperature: " why " (location: " key ")")
@@ -8221,6 +8266,8 @@ $!F4::GravityClose()
 }
 }
 }
+}
+}
 ~Delete:: {
 ~Esc:: {
 ~Esc::CloseCarousel(false)
@@ -8294,12 +8341,13 @@ ApplyGridZone(hwnd, zoneIndex) {
 ApplyLayout(hwnd, tx, ty, tw := -1, th := -1) {
 ApplyUi(writeBack := false) {
 AskWindowIcon(hwnd) {
+Boot()
+Boot() {
 BounceSqueeze(hwnd, X, Y, W, H, crashX, crashY) {
 Box(pg, w, col, txt, checked, pos := "xm y+16") {
 BreathingAnimatorStep(dt:=0, now:=0) {
 BreathingMonitorStep() {
 BringForwardWindow(hwnd) {
-BuildTray()
 BuildTray() {
 BuildWin() {
 Bye(*) {
@@ -8309,7 +8357,6 @@ CarouselCallback(dt, now) {
 CenterWindow() {
 ChangeTransparency(dir) {
 ChangeVolumeOSD(dir) {
-CheckDragFullWindows()
 CheckDragFullWindows() {
 CheckElasticDrag() {
 CheckGravityClose(hwnd) {
@@ -8547,8 +8594,7 @@ global MC_SWEEP_MS       := 1000     ; sweep cadence while something is playing
 global MC_TrackMonitors := false    ; does the monitor dimmer need MC_MediaMonitor
 global MC_Wanted        := false    ; is any consumer feature switched on
 global MediaFallbackList := "youtube.exe; spotify.exe; vlc.exe; potplayermini64.exe; mpc-hc64.exe; netflix.exe"
-global MenuEventCb := CallbackCreate(MenuEvent, , 7)
-global MenuEventHook := DllCall("SetWinEventHook", "uint", 0x0006, "uint", 0x0006, "ptr", 0,
+global MenuEventCb := 0, MenuEventHook := 0
 global MicKillSwitchEnabled := true
 global MicOsdGui := "", MicOsdHiding := false
 global MiddleClickCloseEnabled := false
@@ -8687,8 +8733,7 @@ global WeatherWarnedFor := "-"             ; last location we complained about, 
 global Win := "", Pages := Map(), NavItems := Map(), CurPage := ""
 global WinCurrentAlpha := Map()
 global WindowCmdLineCache := Map()
-global WinEventCb := CallbackCreate(WinEvent, , 7)
-global WinEventHook := DllCall("SetWinEventHook", "uint", 0x000A, "uint", 0x000B, "ptr", 0,
+global WinEventCb := 0, WinEventHook := 0
 global WinLastActive := Map()
 global WinTargetAlpha := Map()
 GravityClose() {
@@ -8712,6 +8757,7 @@ IniStr(section, key, defaultVal) {
 InitLightsaber() {
 InitMag() {
 InitShakeFind() {
+InstallDragHooks() {
 InvalidateScreenMetrics(*) {
 IsAutoStart()  => FileExist(StartupLink()) ? true : false
 IsCloaked(hwnd) {
@@ -8732,7 +8778,6 @@ KeyHistory 0
 LaunchSafeApps() {
 Lbl(pg, col, txt, pos := "xm y+16", w := 160) {
 ListLines False
-LoadSettings()
 LoadSettings() {
 MagCallback(dt, now) {
 MButton:: {
@@ -8775,22 +8820,7 @@ NavClick(name, *) => SelectPage(name)
 NotchAnim(hwnd, startY, destY, fadeIn := true, onDone := "") {
 Notify(msg) => TrayTip(msg, "Window Tweaks")
 NumOr(text, fallback) => IsNumber(text) ? Number(text) : fallback
-OnExit(Bye)
 OnExit(ExitStealthPanic)
-OnMessage(0x007E, InvalidateScreenMetrics)     ; WM_DISPLAYCHANGE
-OnMessage(0x0084, WM_NCHITTEST_PiP)
-OnMessage(0x00A7, PiP_NCMouseEvents) ; WM_NCMBUTTONDOWN
-OnMessage(0x0200, PiP_MouseEvents) ; MOUSEMOVE
-OnMessage(0x0201, PiP_MouseEvents) ; LBUTTONDOWN
-OnMessage(0x0202, PiP_MouseEvents) ; LBUTTONUP
-OnMessage(0x0204, PiP_MouseEvents) ; RBUTTONDOWN
-OnMessage(0x0205, PiP_MouseEvents) ; RBUTTONUP
-OnMessage(0x0207, PiP_MouseEvents) ; MBUTTONDOWN
-OnMessage(0x0208, PiP_MouseEvents) ; MBUTTONUP
-OnMessage(0x020A, PiP_MouseEvents) ; MOUSEWHEEL
-OnMessage(0x1000, TrayIconClick)
-OnMessage(DllCall("RegisterWindowMessage", "str", "SHELLHOOK", "uint"), ShellEvent)
-OnMessage(DllCall("RegisterWindowMessage", "str", "TaskbarCreated", "uint"), TaskbarCreated)
 OnMouseWheel(wParam, lParam, msg, hwnd) {
 OnObservedKeyDown(ih, vk, sc) {
 OnSnapLanded(hwnd, destX, destY, crashX, crashY, seams) {
@@ -8814,7 +8844,6 @@ PushBackWindow(hwnd) {
 PutIni(value, section, key) {
 QPC() {
 RegisterAnimation(key, callback) {
-RegisterShellHook()
 RegisterShellHook() {
 RememberLayout(hwnd, x, y, w, h) {
 RememberPosition(hwnd, forceX := "", forceY := "", forceW := "", forceH := "") {
@@ -8838,7 +8867,6 @@ RestoreStealthFeatures() {
 RestoreStealthPanic() {
 RevealWindow(hwnd) {
 RippleCallback(idx, dt, now) {
-RotateLog()
 RotateLog() {
 RS_Apply() {
 RS_BaseAlpha(hwnd) {
@@ -8882,7 +8910,6 @@ SnapWindow(hwnd, L, T, R, B, winX, winY) {
 Space:: {
 Space::CloseQuickLook()
 SparkCallback(idx, dt, now) {
-SparkHook.OnKeyDown := OnObservedKeyDown
 SpawnRipple(x, y) {
 SpawnSpark(x, y) {
 SpotlightExecute() {
@@ -8911,30 +8938,18 @@ StopBreatheCursor() {
 StopScheduler(force := false) {
 Sub(pg, w, col, txt, pos := "xm y+8") {
 SuspendStealthFeatures() {
-SyncActiveBorderTimer()
 SyncActiveBorderTimer() {
-SyncBreathingTimers()
 SyncBreathingTimers() {
-SyncCursorFxTimer()
 SyncCursorFxTimer() {
-SyncCursorWrapTimer()
 SyncCursorWrapTimer() {
-SyncCustomClockTimer()
 SyncCustomClockTimer() {
-SyncDimmerTimer()
 SyncDimmerTimer() {
-SyncHotCornersTimer()
 SyncHotCornersTimer() {
 SyncMediaCore() {
-SyncShakeDetector()
 SyncShakeDetector() {
-SyncSmartTaskbar()
 SyncSmartTaskbar() {
-SyncTaskbarUiTimer()
 SyncTaskbarUiTimer() {
-SyncTextExpander()
 SyncTextExpander() {
-SyncTray()
 SyncTray() {
 SyncTuningGlobals() {
 TaskbarCreated(*) {
@@ -8989,7 +9004,6 @@ UnrollWindow(hwnd, restoredRect := "") {
 UpdateBreathe(dt, now) {
 UpdateCustomClock() {
 UpdateCustomClockImpl() {
-UpdateKeyboardHook()
 UpdateKeyboardHook() {
 UpdateMicOSD(isMuted) {
 UpdateOSD(vol, isMuted) {
@@ -9006,7 +9020,6 @@ WinGetPosSafe(hwnd, &x, &y, &w, &h) {
 WM_NCHITTEST_PiP(wParam, lParam, msg, hwnd) {
 WorkAreaAt(px, py, &wl, &wt, &wr, &wb) {
 WorkAreaOf(idx, &wl, &wt, &wr, &wb) {
-WriteLog("=== Window Tweaks " VERSION " started ===")
 WriteLog(s) {
 WritePositions() {
 WriteSettings() {

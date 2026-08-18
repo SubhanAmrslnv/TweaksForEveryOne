@@ -5,6 +5,7 @@
 #Include AnimationScheduler.ahk
 #Include MediaCore.ahk
 #Include StealthPanic.ahk
+#Include ProcessLifecycle.ahk
 Persistent
 DetectHiddenWindows false
 SetWinDelay -1
@@ -95,8 +96,8 @@ global MomentumTiltEnabled := true
 ; thousands of lines down is therefore unassigned for the whole of startup:
 ; #HotIf CarouselActive threw "This global variable has not been assigned a
 ; value" on any Alt/Tab/Esc press, and ShellEvent's HSHELL_WINDOWDESTROYED
-; cleanup threw the same on PushedBackWindows. See the deferred-init block at
-; the bottom of the file for the other half of this rule.
+; cleanup threw the same on PushedBackWindows. See Boot() in
+; ProcessLifecycle.ahk for the other half of this rule.
 global FocusDepthEnabled := false
 global LastActiveHwnd := 0
 global PushedBackWindows := Map()
@@ -314,37 +315,21 @@ global IniCache := Map()
 ; bindings to Shift+Alt, and correcting only the m.Add call would have silently
 ; killed the tick marks. One constant per item, used at every site.
 ;
-; These have to live up here, not next to BuildTray(): BuildTray() is called a
-; few lines below, and a "global X := ..." further down the file has not run yet
-; when the call happens - the same trap the deferred-init block exists for.
+; They live in the flag block rather than next to BuildTray() so a label is
+; assigned before anything can reach SyncTray(). Boot() removed the ordering
+; hazard that originally forced this, but the grouping is still the right one:
+; a label is a constant, not part of the menu build.
 global TRAY_SETTINGS  := "Settings`tShift+Alt+W"
 global TRAY_SNAP      := "Magnetic snap`tShift+Alt+S"
 global TRAY_MEMORY    := "Position memory`tShift+Alt+M"
 global TRAY_BREATHING := "Breathing windows`tShift+Alt+E"
 global TRAY_STEALTH   := "Stealth Panic settings`tEsc Esc Esc"
 
-LoadSettings()
-RotateLog()
-SyncTray()
-BuildTray()
-
-; InitShakeFind() and InitLightsaber() are NOT called here. Top-level
-; "global X := ..." initialisers run in file order, and both functions' globals
-; are declared thousands of lines below this point - calling them here created
-; the overlay GUIs and then had SF_Hwnd/LS_Gui/LS_Hwnd reset to 0 underneath
-; them, and armed ShakeDetector's 40 ms timer before the variables it reads
-; existed. They are called at the very bottom of the file instead.
-;
-; These four are the ONLY top-level calls allowed above the deferred-init block,
-; because each one touches only globals declared above this line. Anything that
-; arms a timer or registers a hook - every Sync*() call, RegisterShellHook() -
-; goes in the deferred-init block at the bottom, however far that is from the
-; function it calls. Read the banner there for what went wrong when they did not,
-; and note that these four are also the allowlist scripts\Check-Split.ps1
-; check 8b compares against.
-
-
-WriteLog("=== Window Tweaks " VERSION " started ===")
+; There is no startup code here any more. LoadSettings(), RotateLog(),
+; SyncTray(), BuildTray() and the first WriteLog() all run from Boot() in
+; ProcessLifecycle.ahk, which the last line of this file calls once every
+; declaration in the program has run. scripts\Check-Split.ps1 check 8 fails any
+; top-level call that reappears here.
 
 ; =========================================================== Settings ===========================================================
 ; Kept for any caller that wants a bare number; the tuning registry has its own
@@ -3073,7 +3058,7 @@ AltDragResize() {
 }
 
 global TrayIcons := Map()
-OnMessage(0x1000, TrayIconClick)
+; Boot() registers OnMessage(0x1000) for the icons this Map holds.
 
 TrayIconClick(wParam, lParam, msg, hwnd) {
     if (lParam == 0x0202) {
@@ -4035,15 +4020,26 @@ global CurrentDragAlpha := 255
 ; arbitrary interruption point is what corrupted the scheduler's enumeration.
 ; The event is WINEVENT_OUTOFCONTEXT, so it arrives through our own message
 ; queue either way and nothing here needs fast-mode semantics.
-global WinEventCb := CallbackCreate(WinEvent, , 7)
-; Keep the hook handle: without it the hook can never be unhooked, and the
-; callback can never be freed. Bye() releases both.
-global WinEventHook := DllCall("SetWinEventHook", "uint", 0x000A, "uint", 0x000B, "ptr", 0,
-        "ptr", WinEventCb, "uint", 0, "uint", 0, "uint", 0x0002, "ptr")
+; Keep the hook handles: without them the hooks can never be unhooked and the
+; callbacks can never be freed. Bye() releases all four.
+;
+; Declared here, INSTALLED by InstallDragHooks() from Boot(). As top-level
+; initialisers the two SetWinEventHook calls began delivering MOVESIZESTART and
+; menu-popup events while thousands of later declarations had not run - and
+; WinEvent queries the window, registers an animation and arms a timer.
+global WinEventCb := 0, WinEventHook := 0
+global MenuEventCb := 0, MenuEventHook := 0
 
-global MenuEventCb := CallbackCreate(MenuEvent, , 7)
-global MenuEventHook := DllCall("SetWinEventHook", "uint", 0x0006, "uint", 0x0006, "ptr", 0,
-        "ptr", MenuEventCb, "uint", 0, "uint", 0, "uint", 0x0002, "ptr")
+InstallDragHooks() {
+    global WinEventCb, WinEventHook, MenuEventCb, MenuEventHook
+    WinEventCb := CallbackCreate(WinEvent, , 7)
+    WinEventHook := DllCall("SetWinEventHook", "uint", 0x000A, "uint", 0x000B, "ptr", 0,
+            "ptr", WinEventCb, "uint", 0, "uint", 0, "uint", 0x0002, "ptr")
+
+    MenuEventCb := CallbackCreate(MenuEvent, , 7)
+    MenuEventHook := DllCall("SetWinEventHook", "uint", 0x0006, "uint", 0x0006, "ptr", 0,
+            "ptr", MenuEventCb, "uint", 0, "uint", 0, "uint", 0x0002, "ptr")
+}
 
 MenuEvent(hook, event, hwnd, idObject, idChild, thread, time) {
     global ContextMenuAnimEnabled
@@ -5168,21 +5164,15 @@ WritePositions() {
 }
 
 ; The shell tells us when a window is created, so there is no polling timer.
-OnMessage(DllCall("RegisterWindowMessage", "str", "SHELLHOOK", "uint"), ShellEvent)
-; Explorer broadcasts TaskbarCreated to every top-level window when the shell
-; restarts, and the shell-hook registration does NOT survive that. It used to be
-; registered once at startup, so an Explorer crash - or this app's own "Restart
-; Explorer" button - silently killed position memory, the open animations, focus
-; pulse, breathing seeding, fly-to-mouse minimize and per-window cleanup for the
-; rest of the session, with no error anywhere.
-OnMessage(DllCall("RegisterWindowMessage", "str", "TaskbarCreated", "uint"), TaskbarCreated)
-; RegisterShellHook() itself is called from the deferred-init block at the bottom
-; of the file, NOT here. Registering it at this point armed ShellEvent ~3,200
-; lines before the state it cleans up existed, and every top-level call between
-; the two pumps the message queue, so a window closing during startup reached the
-; HSHELL_WINDOWDESTROYED branch and threw on PushedBackWindows. Only the
-; registration has to wait - no SHELLHOOK message is delivered until then, so
-; OnMessage above can stay where it is documented.
+; Boot() registers both SHELLHOOK and TaskbarCreated, and calls
+; RegisterShellHook() as the very last thing it does. Two reasons, both learned
+; the hard way: ShellEvent is the widest-reaching callback in the program, so
+; nothing may still be uninitialised when the shell starts delivering to it; and
+; the registration does NOT survive an Explorer restart, so without the
+; TaskbarCreated handler an Explorer crash - or this app's own "Restart Explorer"
+; button - silently killed position memory, the open animations, focus pulse,
+; breathing seeding, fly-to-mouse minimize and per-window cleanup for the rest of
+; the session, with no error anywhere.
 
 RegisterShellHook() {
     DllCall("DeregisterShellHookWindow", "ptr", A_ScriptHwnd)
@@ -6012,7 +6002,7 @@ ScreenMetrics() {
     return ScreenGeom
 }
 
-OnMessage(0x007E, InvalidateScreenMetrics)     ; WM_DISPLAYCHANGE
+; Boot() registers this for WM_DISPLAYCHANGE (0x007E).
 InvalidateScreenMetrics(*) {
     global ScreenGeom, DimmerGuis, FocusModeEnabled, FocusBounds, FocusGuis
     ScreenGeom := ""
@@ -6415,16 +6405,10 @@ ClearVolumeOSD() {
 }
 
 ; ====== Live Window PiP ======
-OnMessage(0x0084, WM_NCHITTEST_PiP)
-OnMessage(0x00A7, PiP_NCMouseEvents) ; WM_NCMBUTTONDOWN
-OnMessage(0x0201, PiP_MouseEvents) ; LBUTTONDOWN
-OnMessage(0x0202, PiP_MouseEvents) ; LBUTTONUP
-OnMessage(0x0204, PiP_MouseEvents) ; RBUTTONDOWN
-OnMessage(0x0205, PiP_MouseEvents) ; RBUTTONUP
-OnMessage(0x0207, PiP_MouseEvents) ; MBUTTONDOWN
-OnMessage(0x0208, PiP_MouseEvents) ; MBUTTONUP
-OnMessage(0x020A, PiP_MouseEvents) ; MOUSEWHEEL
-OnMessage(0x0200, PiP_MouseEvents) ; MOUSEMOVE
+; Boot() registers the ten OnMessage handlers these functions need: WM_NCHITTEST,
+; WM_NCMBUTTONDOWN and the eight mouse messages. Each one runs for every message
+; of its kind that reaches ANY window this process owns, which is why every
+; handler's first act is to test the hwnd against PipGuis and return unhandled.
 
 
 WM_NCHITTEST_PiP(wParam, lParam, msg, hwnd) {
@@ -7371,7 +7355,9 @@ GhostMonitorStep() {
     RS_Commit()
 }
 
-OnExit(Bye)
+; Registered by Boot(), not here: across a Reload() a top-level OnExit would be
+; installed by the new process while the old one still holds the original, and
+; Bye() hands every foreign window's state back.
 Bye(*) {
     global TrayIcons, BossKeyActive, BossKeyWindows, BossKeyMuteState
     global WinEventHook, WinEventCb, RolledUpWindows, CustomTrans
@@ -8622,10 +8608,9 @@ NotchAnim(hwnd, startY, destY, fadeIn := true, onDone := "") {
 ; was pressed. A global hook wakes this process on every keystroke, so it is
 ; started and stopped to match its consumers rather than being left running at
 ; load. UpdateKeyboardHook() is the Sync* for it: ApplyUi calls it on every
-; settings change, and the auto-execute call at the bottom of the file does the
-; initial start once LoadSettings has run.
+; settings change, and Boot() does the initial start once LoadSettings has run.
+; It also owns the OnKeyDown wiring, so this stays a plain declaration.
 global SparkHook := InputHook("V L0")
-SparkHook.OnKeyDown := OnObservedKeyDown
 
 ; When a key that is NOT a modifier was last pressed. IsDoublePress needs this to
 ; tell a deliberate double-tap from two ordinary shortcuts in a row.
@@ -8633,6 +8618,10 @@ global LastNonModifierKeyTime := 0
 
 UpdateKeyboardHook() {
     global SparkHook, SparkTypingEnabled, MicKillSwitchEnabled, SpotlightEnabled
+    ; Idempotent, and the reason the wiring lives here rather than beside the
+    ; declaration: assigning the same Func again is free, while a top-level
+    ; assignment would have to sit after OnObservedKeyDown is parsed.
+    SparkHook.OnKeyDown := OnObservedKeyDown
     ; Braces are required. AHK v2 has a Try/Catch/Else form, so a bare
     ; "try X" followed by "else" binds the else to the try, not to the if.
     if (SparkTypingEnabled || MicKillSwitchEnabled || SpotlightEnabled) {
@@ -10395,53 +10384,14 @@ CheckPrivacyBlur() {
 }
 
 ; ============================================================================
-; Deferred init - MUST stay at the bottom of the file
+; Startup - MUST stay the last statement in this file
 ; ============================================================================
-; Top-level "global X := ..." initialisers execute in file order as part of the
-; auto-execute thread, so anything that writes a global declared further down the
-; file gets silently clobbered when execution reaches that declaration. These
-; three used to be called next to LoadSettings() near the top, which reset
-; SF_Hwnd / LS_Gui / LS_Hwnd to 0 immediately after they were assigned and armed
-; ShakeDetector's 40 ms timer before the variables it reads existed. Anything
-; that touches a global declared below line ~200 belongs here, not up there.
-; InitShakeFind() and InitLightsaber() are NOT called here any more - both build
-; their overlay lazily, on first use, so a feature nobody enabled costs nothing.
-;
-; The rule covers ANYTHING THAT CAN FIRE, not just globals: every Sync*() call
-; that arms a polling timer, and every hook registration. Seven Sync*() calls and
-; RegisterShellHook() used to sit next to the function they call, scattered from
-; line ~2900 to ~6700, which armed each feature while thousands of lines of
-; initialisers still had not run. That is not theoretical - several of those calls
-; build a Gui or talk to COM, and both pump the message queue, so a shell event
-; queued during startup got dispatched right there. A window closing at that
-; moment reached ShellEvent's HSHELL_WINDOWDESTROYED cleanup and threw "This
-; global variable has not been assigned a value" on PushedBackWindows, which is
-; declared ~3,200 lines below where the hook used to be registered. It reproduced
-; on a fresh install (the setup window closes as the app starts) and almost never
-; when running from src\ on a quiet desktop.
-;
-; scripts\Check-Split.ps1 check 8 enforces both halves of this.
-SyncShakeDetector()
-SyncCursorFxTimer()
-SyncTaskbarUiTimer()
-SyncBreathingTimers()
-SyncDimmerTimer()
-SyncSmartTaskbar()
-SyncHotCornersTimer()
-SyncCursorWrapTimer()
-SyncActiveBorderTimer()
-SyncTextExpander()
-; Missing from this block until now, so a saved [taskbar] customclock=1 loaded
-; the flag but never armed the 1000 ms timer: the clock only appeared once the
-; user opened the settings window, because ApplyUi was its sole caller.
-SyncCustomClockTimer()
-; Not a Sync: a one-off probe of a Windows setting that the drag effects cannot
-; work without. It only ever logs and notifies, so it belongs after the flags.
-CheckDragFullWindows()
-UpdateKeyboardHook()
-; Last of all. ShellEvent is the widest-reaching callback in the file - window
-; created, destroyed, activated and minimised - so nothing else may still be
-; uninitialised when the shell starts delivering to it.
-RegisterShellHook()
+; One call. Boot() lives in ProcessLifecycle.ahk and runs the whole startup
+; sequence in one place: settings, tray, the drag hooks, every OnMessage handler,
+; OnExit(Bye), and each feature's Sync*. It has to be here rather than beside any
+; of those functions because AHK v2 runs all top-level code in file order, so a
+; startup call placed higher up fires while declarations below it have not run
+; yet - see the ProcessLifecycle.ahk header for the two bugs that produced.
+Boot()
 
 
