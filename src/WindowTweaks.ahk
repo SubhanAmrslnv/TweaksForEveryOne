@@ -116,6 +116,7 @@ global MotionBlurScrollEnabled := false   ; OFF-BY-DEFAULT: never rendered until
 global TaskbarWaveEnabled := false        ; OFF-BY-DEFAULT: never rendered until now
 global CustomClockEnabled := true
 global CustomClockWeather := ""
+global CustomClockWind := ""               ; second line of the info column, e.g. "12 km/h"
 global LastWeatherFetch := 0
 global WeatherNextMs := 900000             ; ms until the next attempt; set by the outcome
 global WeatherFailMs := 0                  ; current backoff, tripled per consecutive failure
@@ -9535,6 +9536,49 @@ IsTaskbarDark() {
     return (v = 0)
 }
 
+; open-meteo reports a WMO weather code. This maps it to one glyph.
+;
+; Built with Chr() rather than written as a literal so the .ahk source stays pure
+; ASCII - AutoHotkey reads a BOM-less file in the system codepage, so a literal
+; would arrive as mojibake on a machine with a different one. All of these are in
+; the BMP on purpose: they live in Segoe UI Symbol, which font fallback finds. The
+; astral-plane weather emoji need Segoe UI Emoji and come out as tofu in a plain
+; Static control.
+WeatherIcon(code) {
+    if (code = 0)
+        return Chr(0x2600)                      ; clear
+    if (code = 1 || code = 2)
+        return Chr(0x26C5)                      ; mainly clear / partly cloudy
+    if (code >= 95)
+        return Chr(0x26C8)                      ; thunderstorm
+    if ((code >= 71 && code <= 77) || code = 85 || code = 86)
+        return Chr(0x2744)                      ; snow
+    if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82))
+        return Chr(0x2614)                      ; drizzle / rain / showers
+    return Chr(0x2601)                          ; overcast, fog, anything else
+}
+
+
+; The colour of the taskbar itself, so the block can be painted to disappear into
+; it. Returns "" when it cannot be read, and the caller then keeps its theme-derived
+; default rather than guessing.
+;
+; The sample point is deliberately to the LEFT of the block: sampling under the
+; block would read the block's own pixels once it exists.
+SampleTaskbarColor(tx, ty, th, blockX) {
+    px := blockX - 12
+    if (px < tx + 2)
+        px := tx + 2
+    try {
+        CoordMode("Pixel", "Screen")
+        c := PixelGetColor(px, ty + th // 2)
+        if (c != "")
+            return Format("{:06X}", c & 0xFFFFFF)
+    }
+    return ""
+}
+
+
 ; One line, with the whole body behind a try, because this is a SetTimer callback:
 ; a throw here pops an error dialog and kills the timer for the rest of the session.
 ; That is not hypothetical - the version this replaces called
@@ -9546,14 +9590,23 @@ UpdateCustomClock() {
 }
 
 PaintCustomClock() {
-    global CustomClockTimeText, CustomClockTempText, CustomClockWeather
+    global CustomClockTimeText, CustomClockTempText, CustomClockWeather, CustomClockWind
     if (CustomClockTimeText)
         try CustomClockTimeText.Value := FormatTime(, "HH:mm") "`n" FormatTime(, "dd.MM.yyyy")
     ; "--" rather than blank: an empty column is indistinguishable from a column
     ; that was never created, which is the confusion this feature already caused
     ; once. A placeholder says "this part is here and has nothing to show yet".
-    if (CustomClockTempText)
-        try CustomClockTempText.Value := (CustomClockWeather == "") ? "--" : CustomClockWeather
+    if (CustomClockTempText) {
+        ; "--" rather than blank: an empty column is indistinguishable from a column
+        ; that was never created, which is the confusion this feature already caused
+        ; once. A placeholder says "this part is here and has nothing to show yet".
+        info := (CustomClockWeather == "") ? "--" : CustomClockWeather
+        ; Gated on the temperature, not on the wind, so a failure that clears the
+        ; reading cannot leave a stale wind line behind on its own.
+        if (CustomClockWeather != "" && CustomClockWind != "")
+            info .= "`n" CustomClockWind
+        try CustomClockTempText.Value := info
+    }
 }
 
 UpdateCustomClockImpl() {
@@ -9615,7 +9668,7 @@ UpdateCustomClockImpl() {
     ; conditional: it reads "--" until a location produces a reading. Sizing the
     ; column to zero when there was no reading yet is what made a feature that was
     ; merely unconfigured look like a feature that was broken.
-    tempW := ClockWeatherEnabled ? Ceil(glyph * 6) + CLOCK_GAP : 0
+    tempW := ClockWeatherEnabled ? Ceil(glyph * 9) + CLOCK_GAP : 0
     boxW := CLOCK_GAP + tempW + dateW + CLOCK_GAP
     x := anchorLeft - CLOCK_GAP - boxW
     if (x < tx) {
@@ -9630,33 +9683,38 @@ UpdateCustomClockImpl() {
     if (textY < 0)
         textY := 0
 
-    ; Chrome follows the anchor, and that is the whole answer to "it looks like a
-    ; floating box". Over empty taskbar the block must not paint a panel at all, or
-    ; it reads as a grey rectangle dropped on the bar; over the Control Center
-    ; button it must paint one, or that button's glyph shows through behind our
-    ; text. So TrayEdge renders colour-keyed - only the glyphs land on screen, the
-    ; same technique RenderTaskbarWave uses - and Clock renders opaque.
-    seeThrough := (ClockAnchor == "TrayEdge")
+    ; The block is painted in the TASKBAR'S OWN COLOUR, so the panel disappears and
+    ; only the text reads. This replaces colour-key transparency, which fringed: a
+    ; keyed background needs every background pixel to be exactly the key colour,
+    ; but antialiased and ClearType glyph edges BLEND with it, those blended pixels
+    ; are not the key any more, so they survive the keying and every character ends
+    ; up haloed in the key colour. Magenta text edges, measured on screen.
+    ;
+    ; Sampling works here because the taskbar is one flat colour - measured 0x202020
+    ; at x = 200, 600, 1000, 1200, 1300 and 1400, including over inactive task
+    ; buttons - so there is no gradient to mismatch against.
+    bgColor := IsTaskbarDark() ? "202020" : "F3F3F3"
 
     ; Colours, font, chrome and the column split are all fixed at creation, so a
     ; change to any of them rebuilds rather than restyles: Gui.SetFont only affects
     ; controls added after it, and a control cannot be resized into existence.
-    stamp := (IsTaskbarDark() ? "d" : "l") "|" fpt "|" tempW "|" dateW "|" th
-        . "|" (seeThrough ? "t" : "o")
+    stamp := bgColor "|" fpt "|" tempW "|" dateW "|" th
     if (CustomClockGui && CustomClockBuiltFor != stamp)
         HideCustomClock()
 
     if (!CustomClockGui) {
-        dark := SubStr(stamp, 1, 1) == "d"
+        dark := IsTaskbarDark()
         CustomClockGui := Gui("-Caption +AlwaysOnTop +ToolWindow +E0x20 -DPIScale")
         CustomClockGui.MarginX := 0
         CustomClockGui.MarginY := 0
-        ; A key colour no glyph is ever drawn in, so keying it out cannot eat part
-        ; of the text. Not black or white: both appear in one theme or the other.
-        ; Held in a local because Gui.BackColor reads BACK as a number - handing
-        ; that to WinSetTransColor would give it a decimal where it wants RRGGBB.
-        keyColor := "FF00FF"
-        CustomClockGui.BackColor := seeThrough ? keyColor : (dark ? "1F1F1F" : "F3F3F3")
+        ; Refined by one sample of the real bar, taken from a point LEFT of where the
+        ; block goes so it can never sample itself. Only at creation: the taskbar
+        ; colour does not change while the block sits on it, and a theme change
+        ; rebuilds through the stamp anyway.
+        sampled := SampleTaskbarColor(tx, ty, th, x)
+        if (sampled != "")
+            bgColor := sampled
+        CustomClockGui.BackColor := bgColor
         CustomClockGui.SetFont("s" fpt " c" (dark ? "FFFFFF" : "1A1A1A") " q5", "Segoe UI")
         ; A WM_CLOSE arriving at a caption-less, click-through overlay is never a
         ; user closing a window. It is a process-wide close request - taskkill,
@@ -9668,10 +9726,11 @@ UpdateCustomClockImpl() {
         ; overlay in the program, which is why nothing hit this before.
         CustomClockGui.OnEvent("Close", (*) => ExitApp())
         if (tempW) {
-            ; 0x200 is SS_CENTERIMAGE - one line, centred against the full height,
-            ; beside the two stacked lines of the clock.
+            ; Two lines, like the clock beside it: the condition glyph with the
+            ; temperature, and the wind under it.
             CustomClockTempText := CustomClockGui.Add("Text"
-                , "x" CLOCK_GAP " y0 w" (tempW - CLOCK_GAP) " h" th " Center 0x200", "")
+                , "x" CLOCK_GAP " y" textY " w" (tempW - CLOCK_GAP)
+                . " h" (2 * lineH) " Center", "")
         } else {
             CustomClockTempText := 0
         }
@@ -9679,12 +9738,9 @@ UpdateCustomClockImpl() {
             , "x" (CLOCK_GAP + tempW) " y" textY " w" (dateW - CLOCK_GAP)
             . " h" (2 * lineH) " Center", "")
         CustomClockBuiltFor := stamp
-        ; Text, then the colour key, then Show - in that order. Showing first costs
-        ; one frame of an unpainted rectangle sitting on the taskbar, and keying
-        ; after Show costs one frame of the key colour itself.
+        ; Text before Show: showing first costs one frame of an unpainted rectangle
+        ; sitting on the taskbar.
         PaintCustomClock()
-        if (seeThrough)
-            try WinSetTransColor(keyColor " 255", CustomClockGui.Hwnd)
         CustomClockGui.Show("NA x" x " y" ty " w" boxW " h" th)
     }
 
@@ -9722,10 +9778,14 @@ ClockUrlPart(s) {
 
 ForecastUrl() {
     global GeoLat, GeoLon, ClockUnits
-    u := "https://api.open-meteo.com/v1/forecast?current=temperature_2m"
+    u := "https://api.open-meteo.com/v1/forecast"
+        . "?current=temperature_2m,weather_code,wind_speed_10m"
         . "&latitude=" GeoLat "&longitude=" GeoLon
+
+    ; Fahrenheit implies the rest of the imperial set, so the wind comes back in mph
+    ; rather than km/h and the label below follows it.
     if (ClockUnits == "Fahrenheit")
-        u .= "&temperature_unit=fahrenheit"
+        u .= "&temperature_unit=fahrenheit&wind_speed_unit=mph"
     return u
 }
 
@@ -9812,7 +9872,7 @@ FetchWeather() {
 PollWeather() {
     global CustomClockReq, WeatherStage, WeatherReqAt, CustomClockWeather
     global WeatherNextMs, WeatherFailMs, ClockLocation, ClockUnits
-    global GeoFor, GeoLat, GeoLon
+    global GeoFor, GeoLat, GeoLon, CustomClockWind
     if !CustomClockReq
         return
     ready := false
@@ -9861,10 +9921,22 @@ PollWeather() {
         return
     }
     n := Round(Number(mT[1]))
-    ; Chr(176) rather than a literal degree sign: .ahk sources here stay pure ASCII,
-    ; because AutoHotkey reads a BOM-less file in the system codepage and a literal
-    ; would arrive as mojibake on a machine with a different one.
-    CustomClockWeather := (n > 0 ? "+" : "") n Chr(176) (ClockUnits == "Fahrenheit" ? "F" : "C")
+    ; Chr(176) rather than a literal degree sign, for the same ASCII-source reason
+    ; as WeatherIcon.
+    unit := (ClockUnits == "Fahrenheit") ? "F" : "C"
+    temp := (n > 0 ? "+" : "") n Chr(176) unit
+
+    ; The condition glyph and the wind are additive: a reply that omits either still
+    ; produces a reading, because the temperature is the part that must be there.
+    icon := ""
+    if RegExMatch(body, '"weather_code"\s*:\s*([0-9]+)', &mC)
+        icon := WeatherIcon(Integer(mC[1])) " "
+    CustomClockWeather := icon temp
+
+    CustomClockWind := ""
+    if RegExMatch(body, '"wind_speed_10m"\s*:\s*(-?[0-9.]+)', &mW)
+        CustomClockWind := Round(Number(mW[1])) (ClockUnits == "Fahrenheit" ? " mph" : " km/h")
+
     WeatherFailMs := 0
     WeatherNextMs := 900000
 }
