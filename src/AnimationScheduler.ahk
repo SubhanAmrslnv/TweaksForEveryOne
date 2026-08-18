@@ -263,3 +263,11 @@ Anim_Forget(key) {
     if (AnimOwner.Has(slot) && AnimOwner[slot] == key)
         AnimOwner.Delete(slot)
 }
+
+QPC() {
+    static freq := 0
+    if !freq
+        DllCall("QueryPerformanceFrequency", "Int64*", &freq)
+    DllCall("QueryPerformanceCounter", "Int64*", &count:=0)
+    return count * 1000 / freq
+}
