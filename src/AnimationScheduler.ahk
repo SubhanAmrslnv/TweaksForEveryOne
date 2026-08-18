@@ -24,7 +24,8 @@
 ; it shifts items under the enumerator index, which silently skips or repeats
 ; animations; iterating a snapshot is immune to that.
 ;
-; Function definitions only.
+; Function definitions only. Also owns QPC(), the shared timebase every
+; elapsed-time animation in the program is parameterised on.
 ; ============================================================================
 
 global ActiveAnimations := Map()

@@ -1,5 +1,40 @@
 # Modularizing WindowTweaks.ahk under the SOLID / single-source-of-truth rules
 
+> **STATUS: DONE.** Phases 0-10 have landed. `src/WindowTweaks.ahk` went from
+> 10,447 lines to 99 - an entry point holding process directives, a 29-line
+> `#Include` manifest and one `Boot()` call - across eleven commits, ten of them
+> verifiably pure code motion. There are now 32 modules, flat in `src/`, and the
+> largest is 979 lines.
+>
+> **Read the rest of this document as the design record, not as a to-do list.**
+> Several details in it were already stale when the work started and are
+> corrected here:
+>
+> - **The installers no longer hardcode the `.ahk` list.** `Install.ps1` and
+>   `build/Build-Installer.ps1` both glob `src/*.ahk` excluding `test_*`, so
+>   adding a module needs no installer edit. The flat-`src/` and no-underscore
+>   rules still hold.
+> - **Every line range quoted below was captured at 9,281 lines** and is off by
+>   more than a thousand. They were re-derived per phase.
+> - **The layout shipped as 24 new modules, not 23.** `TaskbarClock.ahk` was
+>   added: the custom taskbar clock did not exist when this was written, and at
+>   546 lines with a geocoder and a retry back-off it does not belong inside
+>   `ShellSurfaceWatcher.ahk`.
+> - **`QPC()` went to `AnimationScheduler.ahk`**, which already owns the frame
+>   timebase. It was the one function with no feature home.
+> - **`TEARDOWN_SPEC` and `FEATURE_SPEC` were deliberately NOT built.** Both are
+>   behavioural refactors rather than motion, and defining `TEARDOWN_SPEC`
+>   activates Check-Split's timer-drift check, which currently skips and would
+>   fail immediately. `Bye()` moved unchanged. They belong with the phase-11
+>   convergence work, which remains outstanding along with (c) through (g) in
+>   the phase table.
+>
+> Verification that actually ran, after every phase: `scripts/Check-Split.ps1`,
+> with the motion proof byte-identical at 9,065 code lines for phases 2-10, and
+> `-IniCheck` regenerating a `settings.ini` identical to the pre-split
+> reference. The installer was rebuilt and its payload confirmed to match
+> `src/` exactly.
+
 ## Context
 
 `src/WindowTweaks.ahk` is **9,445 lines** — 33 sections, ~230 functions, ~140 top-level globals. (The line ranges quoted throughout this document were captured at 9,281 lines and drift as the file grows; treat them as approximate anchors, not exact offsets.) That is rule 14's "architectural problem" band, and the duplication it hides is measurable, not theoretical:

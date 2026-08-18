@@ -264,18 +264,77 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build\Build-Installer.ps1 
 
 **One AutoHotkey v2 process** for everything except the Stealth Panic settings GUI (below). `src\WindowTweaks.ahk` is the sole entry point; the `#Include` lines at the top pull the rest in at load time. `#SingleInstance Force` is the only cross-instance coordination.
 
+**32 modules, flat in `src\`.** The largest is 979 lines; nothing else is close
+to the ~1000-line review threshold.
+
+*Entry and process lifecycle*
+
 | File | Role |
 |---|---|
-| `src\WindowTweaks.ahk` | App shell: settings, tray, hand-rolled sidebar-nav GUI, hotkeys, drag pipeline, position memory, and every feature |
+| `src\WindowTweaks.ahk` | **Entry point only** — process directives, the 29-line `#Include` manifest, one `Boot()` call. No globals, no functions |
+| `src\ProcessLifecycle.ahk` | `Boot()` and `Bye()`. The single ordered startup sequence and the single teardown |
+
+*Infrastructure — no feature knowledge*
+
+| File | Role |
+|---|---|
 | `src\SnapCore.ahk` | Pure geometry + window predicates. No side effects |
 | `src\RenderCore.ahk` | The only place allowed to touch a window's position, alpha, region or z-order |
-| `src\AnimationScheduler.ahk` | One 16 ms timer multiplexing every animation |
+| `src\AnimationScheduler.ahk` | One 15 ms timer multiplexing every animation; owns the `QPC()` timebase |
 | `src\MediaCore.ahk` | WASAPI "is this window playing audio/video?", so playing windows are never faded |
+
+*Substrate — settings, flags, logging*
+
+| File | Role |
+|---|---|
+| `src\FeatureFlags.ahk` | Declared default of every boolean/string/enum setting + the seven enum lists. **First in the manifest** |
+| `src\TuningRegistry.ahk` | `TUNE_SPEC` and the numeric load/clamp/persist/render runtime. Owns `Clamp()` |
+| `src\DiagnosticsLog.ahk` | Buffered log, rotation, `Notify()` |
+| `src\SettingsStore.ahk` | settings.ini read/write, `IniCache`, `LoadSettings`/`WriteSettings`, Start-with-Windows |
+
+*Shared services*
+
+| File | Role |
+|---|---|
+| `src\MonitorGeometry.ahk` | Monitor index and work-area lookup; the cached screen metrics |
+| `src\OverlayGui.ahk` | One lifecycle for every transient overlay: `GuiDestroy`, `FadeGui`, `NotchAnim` |
+
+*UI and input*
+
+| File | Role |
+|---|---|
+| `src\SettingsWindow.ahk` | The sidebar-nav GUI. **Sole owner of `C`, `Win`, `Pages`, `NavItems`, `CurPage`**. Holds all ten non-ASCII lines |
+| `src\FeatureToggles.ahk` | Tray menu + every `Toggle*` flag handler + the `+!o` always-on-top binding |
+| `src\InputBindings.ahk` | The hotkey block and its `#HotIf` contexts, the keyboard hook, the hotstring expander |
+
+*Features*
+
+| File | Role |
+|---|---|
+| `src\WindowCommands.ahk` | What a keystroke does to the active window: place, tile, cycle, opacity, roll-up, tray-hide, boss key |
+| `src\DragPipeline.ahk` | MOVESIZE/menu hooks, velocity sampling, drag end, magnetic groups |
+| `src\DropPlacement.ahk` | Where a released window lands: snap, verify, glide, bounce, throw, seam flash, tiling grid |
+| `src\WindowLifecycle.ahk` | Classify / remember / restore / animate-in a window. Owns the shell hook |
+| `src\AmbientDimming.ahk` | Breathing windows, monitor dimmer, and the MediaCore bridge that suspends them |
+| `src\ScreenEdgeGestures.ahk` | Hot corners and infinite cursor wrap |
+| `src\AudioOsd.ahk` | Volume and microphone OSDs and their input |
+| `src\OnDemandOverlays.ahk` | Summoned and dismissed: Quick Look, Spotlight, text magnifier |
+| `src\FocusEmphasis.ahk` | Cinema dim, smart active border, focus depth |
+| `src\PinnedWindowModes.ahk` | Modes a window is opted into and must be released on exit: PiP, always-on-bottom, ghost, privacy blur |
+| `src\MouseGestureFx.ahk` | Pointer-motion / idle / wheel driven: shake-find, yawn, ripples, drag trail, spark typing, motion blur |
+| `src\ShellSurfaceWatcher.ahk` | The one poll over shell surfaces: auto-hide, taskbar wave, lightsaber, Start blur, toasts |
+| `src\TaskbarClock.ahk` | The custom taskbar clock, and the only network egress in the program |
+| `src\WindowSpectacleFx.ahk` | One-shot desktop takeovers: gravity close, curtain drop, carousel Alt-Tab, black hole, shatter |
+
+*Stealth Panic — a bolt-on that also runs standalone*
+
+| File | Role |
+|---|---|
 | `src\StealthPanic.ahk` | Stealth Panic Mode engine — triple-ESC hotkey, hide/mute/suspend, safe-app launcher |
 | `src\StealthPanicConfig.ahk` | Storage for the Stealth Panic safe-app list. Included by both of the above |
 | `src\StealthPanicUI.ahk` | Stealth Panic settings GUI — **a separate process**, not part of the app shell |
 
-**The include contract.** The five included files hold *function definitions and global initialisers only* — stated in their own headers. Adding top-level executable statements to any of them silently breaks the script. `MediaCore.ahk` is additionally kept free of `QPC()`, `RegisterAnimation()` and `WriteLog()` calls so a test harness can include it alone; every function that needs the clock takes `now` as a parameter.
+**The include contract.** Every module holds *function definitions and global initialisers only* — stated in its own header. **No module may contain a top-level call**; everything that has to run at startup goes in `Boot()`. `scripts\Check-Split.ps1` check 8 enforces this, and before `Boot()` existed the ordering hazard it removes had already produced two real bugs (see the `ProcessLifecycle.ahk` header). `MediaCore.ahk` is additionally kept free of `QPC()`, `RegisterAnimation()` and `WriteLog()` calls so a test harness can include it alone; every function that needs the clock takes `now` as a parameter.
 
 **Coupling is by shared globals, not parameters.** Functions open with a bare `global` or a long global list. This is deliberate. Note the AHK v2 rule it relies on: a function may *read* a global without declaring it, but must declare it to *assign*. An assignment to an undeclared name silently creates a local instead — which is why `ApplyUi`, `LoadSettings` and `SaveSettings` use a bare `global`, and why any name assigned in those functions becomes a global (hence the `ui*` / `ep*` prefixes on their scratch variables).
 
@@ -283,7 +342,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build\Build-Installer.ps1 
 
 SOLID, DRY, separation of concerns and single-source-of-truth are **requirements** for this repo, adapted to AHK v2. The goal is not more files; it is clear ownership. Optimise for that, never for file count.
 
-**Ownership.** One file, one responsibility. A file approaching ~1000 lines gets reviewed for natural boundaries; ~2000+ is an architectural problem unless there is a documented reason. `src\WindowTweaks.ahk` is currently **9,445 lines** and is being split — the phased plan, the 23 target module boundaries with their source line ranges, and the per-phase smoke tests are in **`docs\MODULARIZATION.md`**. Read it before moving any code. Do not append a new feature to `WindowTweaks.ahk`; find or create the module that owns the responsibility.
+**Ownership.** One file, one responsibility. A file approaching ~1000 lines gets reviewed for natural boundaries; ~2000+ is an architectural problem unless there is a documented reason. **The split is done.** `src\WindowTweaks.ahk` went from 10,447 lines to 99 — an entry point and nothing else — across eleven behaviour-preserving commits; `docs\MODULARIZATION.md` records the phases and what was deliberately deferred. Do not append a new feature to `WindowTweaks.ahk` or to whichever module happens to be open: find the module that owns the responsibility, or add one.
+
+**Three rules the module layout depends on**, all enforced by `scripts\Check-Split.ps1`: modules stay **flat in `src\`** with **no underscore in any filename** (both installers glob `src\*.ahk`, and `build\Setup.cs` unflattens `_` to `\` on extract, so `Window_Commands.ahk` installs as `Window\Commands.ahk` and fails on end-user machines only); **no top-level calls** outside `Boot()`; and every module that defines a hotkey **opens and closes with a bare `#HotIf`**.
 
 **Single source of truth.** A value, rule, mapping or validation gets one authoritative definition. `TUNE_SPEC` is the worked example: one row per tunable number, and load/clamp/persist/UI are all generated from it. Adding a setting must not mean editing five unrelated functions. Where a mirror is required for performance (`SyncTuningGlobals`), say explicitly which copy is authoritative and which is derived.
 
@@ -605,14 +666,27 @@ read as a corrupted system tray - the notification icon looked like it had moved
 the spacing was wrong, and a failed weather lookup printed `no data` where the time
 belongs. Nothing in Explorer had changed; it was all *covered*, not moved.
 
-**Chrome follows the anchor.** Over empty taskbar (`TrayEdge`) the block paints no
-panel at all - `WinSetTransColor` keys out `FF00FF`, the same technique
-`RenderTaskbarWave` uses - because an opaque rectangle in the middle of the taskbar
-reads as a floating box rather than as taskbar text. Over a tray button (`Clock`) it
-paints an opaque background, or that button's glyph shows through behind the text.
-Note `Gui.BackColor` reads BACK as a number, so the key colour is held in a local:
-handing the property to `WinSetTransColor` would give it a decimal where it wants
-`RRGGBB`.
+**The block is painted in the taskbar's own colour, never colour-keyed.** Keying
+looked right in theory and fringed in practice: a keyed background needs every
+background pixel to be exactly the key colour, but antialiased and ClearType glyph
+edges BLEND with it, so those pixels are no longer the key, survive the keying, and
+halo every character in it - visibly magenta text edges. Painting an opaque block in
+the bar's own colour makes the panel disappear instead, with no edge artefacts at
+all. That works because the taskbar is one flat colour: measured `0x202020` at
+x = 200, 600, 1000, 1200, 1300 and 1400, including over inactive task buttons.
+`SampleTaskbarColor()` reads it once per rebuild from a point to the LEFT of the
+block, so the block can never sample itself, and falls back to a theme-derived
+default. Verified after the change: `WS_EX_LAYERED` absent and the block's own
+corner pixel reading `202020`, identical to the bar.
+
+**The info column carries the condition glyph and temperature on one line and the
+wind on the next.** `WeatherIcon()` maps the WMO `weather_code` to a single glyph,
+and every glyph it can return is in the BMP on purpose: those live in Segoe UI
+Symbol, which font fallback finds, whereas the astral-plane weather emoji need
+Segoe UI Emoji and render as tofu in a plain Static control. Both glyph and wind
+are additive - a reply missing either still produces a reading, because the
+temperature is the part that has to be there. Wind follows the temperature unit:
+`km/h` for Celsius, `mph` for Fahrenheit via `wind_speed_unit`.
 
 **The temperature column exists whenever the feature is on; only its VALUE is
 conditional.** It reads `--` until a location produces a reading. Sizing the column

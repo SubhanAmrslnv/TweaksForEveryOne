@@ -30,7 +30,7 @@
 ; RegisterAnimation() or WriteLog() - none of those exist when
 ; tests\test-snap.ahk includes it.  Every function that needs the clock takes
 ; `now` (QPC milliseconds) as a parameter.  Registration lives in
-; WindowTweaks.ahk with the other Sync* functions.
+; AmbientDimming.ahk with the other Sync* functions.
 ; ============================================================================
 
 ; ----- tuning -----------------------------------------------------------------
