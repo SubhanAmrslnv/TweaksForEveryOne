@@ -4,6 +4,9 @@
 #Include RenderCore.ahk
 #Include AnimationScheduler.ahk
 #Include MediaCore.ahk
+#Include DiagnosticsLog.ahk
+#Include MonitorGeometry.ahk
+#Include OverlayGui.ahk
 #Include StealthPanic.ahk
 #Include ProcessLifecycle.ahk
 Persistent
@@ -30,7 +33,6 @@ ProcessSetPriority "BelowNormal"
 global VERSION := "1.0"
 
 global INI      := A_ScriptDir "\settings.ini"
-global LOG_FILE := A_ScriptDir "\snap.log"
 global POS_FILE := A_ScriptDir "\window-positions.ini"
 
 ; Single backslashes. AHK escapes with a backtick, so "HKCU\\Software\\..."
@@ -42,13 +44,6 @@ global SNAP_DISTANCE  := 30
 global CORNER_BOOST   := 2.2
 global NEIGHBOUR_PROX := 90
 global MIN_DRAG       := 4
-global MAX_LOG_BYTES  := 262144
-global LOG_FLUSH_BYTES := 16384
-global LogBuf         := ""
-; Logging is buffered and written by an idle one-shot, but it is still disk
-; I/O and a growing file for something most users never read. It now has a
-; switch like everything else.
-global DEBUG          := false
 ; Alt+F4 was intercepted unconditionally - the only behaviour change in the
 ; whole program with no flag and no settings entry.
 global GravityCloseEnabled := true
@@ -760,62 +755,9 @@ WriteSettings() {
     }
 }
 
-RotateLog() {
-    global LOG_FILE, MAX_LOG_BYTES
-    try {
-        if (FileExist(LOG_FILE) && FileGetSize(LOG_FILE) > MAX_LOG_BYTES) {
-            if FileExist(LOG_FILE ".old")
-                FileDelete(LOG_FILE ".old")
-            FileMove(LOG_FILE, LOG_FILE ".old")
-        }
-    }
-}
 
-; Log lines are buffered in memory and written by an idle one-shot timer.
-;
-; Measured on this machine: one FileAppend of a single line costs 1.9 ms in the
-; program folder and 9.3 ms under %TEMP% (open + write + close, times whatever
-; the AV filter driver adds). WriteLog is called three times per drag, from the
-; FinishDrag timer thread - so logging alone was spending 6-28 ms of blocking
-; disk I/O inside every single drag, stalling the frame loop and every other
-; timer with it. Appending to a string costs 0.3 us.
-;
-; A held file handle would be faster still, but it keeps the file locked and
-; leaves the tail unflushed for "Open log"; buffering keeps both, and adds no
-; permanent handle.
-WriteLog(s) {
-    global DEBUG, LogBuf, LOG_FLUSH_BYTES
-    if !DEBUG
-        return
-    LogBuf .= A_Now "  " s "`n"
-    if (StrLen(LogBuf) >= LOG_FLUSH_BYTES) {
-        FlushLog()
-        return
-    }
-    ; One-shot, re-armed on each line: nothing is scheduled while idle, and the
-    ; write lands ~1.5 s after logging stops rather than inside the drag.
-    SetTimer(FlushLog, -1500)
-}
 
-FlushLog() {
-    global LogBuf, LOG_FILE
-    static sinceCheck := 0
-    if (LogBuf == "")
-        return
-    text := LogBuf
-    LogBuf := ""                        ; clear first: a failed write must not
-    SetTimer(FlushLog, 0)               ; re-queue the same text forever
-    try FileAppend(text, LOG_FILE)
-    ; RotateLog only ran at startup, so the 256 KB cap did nothing within a long
-    ; session - the file just grew. Check every few flushes (FileGetSize is a
-    ; disk call, measured at 14 us).
-    if (++sinceCheck >= 20) {
-        sinceCheck := 0
-        RotateLog()
-    }
-}
 
-Notify(msg) => TrayTip(msg, "Window Tweaks")
 
 ; =========================================================== Start with Windows ===========================================================
 StartupLink() => A_Startup "\Window Tweaks.lnk"
@@ -2249,50 +2191,9 @@ global SizeCycleIdx := Map()      ; hwnd -> {idx, l, t, r, b} last applied by Cy
 
 global SIZE_CYCLE := [0.50, 0.75, 0.90]
 
-; Which cached monitor contains (px, py)? A 1-based index into
-; ScreenMetrics().mons, falling back to 1 for a point off every screen.
-MonitorIndexAt(px, py) {
-    g := ScreenMetrics()
-    for i, m in g.mons {
-        if (px >= m.l && px < m.r && py >= m.t && py < m.b)
-            return i
-    }
-    ; Monitor 1 is NOT the primary - the enumeration order is whatever the OS
-    ; hands back, and on plenty of setups the primary is 2 or 3. For a point that
-    ; is off every screen the primary is the only defensible answer.
-    try return MonitorGetPrimary()
-    return 1
-}
 
-; Which monitor should a transient overlay appear on? The one holding the
-; pointer, because that is where the user is looking, and the primary when the
-; pointer is nowhere. Shared by both OSDs so they cannot disagree.
-CursorMonitorIndex() {
-    MouseGetPos(&mx, &my)
-    return MonitorIndexAt(mx, my)
-}
 
-; Work area (monitor minus taskbar) of monitor `idx`.
-; The monitor RECTS come from the ScreenMetrics cache, but the work area is read
-; live every time on purpose: it changes whenever the taskbar auto-hides, and
-; that raises no WM_DISPLAYCHANGE - so a cached copy would be stale exactly when
-; Smart Auto-Hide is on. This is a hotkey path, not a per-frame one, and
-; MonitorGetWorkArea costs ~3 us.
-WorkAreaOf(idx, &wl, &wt, &wr, &wb) {
-    try {
-        MonitorGetWorkArea(idx, &wl, &wt, &wr, &wb)
-        return true
-    }
-    try {
-        MonitorGetWorkArea(, &wl, &wt, &wr, &wb)
-        return true
-    }
-    return false
-}
 
-WorkAreaAt(px, py, &wl, &wt, &wr, &wb) {
-    return WorkAreaOf(MonitorIndexAt(px, py), &wl, &wt, &wr, &wb)
-}
 
 ; Un-maximize before laying a window out, and do it BEFORE IsRestorable is
 ; consulted: that predicate goes through IsSnappable, which rejects maximized
@@ -3703,13 +3604,6 @@ ToggleFocusMode() {
     }
 }
 
-GuiDestroy(g) {
-    hwnd := 0
-    try hwnd := g.Hwnd
-    try g.Destroy()
-    if hwnd
-        RS_RemoveHwnd(hwnd)
-}
 
 ZOrderSpotlight() {
     global FocusGuis, FocusTargetHwnd
@@ -3834,69 +3728,6 @@ FocusAnimatorStep(dt:=0, now:=0) {
 }
 
 ; ====== The one Gui fade ======
-; Every transient overlay fades the same way, and there used to be five separate
-; implementations of it: OsdFadeIn, FadeOutAndDestroy, FadeInDimmer,
-; FadeOutAndDestroyDimmer, QuickLookFade and FadeWindow. They had drifted apart -
-; different easing (some linear, some not), different durations, and worst of all
-; different animation keys per direction, which is what let an OSD fade in and out
-; at the same time.
-;
-; One key per window ("Fade_" hwnd) for BOTH directions, so starting any fade
-; cancels the opposite one. The start alpha comes from RS_CurrentAlpha, so a
-; reversed fade continues from where the window actually is instead of jumping.
-;
-;   toAlpha   target opacity, 0-255
-;   ms        duration; 0 (the default) means "whatever Overlay fade is set to",
-;             which is how the dimmers, Quick Look and the Start-menu blur all
-;             end up sharing one user-visible speed instead of three literals
-;   destroy   destroy the Gui when it reaches 0 (and forget its render state)
-;   onDone    called once, whichever way the fade ends
-FadeGui(guiObj, toAlpha, ms := 0, destroy := false, onDone := "") {
-    if (ms <= 0)
-        ms := Tune("animFadeMs")
-    hwnd := 0
-    try hwnd := guiObj.Hwnd
-    if (!hwnd || !DllCall("IsWindow", "ptr", hwnd)) {
-        if onDone
-            onDone()
-        return
-    }
-
-    animKey := "Fade_" hwnd
-    CancelAnimation(animKey)
-    from := RS_CurrentAlpha(hwnd, toAlpha)
-    start := QPC()
-
-    Finish() {
-        if destroy {
-            try guiObj.Destroy()
-            RS_RemoveHwnd(hwnd)        ; our own GUIs raise no shell destroy event
-        } else {
-            try RS_SetAlpha(hwnd, toAlpha, RS_PRI_ANIM)
-        }
-        if onDone
-            onDone()
-    }
-
-    FadeGuiStep(dt, now) {
-        if !DllCall("IsWindow", "ptr", hwnd) {
-            RS_RemoveHwnd(hwnd)
-            if onDone
-                onDone()
-            return false
-        }
-        t := (now - start) / ms
-        if (t >= 1) {
-            Finish()
-            return false
-        }
-        e := t * t * (3 - 2 * t)               ; smoothstep
-        try RS_SetAlpha(hwnd, Round(from + (toAlpha - from) * e), RS_PRI_ANIM)
-        return true
-    }
-
-    RegisterAnimation(animKey, FadeGuiStep)
-}
 
 ToggleSnap() {
     global SnapEnabled, Win, C
@@ -5980,56 +5811,8 @@ SyncCursorWrapTimer() {
         SetTimer(CursorWrapMonitorStep, 0)
 }
 
-; Virtual-screen metrics, cached. This runs 50 times a second; four SysGet calls
-; plus a monitor enumeration per tick bought nothing, because the answer only
-; changes when the display configuration does - and WM_DISPLAYCHANGE tells us.
-global ScreenGeom := ""
 
-ScreenMetrics() {
-    global ScreenGeom
-    if !IsObject(ScreenGeom) {
-        vLeft := SysGet(76), vTop := SysGet(77)
-        vWidth := SysGet(78), vHeight := SysGet(79)
-        mons := []
-        try {
-            loop MonitorGetCount() {
-                MonitorGet(A_Index, &L, &T, &R, &B)
-                mons.Push({l: L, t: T, r: R, b: B})
-            }
-        }
-        ScreenGeom := {left: vLeft, top: vTop, width: vWidth, height: vHeight
-                     , right: vLeft + vWidth, bottom: vTop + vHeight, mons: mons}
-    }
-    return ScreenGeom
-}
 
-; Boot() registers this for WM_DISPLAYCHANGE (0x007E).
-InvalidateScreenMetrics(*) {
-    global ScreenGeom, DimmerGuis, FocusModeEnabled, FocusBounds, FocusGuis
-    ScreenGeom := ""
-
-    ; Dropping the cache is not enough - the overlays SIZED from it are still on
-    ; screen at the old geometry. After a resolution change or a monitor being
-    ; plugged in, the dimmers covered the wrong rectangles and the focus vignette
-    ; left a bright band down whatever the desktop had just gained.
-    ;
-    ; Dimmers are cheap to rebuild: drop them and let the 200 ms tick recreate
-    ; them against the new layout on its next pass.
-    for k, g in DimmerGuis
-        try GuiDestroy(g)
-    DimmerGuis.Clear()
-
-    ; The focus overlays cannot be dropped - they ARE focus mode - so resize them
-    ; in place and re-anchor the region maths to the new virtual screen.
-    if (FocusModeEnabled && FocusGuis.Length) {
-        vx := SysGet(76), vy := SysGet(77), vw := SysGet(78), vh := SysGet(79)
-        FocusBounds := {x: vx, y: vy, w: vw, h: vh}
-        for layer in FocusGuis
-            try RS_SetPos(layer.gui.Hwnd, vx, vy, vw, vh, RS_PRI_ANIM)
-        RS_Commit()
-        RegisterAnimation("FocusAnimator", FocusAnimatorStep)
-    }
-}
 
 ; Teleport the cursor across the outer edges of the virtual desktop - but only
 ; when the user clearly meant it.
@@ -8566,44 +8349,6 @@ BringForwardWindow(hwnd) {
     Anim_Claim(hwnd, "geom", animKey, BringForwardStep)
 }
 
-NotchAnim(hwnd, startY, destY, fadeIn := true, onDone := "") {
-    if !DllCall("IsWindow", "ptr", hwnd)
-        return
-        
-    animKey := "Notch_" hwnd
-    CancelAnimation(animKey)
-    start := QPC()
-    ms := Tune("animNotchMs")
-    
-    ; Needs a catch: x is read by NotchStep on every frame, and a bare `try` would
-    ; leave it unset. Callers reach this from a hotkey and from one-shot timers.
-    try WinGetPos(&x, &cy, &w, &h, hwnd)
-    catch
-        return
-
-    NotchStep(dt, now) {
-        if !DllCall("IsWindow", "ptr", hwnd)
-            return false
-        t := (now - start) / ms
-        if (t >= 1) {
-            RS_SetPos(hwnd, x, destY, -1, -1, RS_PRI_USER)
-            try RS_SetAlpha(hwnd, fadeIn ? 220 : 0, RS_PRI_USER)
-            if onDone
-                onDone()
-            return false
-        }
-        
-        ease := fadeIn ? (1 - (1 - t) ** 3) : (t ** 3)
-        curY := Round(startY + (destY - startY) * ease)
-        
-        RS_SetPos(hwnd, x, curY, -1, -1, RS_PRI_USER)
-        
-        alpha := fadeIn ? Round(220 * ease) : Round(220 * (1 - ease))
-        try RS_SetAlpha(hwnd, alpha, RS_PRI_USER)
-        return true
-    }
-    RegisterAnimation(animKey, NotchStep)
-}
 
 ; ONE global keyboard observer, shared by every feature that needs to know a key
 ; was pressed. A global hook wakes this process on every keystroke, so it is
