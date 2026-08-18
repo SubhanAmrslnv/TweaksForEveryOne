@@ -153,7 +153,15 @@ GetRects(hwnd, &fL, &fT, &fR, &fB, &winX, &winY) {
     return true
 }
 
-IsSnappable(hwnd) {
+; allowMax exists for one caller: the MOVESIZESTART hook. That event arrives while
+; a maximized window is STILL maximized - Windows restores it as the pointer pulls
+; it down - so gating the drag pipeline on the plain form meant that dragging a
+; maximized window got no velocity sampling, no drag transparency and no glide at
+; all. That is the most natural way there is to try the feature, and it did nothing.
+;
+; It is a parameter rather than a second predicate so the other tests cannot drift:
+; every other caller keeps the strict behaviour by default.
+IsSnappable(hwnd, allowMax := false) {
     if !hwnd
         return false
     if (DllCall("GetAncestor", "ptr", hwnd, "uint", 2, "ptr") != hwnd)
@@ -177,7 +185,9 @@ IsSnappable(hwnd) {
     if (cls ~= skip)
         return false
 
-    if (state != 0)                  ; minimized or maximized
+    ; 0 = normal, 1 = maximized, -1 = minimized. A minimized window is never
+    ; draggable; a maximized one is, and is about to stop being maximized.
+    if (state != 0 && !(allowMax && state = 1))
         return false
     if !(style & 0x10000000)         ; WS_VISIBLE
         return false

@@ -113,7 +113,7 @@ global Thumbnails := []
 global CarouselAngleOffset := 0
 global MotionBlurScrollEnabled := false   ; OFF-BY-DEFAULT: never rendered until now
 global TaskbarWaveEnabled := false        ; OFF-BY-DEFAULT: never rendered until now
-global CustomClockEnabled := false
+global CustomClockEnabled := true
 global CustomClockWeather := ""
 global LastWeatherFetch := 0
 global WeatherNextMs := 900000             ; ms until the next attempt; set by the outcome
@@ -240,8 +240,8 @@ global TUNE_SPEC := [
 , TS("glideMax"     , "glide"    , "max"         ,    500,   100,   2000,    50, 0, "win"    , "Throw distance"         , "px a flick can carry a window")
 , TS("glideSettle"  , "glide"    , "settle"      ,      6,     0,     30,     1, 0, "win"    , "Settle overshoot"       , "px past the target on a hard landing, 0 = none")
 , TS("parallaxMin"  , "memory"   , "parallaxmin" ,     24,    10,    100,     5, 0, "win"    , "Drag opacity floor"     , "% at full drag speed")
-, TS("parallaxFrom" , "memory"   , "parallaxfrom",    120,     0,   2000,    10, 0, "win"    , "Drag fade starts at"    , "px/s of drag speed before it fades at all")
-, TS("parallaxFull" , "memory"   , "parallaxfull",   1000,   100,   6000,    50, 0, "win"    , "Drag fade full at"      , "px/s where the opacity floor is reached")
+, TS("parallaxFrom" , "memory"   , "parallaxfrom",     40,     0,   2000,    10, 0, "win"    , "Drag fade starts at"    , "px/s of drag speed before it fades at all")
+, TS("parallaxFull" , "memory"   , "parallaxfull",    600,   100,   6000,    50, 0, "win"    , "Drag fade full at"      , "px/s where the opacity floor is reached")
 , TS("gridGap"      , "snap"     , "smartgap"    ,      8,     0,     40,     2, 0, "win"    , "Tiling grid gap"        , "px between tiled windows")
 , TS("elasticAmt"   , "snap"     , "elasticamt"  ,     18,     4,     60,     2, 0, "win"    , "Rubber-band travel"     , "px the window leans")
 , TS("ghostAlpha"   , "ghost"    , "alpha"       ,     16,     5,     60,     1, 0, "power"  , "Ghost opacity"          , "% when the mouse is far away")
@@ -555,7 +555,7 @@ LoadSettings() {
     CarouselAltTabEnabled := IniStr("memory", "carousel", "0") = "1"
     MotionBlurScrollEnabled := IniStr("mouse", "motionblur", "0") = "1"
     TaskbarWaveEnabled := IniStr("taskbar", "wave", "0") = "1"
-    CustomClockEnabled := IniStr("taskbar", "customclock", "0") = "1"
+    CustomClockEnabled := IniStr("taskbar", "customclock", "1") = "1"
     ClockLocation := CleanClockLocation(IniStr("taskbar", "clocklocation", ""))
     ; Membership, not range - see the note on IniPick. A hand-edited value the
     ; dropdown cannot display would throw inside BuildWin and kill Shift+Alt+W.
@@ -1227,14 +1227,14 @@ BuildWin() {
     C["twave"] := Box(pg, CW, FG, "Taskbar Icon Wave", TaskbarWaveEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Hovering over the taskbar creates a magnifying glass bubble that tracks your mouse.", "xm y+8")
     
-    C["customclock"] := Box(pg, CW, FG, "Taskbar Temperature", CustomClockEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Adds the temperature just left of the system tray. It does not redraw the clock,", "xm y+8")
-    Sub(pg, CW, cSub, "the date or the tray icons - Windows keeps drawing those, in their own places.", "xm y+2")
+    C["customclock"] := Box(pg, CW, FG, "Custom Taskbar Clock (time, date, temperature)", CustomClockEnabled, "xm y+16")
+    Sub(pg, CW, cSub, "Draws in the free space to the LEFT of the system tray. It never covers the", "xm y+8")
+    Sub(pg, CW, cSub, "clock, the date or the tray icons - Windows keeps drawing those where they are.", "xm y+2")
     TuneRow(pg, "clockFont", FG, cSub)
 
     Lbl(pg, FG, "Weather location", "xm y+12", 190)
     C["clockloc"] := pg.AddEdit("x196 yp-3 w120", ClockLocation)
-    Sub(pg, 250, cSub, "required, e.g. Baku or Baku, Azerbaijan", "x+12 yp+3")
+    Sub(pg, 250, cSub, "optional, e.g. Baku. Blank = no temperature, no network", "x+12 yp+3")
 
     Lbl(pg, FG, "Temperature units", "xm y+12", 190)
     C["clockunits"] := pg.AddDropDownList("x196 yp-3 w120 Choose" IndexOf(CLOCK_UNITS, ClockUnits), CLOCK_UNITS)
@@ -4065,7 +4065,12 @@ WinEvent(hook, event, hwnd, idObject, idChild, thread, time) {
                 StartFadeBackAlpha(DragHwnd, CurrentDragAlpha)
         }
         DragHwnd := 0
-        if !IsSnappable(hwnd)
+        ; allowMax: see the note on IsSnappable. Windows un-maximizes the window
+        ; as the drag begins, so by the time SampleVelocityStep first runs it is a
+        ; normal window - but the event that STARTS the pipeline arrives before
+        ; that, and gating on the strict form meant dragging a maximized window
+        ; got no velocity sampling, no drag transparency and no glide at all.
+        if !IsSnappable(hwnd, true)
             return
         if !GetRects(hwnd, &sL, &sT, &sR, &sB, &sx, &sy)
             return
@@ -4147,7 +4152,7 @@ CheckDragFullWindows() {
 }
 
 SampleVelocityStep(dt, now) {
-    global DragHwnd, VelX, VelY, PrevX, PrevY, ParallaxEnabled, CurrentDragAlpha, FRAME_MS
+    global DragHwnd, VelX, VelY, PrevX, PrevY, ParallaxEnabled, CurrentDragAlpha, FRAME_MS, DEBUG
     if !DragHwnd {
         return false
     }
@@ -4223,6 +4228,17 @@ SampleVelocityStep(dt, now) {
         ; wants this window dimmed; the old alpha < 250 test threw away the first
         ; five units of every fade and left the layer installed on the way out.
         if (p.fade > 0 || CurrentDragAlpha < 254) {
+            ; "It does not fade" is not a diagnosable report on its own: the speed,
+            ; the ramp and the composed alpha are all invisible from outside the
+            ; process. With the debug log on, this says which of the three is wrong.
+            ; Throttled, because this is a 15 ms path - WriteLog buffers in RAM but
+            ; is not free.
+            static lastLog := 0
+            if (DEBUG && (now - lastLog > 250)) {
+                lastLog := now
+                WriteLog("drag speed=" Round(speed) " px/s fade=" Round(p.fade, 2)
+                    . " alpha=" Round(CurrentDragAlpha) "/255")
+            }
             RS_SetAlphaLayer(DragHwnd, "drag", CurrentDragAlpha / 255.0, RS_PRI_DRAG)
         } else {
             RS_ClearAlphaLayer(DragHwnd, "drag", RS_PRI_DRAG)
@@ -9335,47 +9351,46 @@ SyncTaskbarUiTimer() {
 }
 
 ; ----------------------------------------------------------------------------
-; Taskbar Temperature
+; Custom Taskbar Clock
 ; ----------------------------------------------------------------------------
-; This draws ONE thing that Windows does not: the temperature. It deliberately
-; does not render the time, the date or anything else the shell already renders.
+; A time / date / temperature block on the taskbar, and ONE rule shapes all of it:
+; it may never intersect TrayNotifyWnd.
 ;
-; The first version of this overlay did. It was 110 px wide, anchored on
-; TrayClockWClass and grown leftward, so it covered the native clock and the
-; Control Center button and redrew the time and date itself - which looked like a
-; corrupted tray: the notification icon appeared to have moved, the spacing was
-; wrong, and a failed weather lookup printed "no data" where the time belongs.
-; Nothing in Explorer had actually changed; it was all covered, not moved.
+; The first version did. It was 110 px wide, anchored on TrayClockWClass and grown
+; leftward, so it covered the native clock and the Control Center button. That read
+; as a corrupted tray - the notification icon looked like it had moved, the spacing
+; was wrong, and a failed weather lookup printed "no data" where the time belongs.
+; Nothing in Explorer had changed; it was all covered, not moved.
 ;
-; So the rule now is that the overlay may never intersect TrayNotifyWnd. It sits
-; entirely to its left, it is sized to its own content, and if the tray cannot be
-; located at all it does not draw - because then there is no way to guarantee it
-; is not sitting on top of something.
+; So it sits entirely to the LEFT of the tray, in the strip the task buttons have
+; not used, it is sized to its own content, and if the tray cannot be located it
+; does not draw at all - because then there is no way to prove it is not sitting on
+; top of something. Windows keeps drawing its own clock, date and tray icons,
+; untouched, to the right of it.
 global CustomClockGui := 0
-global CustomClockText := 0
+global CustomClockTimeText := 0
+global CustomClockTempText := 0
 global CustomClockReq := 0        ; held so the async request is not collected mid-flight
 global WeatherReqAt := 0
-global WeatherStage := ""         ; "geo" or "now" - which request is in flight
-global GeoFor := "-"              ; the location string GeoLat/GeoLon were resolved for
-global GeoLat := "", GeoLon := ""
-global CustomClockBuiltFor := ""  ; theme + font the current Gui was built for
+global CustomClockBuiltFor := ""  ; theme, font and column widths the Gui was built for
 global CustomClockRect := ""      ; last rect actually queued, so unchanged ticks cost nothing
 
-; Gap between the block and the tray, and the width of the block itself. A
-; temperature is at most "+100F" - five glyphs - so this is content sizing rather
-; than a setting: a width control would only ever be used to make it wrong.
+; Padding around and between the two columns.
 global CLOCK_GAP := 6
 
 SyncCustomClockTimer() {
     global CustomClockEnabled, LastWeatherFetch, CustomClockWeather, WeatherNextMs
-    global WeatherWarnedFor
+    global WeatherWarnedFor, GeoFor
     if (CustomClockEnabled) {
         ; Re-arming forces an immediate fetch, which is also how a changed location
-        ; or unit takes effect: ApplyUi calls this after reading the controls.
+        ; or unit takes effect: ApplyUi calls this after reading the controls. GeoFor
+        ; is reset with it, so a new city is geocoded again instead of reusing the
+        ; coordinates of the old one.
         LastWeatherFetch := 0
         WeatherNextMs := 900000
         CustomClockWeather := ""
         WeatherWarnedFor := "-"
+        GeoFor := "-"
         SetTimer(UpdateCustomClock, 250)
         UpdateCustomClock()
     } else {
@@ -9385,7 +9400,8 @@ SyncCustomClockTimer() {
 }
 
 HideCustomClock() {
-    global CustomClockGui, CustomClockText, CustomClockBuiltFor, CustomClockRect
+    global CustomClockGui, CustomClockTimeText, CustomClockTempText
+    global CustomClockBuiltFor, CustomClockRect
     if (CustomClockGui) {
         ; Mandatory, not tidiness: a -Caption +ToolWindow overlay raises no shell
         ; destroy notification, so nothing else would ever prune its RS_* entries.
@@ -9393,20 +9409,20 @@ HideCustomClock() {
         try CustomClockGui.Destroy()
     }
     CustomClockGui := 0
-    ; This referenced a control of the destroyed Gui. Left dangling, the next tick
+    ; These referenced controls of the destroyed Gui. Left dangling, the next tick
     ; wrote .Value into a dead control and threw - inside a timer callback.
-    CustomClockText := 0
-    CustomClockRect := ""
+    CustomClockTimeText := 0
+    CustomClockTempText := 0
     CustomClockBuiltFor := ""
+    CustomClockRect := ""
 }
 
-; The left edge of the system tray, which is the one boundary this feature must
-; never cross. Returns 0 when it cannot be found, and the caller then draws
-; nothing rather than guessing.
+; The left edge of the system tray: the one boundary this feature must not cross.
+; Returns 0 when it cannot be found, and the caller then draws nothing rather than
+; guessing.
 ;
-; Measured on this build: TrayNotifyWnd moves as icons are added and removed
-; (1577 with a quiet tray, 1529 with two more icons), so it is read every tick
-; rather than cached.
+; Measured on this build: TrayNotifyWnd MOVES as icons come and go - 1577 with a
+; quiet tray, 1529 with two more - so it is read every tick rather than cached.
 FindTrayLeft(tbHwnd) {
     try {
         notify := DllCall("FindWindowExW", "ptr", tbHwnd, "ptr", 0
@@ -9430,32 +9446,34 @@ IsTaskbarDark() {
     return (v = 0)
 }
 
-; One line, with the whole body behind a try, because this is a 1000 ms SetTimer
-; callback: a throw here pops an error dialog and kills the timer for the rest of
-; the session. That is not hypothetical - the version this replaces called
+; One line, with the whole body behind a try, because this is a SetTimer callback:
+; a throw here pops an error dialog and kills the timer for the rest of the session.
+; That is not hypothetical - the version this replaces called
 ; ControlGetHwnd("TrayClockWClass", ...) with a bare class name, which is not a
-; valid ClassNN, and AHK throws TargetError rather than returning 0. It died on
-; its first tick, every time, so the feature had never once drawn anything.
+; valid ClassNN, and AHK throws TargetError rather than returning 0. It died on its
+; first tick, every time, so the feature had never once drawn anything.
 UpdateCustomClock() {
     try UpdateCustomClockImpl()
 }
 
+PaintCustomClock() {
+    global CustomClockTimeText, CustomClockTempText, CustomClockWeather
+    if (CustomClockTimeText)
+        try CustomClockTimeText.Value := FormatTime(, "HH:mm") "`n" FormatTime(, "dd.MM.yyyy")
+    if (CustomClockTempText)
+        try CustomClockTempText.Value := CustomClockWeather
+}
+
 UpdateCustomClockImpl() {
-    global CustomClockGui, CustomClockText, CustomClockBuiltFor, CustomClockRect, CLOCK_GAP
+    global CustomClockGui, CustomClockTimeText, CustomClockTempText
+    global CustomClockBuiltFor, CustomClockRect, CLOCK_GAP
     global CustomClockWeather, LastWeatherFetch, WeatherNextMs
 
-    ; Read the network first, so the fetch keeps running on its own schedule even
-    ; on the ticks where nothing is drawn.
+    ; Read the network first, so the fetch keeps its own schedule regardless of
+    ; whether anything gets drawn this tick.
     PollWeather()
     if (LastWeatherFetch == 0 || (A_TickCount - LastWeatherFetch > WeatherNextMs))
         FetchWeather()
-
-    ; Nothing to say: draw nothing. A failed lookup used to put "no data" on the
-    ; taskbar, which is not information the taskbar should ever be carrying.
-    if (CustomClockWeather == "") {
-        HideCustomClock()
-        return
-    }
 
     tbHwnd := WinExist("ahk_class Shell_TrayWnd")
     ; The visibility test is the one that matters most: a full-screen app hides the
@@ -9485,15 +9503,6 @@ UpdateCustomClockImpl() {
         return
     }
 
-    ; Get out of the way while the pointer is on the taskbar. The block is
-    ; click-through, so it never blocks a button - but it can sit in front of one
-    ; when the task list is long, and the moment the user looks down there they
-    ; should see the shell exactly as the shell drew it.
-    if (IsMouseOverTaskbar()) {
-        HideCustomClock()
-        return
-    }
-
     trayLeft := FindTrayLeft(tbHwnd)
     if (!trayLeft) {
         ; No tray to measure against, so no way to prove we are not covering it.
@@ -9501,19 +9510,33 @@ UpdateCustomClockImpl() {
         return
     }
 
-    ; Content width, from the font. Five glyphs plus padding; digits in Segoe UI
-    ; run about 0.6 em, and em is about 4/3 of the point size at 96 dpi.
+    ; Widths from the font, not from a setting. The content is known - five glyphs
+    ; of time over ten of date, and at most six of temperature - so a width control
+    ; could only ever be used to make it wrong. Segoe UI digits run about 0.6 em and
+    ; em is about 4/3 of the point size at 96 dpi, which is what makes this scale
+    ; with the text size and with DPI instead of assuming either.
     fpt := Integer(Tune("clockFont"))
-    boxW := 16 + Ceil(fpt * 4 / 3 * 0.6 * 5)
+    glyph := fpt * 4 / 3 * 0.6
+    dateW := Ceil(glyph * 10) + CLOCK_GAP
+    tempW := (CustomClockWeather == "") ? 0 : Ceil(glyph * 6) + CLOCK_GAP
+    boxW := CLOCK_GAP + tempW + dateW + CLOCK_GAP
     x := trayLeft - CLOCK_GAP - boxW
     if (x < tx) {
         HideCustomClock()
         return
     }
 
-    ; Colours and font are fixed at creation, so a change to either has to rebuild
-    ; rather than restyle: Gui.SetFont only affects controls added after it.
-    stamp := (IsTaskbarDark() ? "d" : "l") "|" fpt "|" boxW "|" th
+    ; Two stacked lines, centred vertically by hand: the taskbar can be 30 px or
+    ; 48 px tall and nothing here may assume which.
+    lineH := Ceil(fpt * 4 / 3 * 1.35)
+    textY := (th - 2 * lineH) // 2
+    if (textY < 0)
+        textY := 0
+
+    ; Colours, font and the column split are all fixed at creation, so a change to
+    ; any of them rebuilds rather than restyles: Gui.SetFont only affects controls
+    ; added after it, and a control cannot be resized into existence.
+    stamp := (IsTaskbarDark() ? "d" : "l") "|" fpt "|" tempW "|" dateW "|" th
     if (CustomClockGui && CustomClockBuiltFor != stamp)
         HideCustomClock()
 
@@ -9524,13 +9547,30 @@ UpdateCustomClockImpl() {
         CustomClockGui.MarginY := 0
         CustomClockGui.BackColor := dark ? "1F1F1F" : "F3F3F3"
         CustomClockGui.SetFont("s" fpt " c" (dark ? "FFFFFF" : "1A1A1A") " q5", "Segoe UI")
-        ; 0x200 is SS_CENTERIMAGE: one line, centred in the taskbar height, whatever
-        ; that height is. Nothing here assumes 30 px or 48 px.
-        CustomClockText := CustomClockGui.Add("Text"
-            , "x0 y0 w" boxW " h" th " Center 0x200", CustomClockWeather)
+        ; A WM_CLOSE arriving at a caption-less, click-through overlay is never a
+        ; user closing a window. It is a process-wide close request - taskkill,
+        ; Install.ps1's StopRunning, a Windows shutdown - that walked the process's
+        ; top-level windows, found this one before the script's own hidden main
+        ; window, and stopped there. Measured: with the block on screen the app
+        ; NEVER exited and Bye() never ran, so a graceful close silently lost every
+        ; setting and left the overlay behind. It is the first permanently visible
+        ; overlay in the program, which is why nothing hit this before.
+        CustomClockGui.OnEvent("Close", (*) => ExitApp())
+        if (tempW) {
+            ; 0x200 is SS_CENTERIMAGE - one line, centred against the full height,
+            ; beside the two stacked lines of the clock.
+            CustomClockTempText := CustomClockGui.Add("Text"
+                , "x" CLOCK_GAP " y0 w" (tempW - CLOCK_GAP) " h" th " Center 0x200", "")
+        } else {
+            CustomClockTempText := 0
+        }
+        CustomClockTimeText := CustomClockGui.Add("Text"
+            , "x" (CLOCK_GAP + tempW) " y" textY " w" (dateW - CLOCK_GAP)
+            . " h" (2 * lineH) " Center", "")
         CustomClockBuiltFor := stamp
-        ; Text set before Show. Showing first costs one frame of an unpainted
-        ; rectangle sitting on the taskbar.
+        ; Text before Show: showing first costs one frame of an unpainted rectangle
+        ; sitting on the taskbar.
+        PaintCustomClock()
         CustomClockGui.Show("NA x" x " y" ty " w" boxW " h" th)
     }
 
@@ -9538,24 +9578,24 @@ UpdateCustomClockImpl() {
     ;
     ; The rect is diffed first. RenderCore deliberately does not cache positions -
     ; the user can move a window behind its back - but this window is ours alone, so
-    ; the cache is valid here, and it is what lets the tick run at 250 ms instead of
-    ; 1000 ms for nothing. That matters because TrayNotifyWnd's left edge MOVES:
-    ; adding one tray icon shifted it 24 px and left this block overlapping the tray
-    ; until the next tick - measured, and exactly the defect this feature is being
-    ; fixed for. Four times a second, the worst case is a quarter of a second of it.
+    ; the cache is valid here, and it is what lets the tick run at 250 ms for
+    ; nothing. That matters because TrayNotifyWnd's left edge MOVES: adding one tray
+    ; icon shifted it 24 px and left the block overlapping the tray until the next
+    ; tick - measured, and exactly the defect this feature exists in order not to
+    ; have.
     rect := x "," ty "," boxW "," th
     if (rect != CustomClockRect) {
         RS_SetPos(CustomClockGui.Hwnd, x, ty, boxW, th, RS_PRI_AMBIENT)
         CustomClockRect := rect
     }
     ; Z-order is re-asserted every tick regardless: the taskbar is topmost too and
-    ; comes to the front whenever it is clicked. On our own 45 px window that is one
-    ; SetWindowPos with NOMOVE | NOSIZE, nothing like the 260 us a real move costs on
-    ; a foreign window.
+    ; comes to the front whenever it is clicked. On our own window that is one
+    ; SetWindowPos with NOMOVE | NOSIZE, nothing like the 260 us a real move costs
+    ; on a foreign window.
     RS_SetZOrder(CustomClockGui.Hwnd, -1, 0x0013, RS_PRI_AMBIENT)
     RS_Commit()
 
-    try CustomClockText.Value := CustomClockWeather
+    PaintCustomClock()
 }
 
 ClockUrlPart(s) {
@@ -9614,15 +9654,19 @@ StartWeatherRequest(stage, url) {
 ; minutes it did it for everything - and then began timing out entirely. Every one
 ; of those is indistinguishable from success at the HTTP level.
 FetchWeather() {
-    global CustomClockReq, LastWeatherFetch, ClockLocation, GeoFor
+    global CustomClockReq, LastWeatherFetch, ClockLocation, GeoFor, CustomClockWeather
     if (CustomClockReq)
         return                        ; one in flight is enough
     ; Stamp the attempt BEFORE sending, or a slow endpoint would be re-requested on
     ; every tick. The interval itself is set by the outcome - see WeatherFailed and
     ; the success path in PollWeather - so this only records that we tried.
     LastWeatherFetch := A_TickCount
+    ; No city, no network. The time and the date need nothing, so the block still
+    ; draws - the temperature column simply is not there until a location is typed.
+    ; This is also what makes the feature safe to default ON: out of the box it
+    ; makes no outbound request whatsoever.
     if (ClockLocation == "") {
-        WeatherFailed("no location is set")
+        CustomClockWeather := ""
         return
     }
     if (GeoFor != ClockLocation)

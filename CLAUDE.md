@@ -576,34 +576,44 @@ Two rules for that module: nothing in it may throw (it runs from a top-level ini
 
 `settings.ini`, `window-positions.ini`, `snap.log` (+ `.old`, rotated at 256 KB) are written to `A_ScriptDir` — so running from source writes into `src\`, not the installed copy at `%LOCALAPPDATA%\Window Tweaks`. Stealth Panic adds `StealthPanic.ini` and `StealthPanicApps.txt` next to whichever copy is running. All gitignored. Nothing is written outside the program folder except a Startup `.lnk`; the registry is read-only (`AppsUseLightTheme`) — there is no `Run` key, service, or scheduled task.
 
-### Taskbar Temperature - the one network egress
+### Custom Taskbar Clock - the one network egress
 
-`src\WindowTweaks.ahk` carries a small overlay that adds the current temperature to
-the taskbar: `CustomClockEnabled`, ini key `[taskbar] customclock` (default `0`),
-plus `[taskbar] clocklocation`, `clockunits` and `clockfont`. Wired through
-`LoadSettings` / `WriteSettings` / `BuildWin` / `ApplyUi`, armed by
-`SyncCustomClockTimer()`, drawn by a 1000 ms `UpdateCustomClock()` timer.
+`src\WindowTweaks.ahk` carries an overlay that puts the time, the date and the
+current temperature on the taskbar: `CustomClockEnabled`, ini key
+`[taskbar] customclock` (default `1`), plus `[taskbar] clocklocation`,
+`clockunits` and `clockfont`. Wired through `LoadSettings` / `WriteSettings` /
+`BuildWin` / `ApplyUi`, armed by `SyncCustomClockTimer()`, drawn by a 250 ms
+`UpdateCustomClock()` timer.
 
-**It draws only the temperature, and that constraint is load-bearing.** It used to
-draw the time and the date as well, in a 110 px block anchored on `TrayClockWClass`
-and grown leftward - which covered the native clock and the Control Center button.
-The result read as a corrupted system tray: the notification icon looked like it
-had moved, the spacing was wrong, and a failed weather lookup printed `no data`
-where the time belongs. Nothing in Explorer had changed; it was all *covered*, not
-moved. So:
+**One rule shapes the whole feature: the block may never intersect
+`TrayNotifyWnd`.** The first version did. It was 110 px wide, anchored on
+`TrayClockWClass` and grown leftward, so it covered the native clock and the
+Control Center button. The result read as a corrupted system tray - the
+notification icon looked like it had moved, the spacing was wrong, and a failed
+weather lookup printed `no data` where the time belongs. Nothing in Explorer had
+changed; it was all *covered*, not moved. So:
 
-- **The overlay may never intersect `TrayNotifyWnd`.** `FindTrayLeft()` reads that
-  window's left edge every tick (it moves as tray icons come and go - measured 1577
-  with a quiet tray, 1529 with two more), the block is sized to its own content and
-  placed to the left of it with a 6 px gap, and if the tray cannot be found the
-  feature draws nothing rather than guessing.
-- **It hides itself rather than reporting.** No reading, no taskbar, taskbar
-  auto-hidden off its own monitor, no room left of the tray, or the pointer over the
-  taskbar - each of those hides the block. Failures go to `snap.log`, and to one
-  `Notify()` when the user typed the location themselves. Nothing about the
-  program's state is ever rendered onto the taskbar.
-- **Windows keeps drawing the clock, the date and the tray.** There is no
-  `EP_IconSize` gate any more: it mirrors `TaskbarSmallIcons`, which
+- **It draws in the free strip to the LEFT of the tray.** `FindTrayLeft()` reads
+  that window's left edge every tick - it MOVES as tray icons come and go, measured
+  1577 with a quiet tray and 1553 / 1529 with one and two more - the block is sized
+  from its own content and placed 6 px to its left, and if the tray cannot be found
+  it draws nothing rather than guessing. Windows keeps drawing its own clock, date
+  and tray icons, untouched, to the right of it.
+- **The rect is diffed before it is queued.** RenderCore does not cache positions
+  on purpose, but this window is ours alone so the cache is valid here - which is
+  what makes a 250 ms tick free. The tick has to be that fast because one new tray
+  icon shifts the boundary 24 px.
+- **It hides rather than reporting.** No taskbar, taskbar not visible, taskbar
+  auto-hidden off its own monitor, or no room left of the tray - each of those hides
+  the block. Weather failures go to `snap.log` and to one `Notify()`; nothing about
+  the program's state is ever rendered onto the taskbar.
+- **Widths come from the font, not from a setting.** The content is known - five
+  glyphs of time over ten of date, at most six of temperature - so `glyph := fpt *
+  4/3 * 0.6` sizes the columns, and the feature follows the text size and the DPI
+  instead of assuming either. A width control could only ever be used to make it
+  wrong. Two stacked lines are centred by hand because the taskbar can be 30 px or
+  48 px tall.
+- **There is no `EP_IconSize` gate.** It mirrored `TaskbarSmallIcons`, which
   `docs\TASKBAR-AND-INTERNALS.md` records as inert on the Win11 shell and which
   defaults to `Large`, so gating on it made the feature unreachable on a stock
   install however the box was ticked.
@@ -615,25 +625,28 @@ Three things that are easy to reintroduce:
   ClassNN - AHK wants `TrayClockWClass1`. Measured on 26200: the bare form raises
   `TargetError: Target control not found.`, and `ControlGetHwnd` throws rather than
   returning 0, so the `if (!clockHwnd)` guard under it was unreachable. Inside a
-  timer callback that throw pops an error dialog and kills the timer, so the
-  feature had never once drawn anything. Use `FindWindowExW`, and keep the whole
-  tick body behind the `try` in `UpdateCustomClock()`.
-- **`FetchWeather()` is the only outbound request in the program** -
-  `ComObject("Msxml2.XMLHTTP")` against `https://wttr.in` (HTTPS), off by default,
-  every 15 minutes, and it carries the configured place name. The reply is *polled*
-  from the clock tick rather than driven by `onreadystatechange`: the event handler
-  is one more thing that has to work for the feature to work at all, and it forced
-  the request object to be released from inside its own callback while MSXML was
-  still on the stack. `CustomClockReq` is held in a global so it is not collected
-  mid-flight - do not "tidy" that into a local - and `Bye()` clears it.
-- **wttr.in answers 200 with its HTML landing page instead of an error status**
-  whenever it will not serve a reading. Measured: `/Berlin` and the blank
-  geolocated form answer in plain text, `/Baku` answers with the page, `?format=%t`
-  on its own answers with the page, and roughly twenty requests inside a few
-  minutes gets *everything* answered with the page. So the body is the only signal,
-  `%C+%t` is requested (the condition is thrown away - it is there because `%t`
-  alone does not work), and `WeatherFailed()` triples the retry interval up to 15
-  minutes rather than retrying every minute into a rate limit.
+  timer callback that throw pops an error dialog and kills the timer, so the feature
+  had never once drawn anything. Use `FindWindowExW`, and keep the whole tick body
+  behind the `try` in `UpdateCustomClock()`.
+- **The default is ON, and that is only safe because a blank location makes no
+  request.** `FetchWeather()` returns immediately while `[taskbar] clocklocation` is
+  empty, so out of the box the block shows the time and the date and the program
+  makes no outbound call at all. The temperature column appears - and the network
+  egress begins - only once a city is typed. Do not "simplify" that early return
+  away.
+- **open-meteo over WinHttp, not wttr.in over MSXML.** Measured: MSXML (3.0 and
+  6.0) returns status 200 with an EMPTY `responseText` for an `application/json`
+  body, so every reading came back blank; and wttr.in answers 200 with its HTML
+  landing page instead of an error status whenever it will not serve a reading - it
+  did that for `/Baku` while answering `/Berlin` in plain text, did it for
+  `?format=%t` alone, did it for everything after roughly twenty requests in a few
+  minutes, then began timing out entirely. `WinHttpRequest` is opened async and
+  polled with `WaitForResponse(0)`, which returns immediately, so nothing on this
+  path blocks; a bare `WaitForResponse()` would block every timer in the process.
+  Two requests: the geocoder resolves the city once and the coordinates are cached
+  for as long as the setting holds, so the steady state is one request per 15
+  minutes. `WeatherFailed()` triples the retry interval up to 15 minutes rather than
+  retrying into a rate limit.
 
 ## Packaging
 

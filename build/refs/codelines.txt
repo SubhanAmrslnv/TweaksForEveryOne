@@ -44,6 +44,7 @@
                      , right: vLeft + vWidth, bottom: vTop + vHeight, mons: mons}
                     , "int", it.x, "int", it.y, "int", it.w, "int", it.h
                     , "uint", it.flags)
+                    . " alpha=" Round(CurrentDragAlpha) "/255")
                     : A_TrayMenu.Uncheck(TRAY_SNAP)
                     }
                     }
@@ -163,6 +164,7 @@
                  . "|Windows\.UI\.Core\.CoreWindow|ApplicationFrameInputSinkWindow"
                  . "|XamlExplorerHostIslandWindow|TopLevelWindowForOverflowXamlIsland)$"
                 , "int", 0, "int", 0, "int", 0, "int", 0, "uint", entry.flags)
+                , "x" CLOCK_GAP " y0 w" (tempW - CLOCK_GAP) " h" th " Center 0x200", "")
                 || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd")
                 }
                 }
@@ -356,6 +358,7 @@
                 keepAlive := anim.Call(dt, now)
                 keepAlive := false
                 L := Clamp(L, wl, wr - w)
+                lastLog := now
                 layer.currentAlpha := Max(layer.currentAlpha - step, layer.targetAlpha)
                 layer.currentAlpha := Min(layer.currentAlpha + step, layer.targetAlpha)
                 LayoutUndo.Delete(lParam)
@@ -525,6 +528,7 @@
                 WinTargetAlpha[lParam] := 255
                 wl := NumGet(monInfo, 20, "int")
                 wr := NumGet(monInfo, 28, "int")
+                WriteLog("drag speed=" Round(speed) " px/s fade=" Round(p.fade, 2)
                 wt := NumGet(monInfo, 24, "int")
                 wVal := 0, hVal := 0
                 wX := newX, wY := newY, wW := newW, wH := newH
@@ -538,7 +542,8 @@
             , "str", "MagnifierWindow"
             , "str", "TrayNotifyWnd", "ptr", 0, "ptr")
             , "uint", 0x50000000 ; WS_CHILD | WS_VISIBLE
-            , "x0 y0 w" boxW " h" th " Center 0x200", CustomClockWeather)
+            , "x" (CLOCK_GAP + tempW) " y" textY " w" (dateW - CLOCK_GAP)
+            . " h" (2 * lineH) " Center", "")
             . "?count=1&language=en&format=json&name=" ClockUrlPart(ClockLocation))
             . "|Choose Profile|Save As|Choose Account|Choose Workspace|Workspace Picker|Device Setup|Connection Wizard)\b"
             . "|Chrome Profile Picker|Chrome Welcome|Chrome First Run|Chrome Sign In"
@@ -555,6 +560,7 @@
             . "|Visual Studio Installer|JetBrains Toolbox|Creative Cloud Installer|Office Installer|Epic Installer|Steam Installer|Riot Installer|EA Installer"
             || !RegExMatch(body, '"longitude"\s*:\s*(-?[0-9.]+)', &mLo)) {
             || LightsaberSeamEnabled || (PrivacyBlurEnabled && PrivacyBlurWindows.Count > 0)
+            }
             }
             }
             }
@@ -775,6 +781,8 @@
             curX := s.x + (s.w - curW)/2
             curY := s.y + (s.h - curH)/2
             CustomClockReq := 0, WeatherStage := ""
+            CustomClockTempText := 0
+            CustomClockTempText := CustomClockGui.Add("Text"
             cx := wx + srcX + pieceW/2
             cy := hiddenY
             cy := wy + srcY + pieceH/2
@@ -954,6 +962,7 @@
             if (cursor == "SizeWE") {
             if (curW < 1)
             if (d > threshold)
+            if (DEBUG && (now - lastLog > 250)) {
             if (dir != 0 && moving != 0 && ((moving > 0) != (dir > 0)))
             if (dist < bestDist) {
             if (dist < clickDist) {
@@ -1413,14 +1422,14 @@
             RS_SetPos(hwnd, x, destY, -1, -1, RS_PRI_USER)
             RS_SetPos(hwnd, x, y + shrink, w, h - shrink*2, RS_PRI_ANIM)
             RS_SetPos(hwnd, x, y, -1, -1, RS_PRI_USER)
-            RS_SetPos(hwnd, X, Y, W, H, RS_PRI_ANIM)
             RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
+            RS_SetPos(hwnd, X, Y, W, H, RS_PRI_ANIM)
             RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
             RS_SetRegion(ActiveBorderGui.Hwnd, rect1 "  " rect2 "  " rect3 "  " rect4, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "", RS_PRI_ANIM)
-            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
-            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "0-0 w" w " h" curH, RS_PRI_ANIM)
+            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
+            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
             RS_SetRegion(MicOsdGui.Hwnd, "0-0 w240 h70 r20-20", RS_PRI_ANIM)
             RS_SetRegion(OsdGui.Hwnd, "0-0 w280 h64 r20-20", RS_PRI_ANIM)
             Run(appStr)
@@ -1477,6 +1486,7 @@
             StartBreatheCursor()
             StartFadeBackAlpha(hwnd, startA)
             StartMenuBlurGui := ""
+            static lastLog := 0
             StealthAppCache.Delete(exeName)
             StealthAppCache[exeName] := appPath
             StealthAppCache[exeName] := appPath
@@ -1617,8 +1627,8 @@
             winCy := wy + wh/2
             WinGetPos(&gx, &gy, &gw, &gh, hwnd)
             WinGetPos(&nx, &ny, &nw, &nh, "ahk_id " notify)
-            WinGetPos(&wX, &wY, &wW, &wH, hwnd)
             WinGetPos(&wx, &wy, &ww, &wh, hwnd)
+            WinGetPos(&wX, &wY, &wW, &wH, hwnd)
             WinGetPos(&wx, &wy, &ww, &wh, mHwnd)
             WinGetPos(&X, &Y, &W, &H, hwnd)
             WinLastActive.Delete(hwnd)
@@ -1900,8 +1910,10 @@
         }
         }
         }
+        }
         } catch {
         } catch as e {
+        } else {
         } else {
         } else {
         } else {
@@ -2125,12 +2137,14 @@
         CustomClockGui.BackColor := dark ? "1F1F1F" : "F3F3F3"
         CustomClockGui.MarginX := 0
         CustomClockGui.MarginY := 0
+        CustomClockGui.OnEvent("Close", (*) => ExitApp())
         CustomClockGui.SetFont("s" fpt " c" (dark ? "FFFFFF" : "1A1A1A") " q5", "Segoe UI")
         CustomClockGui.Show("NA x" x " y" ty " w" boxW " h" th)
         CustomClockRect := rect
         CustomClockReq := 0, WeatherStage := ""
         CustomClockReq := req
-        CustomClockText := CustomClockGui.Add("Text"
+        CustomClockTimeText := CustomClockGui.Add("Text"
+        CustomClockWeather := ""
         CustomClockWeather := ""
         CustomTrans.Delete(hwnd)
         CustomTrans.Delete(hwnd)
@@ -2357,6 +2371,7 @@
         g.BackColor := "White"
         g.Hide()
         g.Show("x" gx " y" gy " w" gw " h" gh " NoActivate")
+        GeoFor := "-"
         GeoLat := mLa[1], GeoLon := mLo[1], GeoFor := ClockLocation
         gh := 0
         GhostHiddenWindows.Delete(hwnd)
@@ -2395,8 +2410,6 @@
         HideActiveBorder()
         HideActiveBorder()
         HideActiveBorder()
-        HideCustomClock()
-        HideCustomClock()
         HideCustomClock()
         HideCustomClock()
         HideCustomClock()
@@ -2470,7 +2483,7 @@
         if !hwnd
         if !IsObject(fh)
         if !IsSnappable(hwnd)
-        if !IsSnappable(hwnd)
+        if !IsSnappable(hwnd, true)
         if !MagChildHwnd
         if !pAudioEndpointVolume
         if !pDevice
@@ -2700,6 +2713,7 @@
         if (t >= 1) {
         if (t >= 1) {
         if (TaskbarWaveGui) {
+        if (tempW) {
         if (testPath != "") {
         if (th < 10)
         if (token = "")
@@ -3040,6 +3054,7 @@
         p2 := localAppData "\Microsoft\Teams\Teams.exe"
         pad := (A_Index - 1) * FocusFeather
         Pages[name] := pg
+        PaintCustomClock()
         ParallaxEnabled := C["parallax"].Value
         parts := StrSplit(A_LoopField, "=", " `t", 2)
         pAudioEndpointVolume := 0
@@ -3138,8 +3153,6 @@
         RestoreFromBottom(hwnd)
         RestoreFromTray(hwnd)
         RestoreStealthPanic()
-        return
-        return
         return
         return
         return
@@ -3849,6 +3862,7 @@
         text := SubStr(text, 1, StrLen(text) - 1)
         TextExpanderEnabled := C["expander"].Value
         TextMagnifierEnabled := C["textmag"].Value
+        textY := 0
         th := dh
         thresh := Tune("cornerSize")
         thumbId := 0
@@ -3906,6 +3920,8 @@
         try cls := WinGetClass(ahwnd)
         try cls := WinGetClass(hwnd)
         try CustomClockGui.Destroy()
+        try CustomClockTempText.Value := CustomClockWeather
+        try CustomClockTimeText.Value := FormatTime(, "HH:mm") "`n" FormatTime(, "dd.MM.yyyy")
         try DirCreate(dirOnly)
         try DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", thumbId)
         try DllCall("UnhookWinEvent", "ptr", MenuEventHook)
@@ -4025,7 +4041,6 @@
         w := baseSize
         w := Round(400 * scale)
         wasMax := (WinGetMinMax(hwnd) = 1)
-        WeatherFailed("no location is set")
         WeatherFailed("no temperature in the reply")
         WeatherFailed("the connection failed")
         WeatherFailed("the server answered " status)
@@ -4087,8 +4102,6 @@
     , step: step, dec: dec, page: page, label: label, hint: hint}
     {
     {key: key, sec: sec, ini: ini, def: def, lo: lo, hi: hi
-    }
-    }
     }
     }
     }
@@ -4685,7 +4698,7 @@
     BounceStep(dt, now) {
     BounceStep(dt, now) {
     bounceW := W, bounceH := H
-    boxW := 16 + Ceil(fpt * 4 / 3 * 0.6 * 5)
+    boxW := CLOCK_GAP + tempW + dateW + CLOCK_GAP
     BREATHE_IDLE_MS    := Integer(Tune("breatheIdle"))
     BreatheCursorEnabled := IniStr("mouse", "breathe", "1") = "1"
     BreatheStart := QPC()
@@ -4724,7 +4737,7 @@
     C["corners_en"] := Box(pg, CW, FG, "Enable Hot Corners (Shift+Alt+C)", HotCornersEnabled, "xm y+16")
     C["cursoryawn"] := Box(pg, CW, FG, "Cursor Yawn (Wakes up after idle)", CursorYawnEnabled, "xm y+16")
     C["curtain"] := Box(pg, CW, FG, "Curtain Drop (Win+Alt+D)", CurtainDropEnabled, "xm y+16")
-    C["customclock"] := Box(pg, CW, FG, "Taskbar Temperature", CustomClockEnabled, "xm y+16")
+    C["customclock"] := Box(pg, CW, FG, "Custom Taskbar Clock (time, date, temperature)", CustomClockEnabled, "xm y+16")
     C["debuglog"] := Box(pg, CW, FG, "Write a debug log (snap.log)", DEBUG, "xm y+16")
     C["deletehole"] := Box(pg, CW, FG, "Recycle Bin Black Hole (Delete Animation)", BlackHoleDeleteEnabled, "xm y+16")
     C["elastic"] := Box(pg, CW, FG, "Rubber-Band Scroll (Kinetic lean)", ElasticScrollEnabled, "xm y+16")
@@ -4890,12 +4903,13 @@
     CurtainDropped := false
     CurtainWindows := Map()
     CustomClockBuiltFor := ""
-    CustomClockEnabled := IniStr("taskbar", "customclock", "0") = "1"
+    CustomClockEnabled := IniStr("taskbar", "customclock", "1") = "1"
     CustomClockGui := 0
     CustomClockRect := ""
     CustomClockReq := 0
     CustomClockReq := 0, WeatherStage := ""
-    CustomClockText := 0
+    CustomClockTempText := 0
+    CustomClockTimeText := 0
     CustomClockWeather := ""
     CustomClockWeather := (n > 0 ? "+" : "") n Chr(176) (ClockUnits == "Fahrenheit" ? "F" : "C")
     CustomTrans[hwnd] := current
@@ -4913,6 +4927,7 @@
     cycle := Mod(t, 3000) / 3000
     dark := IsDark()
     data := Buffer(24, 0)
+    dateW := Ceil(glyph * 10) + CLOCK_GAP
     dead := ""
     dead := []
     dead := []
@@ -5231,12 +5246,15 @@
     global CurtainDropEnabled, SparkTypingEnabled, CarouselAltTabEnabled, MotionBlurScrollEnabled
     global CurtainDropped, CurtainWindows
     global CurtainDropped, CurtainWindows
+    global CustomClockBuiltFor, CustomClockRect
+    global CustomClockBuiltFor, CustomClockRect, CLOCK_GAP
     global CustomClockEnabled, LastWeatherFetch, CustomClockWeather, WeatherNextMs
-    global CustomClockGui, CustomClockText, CustomClockBuiltFor, CustomClockRect
-    global CustomClockGui, CustomClockText, CustomClockBuiltFor, CustomClockRect, CLOCK_GAP
-    global CustomClockReq, LastWeatherFetch, ClockLocation, GeoFor
+    global CustomClockGui, CustomClockTimeText, CustomClockTempText
+    global CustomClockGui, CustomClockTimeText, CustomClockTempText
+    global CustomClockReq, LastWeatherFetch, ClockLocation, GeoFor, CustomClockWeather
     global CustomClockReq, WeatherReqAt, WeatherStage
     global CustomClockReq, WeatherStage, WeatherReqAt, CustomClockWeather
+    global CustomClockTimeText, CustomClockTempText, CustomClockWeather
     global CustomClockWeather, ClockLocation, WeatherWarnedFor
     global CustomClockWeather, LastWeatherFetch, WeatherNextMs
     global CustomTrans, PendingTransMsg
@@ -5245,7 +5263,7 @@
     global DragHwnd
     global DragHwnd, DragL, DragT, DragR, DragB, VelX, VelY, PrevX, PrevY
     global DragHwnd, FRAME_MS
-    global DragHwnd, VelX, VelY, PrevX, PrevY, ParallaxEnabled, CurrentDragAlpha, FRAME_MS
+    global DragHwnd, VelX, VelY, PrevX, PrevY, ParallaxEnabled, CurrentDragAlpha, FRAME_MS, DEBUG
     global DragTrailGui, DragTrailActive, DragTrailX, DragTrailY, DragTrailVX, DragTrailVY
     global DragTrailStartX, DragTrailStartY, DragTrailActive, DragTrailX, DragTrailY, DragTrailGui
     global ElasticEdgeStates, ElasticAwayCounts
@@ -5489,7 +5507,7 @@
     global VelX, VelY, GLIDE_THROW, GLIDE_MAX
     global WeatherNextMs, WeatherFailMs
     global WeatherNextMs, WeatherFailMs, ClockLocation, ClockUnits
-    global WeatherWarnedFor
+    global WeatherWarnedFor, GeoFor
     global Win
     global Win
     global Win, C
@@ -5497,6 +5515,7 @@
     global WinCurrentAlpha, GhostWindows, BottomWindows, FocusGuis
     global WindowCmdLineCache
     global WinEventHook, WinEventCb, RolledUpWindows, CustomTrans
+    glyph := fpt * 4 / 3 * 0.6
     GrabPanEnabled := !GrabPanEnabled
     GrabPanEnabled := IniStr("memory", "grabpan", "0") = "1"
     GravityCloseEnabled := IniStr("memory", "gravityclose", "1") = "1"
@@ -5881,7 +5900,8 @@
     if (CustomClockGui && CustomClockBuiltFor != stamp)
     if (CustomClockGui) {
     if (CustomClockReq)
-    if (CustomClockWeather == "") {
+    if (CustomClockTempText)
+    if (CustomClockTimeText)
     if (cx = "" || cw = "")
     if (dir == 1) {
     if (dir > 0)
@@ -5936,7 +5956,6 @@
     if (info.exe != "" && MC_FallbackExe.Has(info.exe)) {
     if (info.exe != "" && MC_LiveExe.Has(info.exe))
     if (IniCache.Has(ck) && IniCache[ck] == v)
-    if (IsMouseOverTaskbar()) {
     if (isMuted || vol == 0)
     if (isMuted) {
     if (IsObject(restoredRect) && restoredRect.HasOwnProp("w")) {
@@ -6041,7 +6060,7 @@
     if (stage == "geo") {
     if (startA >= 254) {
     if (startHwnd && DllCall("IsWindowVisible", "ptr", startHwnd)) {
-    if (state != 0)                  ; minimized or maximized
+    if (state != 0 && !(allowMax && state = 1))
     if (state != -1)
     if (state != 1)                  ; 0 Inactive, 1 Active, 2 Expired
     if (status != 200) {
@@ -6073,6 +6092,7 @@
     if (text = "")
     if (text = "") {
     if (TextMagnifierEnabled) {
+    if (textY < 0)
     if (th > dh)
     if (title == "")
     if (ToastBounceEnabled)
@@ -6277,6 +6297,7 @@
     Lbl(pg, FG, "Window animations", "xm y+16")
     leftDist := mX - wX
     LightsaberSeamEnabled := IniStr("mouse", "lightsaber", "1") = "1"
+    lineH := Ceil(fpt * 4 / 3 * 1.35)
     list := ""
     list := StealthPanicConfig_NormalizeList(listStr)
     list := StealthPanicConfig_ReadIndexed(iniFile)
@@ -6464,13 +6485,13 @@
     numAlpha := (alpha == "Off") ? 256 : Integer(alpha)
     NumPut("char", 255, props, 36)
     NumPut("int", 0, accent, 12)
-    NumPut("Int", 0, props, 4)
     NumPut("int", 0, props, 4)
+    NumPut("Int", 0, props, 4)
     NumPut("Int", 0, props, 8)
     NumPut("int", 0, props, 8)
     NumPut("int", 0x88222222, accent, 8)
-    NumPut("int", 1, props, 40)
     NumPut("Int", 1, props, 40)
+    NumPut("int", 1, props, 40)
     NumPut("Int", 1, props, 44)
     NumPut("int", 16, data, A_PtrSize + A_PtrSize)
     NumPut("int", 19, data, 0)
@@ -6519,6 +6540,7 @@
     ox := 0, oy := 0
     p := A_ScriptDir "\" name
     Pages := Map(), NavItems := Map(), C := Map()
+    PaintCustomClock()
     ParallaxEnabled := IniStr("memory", "parallax", "1") = "1"
     path := GetActiveExplorerPath()
     path := GetSelectedExplorerFile()
@@ -6746,8 +6768,8 @@
     return (v = 0)
     return (v >= 256) ? 255 : v
     return {alpha: Round(255 - f * (255 - TuneAlpha("parallaxMin"))), fade: f}
-    Return 0
     return 0
+    Return 0
     return 0
     return 1
     return 1
@@ -7020,7 +7042,7 @@
     srcY := my - wy - (size/2)
     srcY := Round(my - ty - (size / zoom / 2))
     stage := WeatherStage
-    stamp := (IsTaskbarDark() ? "d" : "l") "|" fpt "|" boxW "|" th
+    stamp := (IsTaskbarDark() ? "d" : "l") "|" fpt "|" tempW "|" dateW "|" th
     start := QPC()
     start := QPC()
     start := QPC()
@@ -7118,21 +7140,22 @@
     StrPut(SubStr(title, 1, 63), nid.Ptr + (A_PtrSize == 8 ? 40 : 24), "UTF-16")
     Sub(pg, 220, cSub, "Win10 supports small icons", "x+16 yp+3")
     Sub(pg, 250, cSub, "auto = Windows accent, or a hex RRGGBB", "x+12 yp+3")
-    Sub(pg, 250, cSub, "required, e.g. Baku or Baku, Azerbaijan", "x+12 yp+3")
+    Sub(pg, 250, cSub, "optional, e.g. Baku. Blank = no temperature, no network", "x+12 yp+3")
     Sub(pg, 250, subCol, s.hint " (" TuneFormat(s, s.lo) "-" TuneFormat(s, s.hi)
     Sub(pg, CW, cSub, "A fast, minimalist search bar for calculations, folders, and apps.", "xm y+8")
     Sub(pg, CW, cSub, "A window fades while you drag it and springs back to solid when you let go.", "xm y+8")
-    Sub(pg, CW, cSub, "Adds the temperature just left of the system tray. It does not redraw the clock,", "xm y+8")
     Sub(pg, CW, cSub, "Advanced overlays, widgets, and shortcuts.", "xm y+10")
     Sub(pg, CW, cSub, "Aggressively close the active window by smashing it into dozens of 3D glass shards.", "xm y+8")
     Sub(pg, CW, cSub, "Applies a cinematic vertical motion blur to text when scrolling fast.", "xm y+8")
     Sub(pg, CW, cSub, "Audio, typing, and system-wide controls.", "xm y+10")
     Sub(pg, CW, cSub, "Automatically dims every monitor except the one your mouse is currently on.", "xm y+8")
+    Sub(pg, CW, cSub, "clock, the date or the tray icons - Windows keeps drawing those where they are.", "xm y+2")
     Sub(pg, CW, cSub, "Closing a window drops it off the screen. Off leaves Alt+F4 entirely to Windows.", "xm y+8")
     Sub(pg, CW, cSub, "Cursor stretches and 'yawns' the first time you touch it after a long idle.", "xm y+8")
     Sub(pg, CW, cSub, "Deleting a file visually sucks it into a top-left singularity (spaghettification).", "xm y+8")
     Sub(pg, CW, cSub, "Draws a fast fading ripple when you left click.", "xm y+8")
     Sub(pg, CW, cSub, "Draws a sleek, accent-colored border around the currently active window.", "xm y+8")
+    Sub(pg, CW, cSub, "Draws in the free space to the LEFT of the system tray. It never covers the", "xm y+8")
     Sub(pg, CW, cSub, "Dual/Triple monitor optimizations and focus effects.", "xm y+10")
     Sub(pg, CW, cSub, "Executable names, comma or semicolon separated - used when no audio API reports playback.", "xm y+6")
     Sub(pg, CW, cSub, "Fluid, physics-based movement and snapping.", "xm y+10")
@@ -7168,7 +7191,6 @@
     Sub(pg, CW, cSub, "Shows a visual 3-zone layout grid. Drop the window into a zone to snap it.", "xm y+8")
     Sub(pg, CW, cSub, "Smoothly drops windows down off-screen instead of instantly vanishing.", "xm y+8")
     Sub(pg, CW, cSub, "Spawns neon sparks behind the text caret while typing.", "xm y+8")
-    Sub(pg, CW, cSub, "the date or the tray icons - Windows keeps drawing those, in their own places.", "xm y+2")
     Sub(pg, CW, cSub, "Throw a window forcefully towards another monitor to make it fly and land in the center.", "xm y+8")
     Sub(pg, CW, cSub, "Throw your mouse into the corners of the screen to trigger actions.", "xm y+10")
     Sub(pg, CW, cSub, "Turns active window into an interactive ghost overlay that fades in as your mouse approaches.", "xm y+8")
@@ -7213,6 +7235,7 @@
     TaskbarScrollEnabled := IniStr("memory", "taskbarscroll", "1") = "1"
     TaskbarWaveEnabled := IniStr("taskbar", "wave", "0") = "1"
     tbHwnd := WinExist("ahk_class Shell_TrayWnd")
+    tempW := (CustomClockWeather == "") ? 0 : Ceil(glyph * 6) + CLOCK_GAP
     text := LogBuf
     text := StrReplace(listStr, "`r`n", "`n")
     text := StrReplace(text, "`r", "`n")
@@ -7220,6 +7243,7 @@
     text := Trim(SpotlightInput.Value)
     TextExpanderEnabled := IniStr("memory", "expander", "1") = "1"
     TextMagnifierEnabled := IniStr("mouse", "textmag", "1") = "1"
+    textY := (th - 2 * lineH) // 2
     threshold := 3
     threshold := 5
     thumb := 0
@@ -7338,7 +7362,6 @@
     try cls := WinGetClass(hwnd)
     try cls := WinGetClass(srcHwnd)
     try count := MonitorGetCount()
-    try CustomClockText.Value := CustomClockWeather
     try DestroyActiveBorder()
     try DllCall("DeregisterShellHookWindow", "ptr", A_ScriptHwnd)
     try DllCall("dwmapi\DwmUnregisterThumbnail", "ptr", pip.ThumbId)
@@ -7454,11 +7477,11 @@
     try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
     try WinGetPos(&x, &cy, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&X, &Y, &W, &H, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(, , &bounceW, &bounceH, hwnd)
     try WinGetPos(, , &winW, &winH, hwnd)
     try WinGetPos(,, &rawW, &rawH, hwnd)
@@ -7729,8 +7752,8 @@ $!F4::GravityClose()
 , TS("osdAlpha"     , "osd"      , "alpha"       ,     86,    40,    100,     5, 0, "media"  , "OSD opacity"            , "%")
 , TS("osdHide"      , "osd"      , "hidems"      ,   1500,   500,  10000,   250, 0, "media"  , "OSD hold time"          , "ms on screen after the last change")
 , TS("osdStep"      , "osd"      , "volumestep"  ,      2,     1,     20,     1, 0, "media"  , "Volume step"            , "% per wheel notch")
-, TS("parallaxFrom" , "memory"   , "parallaxfrom",    120,     0,   2000,    10, 0, "win"    , "Drag fade starts at"    , "px/s of drag speed before it fades at all")
-, TS("parallaxFull" , "memory"   , "parallaxfull",   1000,   100,   6000,    50, 0, "win"    , "Drag fade full at"      , "px/s where the opacity floor is reached")
+, TS("parallaxFrom" , "memory"   , "parallaxfrom",     40,     0,   2000,    10, 0, "win"    , "Drag fade starts at"    , "px/s of drag speed before it fades at all")
+, TS("parallaxFull" , "memory"   , "parallaxfull",    600,   100,   6000,    50, 0, "win"    , "Drag fade full at"      , "px/s where the opacity floor is reached")
 , TS("parallaxMin"  , "memory"   , "parallaxmin" ,     24,    10,    100,     5, 0, "win"    , "Drag opacity floor"     , "% at full drag speed")
 , TS("shakeCount"   , "mouse"    , "shakecount"  ,      6,     3,     15,     1, 0, "multi"  , "Shake sensitivity"      , "direction changes to trigger")
 , TS("shakeSize"    , "mouse"    , "shakesize"   ,    150,    50,    400,    10, 0, "multi"  , "Shake highlight size"   , "px across")
@@ -7748,6 +7771,7 @@ $!F4::GravityClose()
 ]
 ^!v:: {
 ^g:: {
+}
 }
 }
 }
@@ -8341,12 +8365,13 @@ global CursorYawnIdleTime := 900000
 global CurtainDropEnabled := true
 global CurtainDropped := false
 global CurtainWindows := Map()
-global CustomClockBuiltFor := ""  ; theme + font the current Gui was built for
-global CustomClockEnabled := false
+global CustomClockBuiltFor := ""  ; theme, font and column widths the Gui was built for
+global CustomClockEnabled := true
 global CustomClockGui := 0
 global CustomClockRect := ""      ; last rect actually queued, so unchanged ticks cost nothing
 global CustomClockReq := 0        ; held so the async request is not collected mid-flight
-global CustomClockText := 0
+global CustomClockTempText := 0
+global CustomClockTimeText := 0
 global CustomClockWeather := ""
 global CustomTrans := Map()
 global DEBUG          := false
@@ -8379,8 +8404,6 @@ global FRAME_MS := 15
 global FrameOverbudget := 0   ; count of frames where produce > 12 ms
 global FrameProduceMs := 0
 global FrameRenderMs  := 0
-global GeoFor := "-"              ; the location string GeoLat/GeoLon were resolved for
-global GeoLat := "", GeoLon := ""
 global GhostHiddenWindows := Map()
 global GhostWindows := Map()
 global GLIDE_MAX     := 500
@@ -8591,7 +8614,6 @@ global VERSION := "1.0"
 global WeatherFailMs := 0                  ; current backoff, tripled per consecutive failure
 global WeatherNextMs := 900000             ; ms until the next attempt; set by the outcome
 global WeatherReqAt := 0
-global WeatherStage := ""         ; "geo" or "now" - which request is in flight
 global WeatherWarnedFor := "-"             ; last location we complained about, so it is said once
 global Win := "", Pages := Map(), NavItems := Map(), CurPage := ""
 global WinCurrentAlpha := Map()
@@ -8631,7 +8653,7 @@ IsFileDialog(hwnd) {
 IsMainApplicationWindow(hwnd) {
 IsMouseOverTaskbar() {
 IsRestorable(hwnd) {
-IsSnappable(hwnd) {
+IsSnappable(hwnd, allowMax := false) {
 IsSpotlightActive() {
 IsTaskbarDark() {
 IsTypingInExplorer() {
@@ -8707,6 +8729,7 @@ OnTypingSpark(ih, vk, sc) {
 OpenDoc(name) {
 OpenLog() {
 OpenStealthPanicSettings() {
+PaintCustomClock() {
 ParallaxAlpha(speed) {
 Persistent
 PiP_MouseEvents(wParam, lParam, msg, hwnd) {
