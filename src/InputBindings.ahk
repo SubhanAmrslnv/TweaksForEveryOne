@@ -47,8 +47,8 @@
 #HotIf ProximityGhostEnabled
 +!g::ToggleGhostMode()
 #HotIf
-+!WheelUp::ChangeTransparency(1)
-+!WheelDown::ChangeTransparency(-1)
+*+!WheelUp::ChangeTransparency(1)
+*+!WheelDown::ChangeTransparency(-1)
 
 #HotIf LivePipEnabled
 +!p::TogglePiP()

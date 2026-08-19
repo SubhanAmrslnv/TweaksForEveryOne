@@ -393,6 +393,7 @@ UpdateCustomClockImpl() {
         ; sitting on the taskbar.
         PaintCustomClock()
         CustomClockGui.Show("NA x" x " y" ty " w" boxW " h" th)
+        WinSetTransColor(bgColor, CustomClockGui.Hwnd)
     }
 
     ; A one-shot producer: nothing else flushes for it, so it commits itself.
