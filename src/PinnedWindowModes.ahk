@@ -146,7 +146,7 @@ TogglePiP() {
 
     cls := ""
     try cls := WinGetClass(srcHwnd)
-    if (cls = "" || cls = "WorkerW" || cls = "Progman" || cls = "Shell_TrayWnd")
+    if (!cls || IsShellSurface(srcHwnd, cls))
         return
 
     ; Shift+Alt+P while a PiP thumbnail itself is focused closes that thumbnail.
@@ -284,7 +284,7 @@ ToggleAlwaysOnBottom() {
 
     cls := ""
     try cls := WinGetClass(hwnd)
-    if (cls = "" || cls = "WorkerW" || cls = "Progman" || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd")
+    if (!cls || IsShellSurface(hwnd, cls))
         return
 
     if BottomWindows.Has(hwnd) {
@@ -386,7 +386,7 @@ ToggleGhostMode() {
 
     cls := ""
     try cls := WinGetClass(hwnd)
-    if (cls = "" || cls = "WorkerW" || cls = "Progman" || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd")
+    if (!cls || IsShellSurface(hwnd, cls))
         return
 
     if GhostWindows.Has(hwnd) {

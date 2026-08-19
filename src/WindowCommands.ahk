@@ -953,8 +953,7 @@ ToggleBossKey() {
             ; Shell_SecondaryTrayWnd is the taskbar on every non-primary monitor.
             ; Hiding it left those taskbars gone for good if this process died
             ; while Boss Key was active.
-            if (cls == "Progman" || cls == "WorkerW"
-                || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd")
+            if (!cls || IsShellSurface(hwnd, cls))
                 continue
 
             ; Our own overlays (active border, monitor dimmers, the OSDs, the

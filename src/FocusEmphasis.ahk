@@ -290,7 +290,7 @@ ActiveBorderMonitorStep() {
         return
     }
 
-    if (cls = "WorkerW" || cls = "Progman" || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd" || cls = "AutoHotkeyGUI") {
+    if (IsShellSurface(hwnd, cls) || cls = "AutoHotkeyGUI") {
         HideActiveBorder()
         return
     }

@@ -166,7 +166,6 @@
                 , "int", 0, "int", 0, "int", 0, "int", 0, "uint", entry.flags)
                 , "x" CLOCK_GAP " y" textY " w" (tempW - CLOCK_GAP)
                 . " h" (2 * lineH) " Center", "")
-                || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd")
                 }
                 }
                 }
@@ -946,6 +945,7 @@
             if !MC_IsMediaHwnd(hwnd)
             if !WinGetPosSafe(hwnd, &winX, &winY, &winW, &winH)
             if !WinLastActive.Has(hwnd)              ; closed since the snapshot
+            if (!cls || IsShellSurface(hwnd, cls))
             if (!conflict)
             if (!dragged && (Abs(dx) > threshold || Abs(dy) > threshold))
             if (!GhostWindows.Has(DragHwnd))
@@ -960,8 +960,6 @@
             if (ans != "") {
             if (bestY == "" || dy < bestDy)
             if (BreathingEnabled && IsRestorable(lParam) && !WinLastActive.Has(lParam)) {
-            if (cls == "Progman" || cls == "WorkerW"
-            if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd")
             if (ComCall(0, pCtl, "Ptr", MC_Iid(MC_IID_IAudioMeterInformation), "Ptr*", &pMeter, "Int") = 0 && pMeter) {
             if (ComCall(0, pCtl, "Ptr", MC_Iid(MC_IID_ISimpleAudioVolume), "Ptr*", &pVol, "Int") = 0 && pVol) {
             if (ComCall(3, pDev, "Ptr", iidMgr, "UInt", 23, "Ptr", 0, "Ptr*", &pMgr, "Int") = 0 && pMgr)
@@ -991,6 +989,7 @@
             if (hyst > 0 && d <= hyst)
             if (isEdge) {
             if (isMuted) {
+            if (IsShellSurface(hwnd, cls))
             if (iv >= 255)
             if (layer.currentAlpha < layer.targetAlpha)
             if (LS_Alpha <= 0) {
@@ -1370,6 +1369,7 @@
             return false
             return false
             return false
+            return false
             return Format("{:06X}", c & 0xFFFFFF)
             return h
             return i
@@ -1439,13 +1439,13 @@
             RS_SetPos(hwnd, x, y + shrink, w, h - shrink*2, RS_PRI_ANIM)
             RS_SetPos(hwnd, x, y, -1, -1, RS_PRI_USER)
             RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
-            RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
             RS_SetPos(hwnd, X, Y, W, H, RS_PRI_ANIM)
+            RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
             RS_SetRegion(ActiveBorderGui.Hwnd, rect1 "  " rect2 "  " rect3 "  " rect4, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "", RS_PRI_ANIM)
             RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
-            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "0-0 w" w " h" curH, RS_PRI_ANIM)
+            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
             RS_SetRegion(MicOsdGui.Hwnd, "0-0 w240 h70 r20-20", RS_PRI_ANIM)
             RS_SetRegion(OsdGui.Hwnd, "0-0 w280 h64 r20-20", RS_PRI_ANIM)
             Run(appStr)
@@ -1607,9 +1607,9 @@
             try WinGetPos(&cx, &cy, &cw, &ch, OsdGui.Hwnd)
             try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
             try WinGetPos(&wx, &wy, &ww, &wh, hwndToMin)
-            try WinGetPos(&x, &y, &w, &h, hwnd)
-            try WinGetPos(&x, &y, &w, &h, hwnd)
             try WinGetPos(&X, &Y, &W, &H, hwnd)
+            try WinGetPos(&x, &y, &w, &h, hwnd)
+            try WinGetPos(&x, &y, &w, &h, hwnd)
             try WinHide(hwnd)
             try WinMove(ElasticBaseX, ElasticBaseY,,, ElasticHwnd)
             try WinSetAlwaysOnTop(1, OsdGui.Hwnd)
@@ -1688,7 +1688,6 @@
         ? ["TrayNotifyWnd"]
         ? MC_Qualifies(state, peak, muted, MC_PEAK_EPS)
         || (MC_FallbackExe.Count && (MC_LiveSessionExe.Count || !MC_FALLBACK_NEEDS_SESSION)))
-        || cls == "Progman" || cls == "Shell_TrayWnd") {
         || GetKeyState("MButton", "P")) {
         || vk = 0xA0 || vk = 0xA1 || vk = 0xA2 || vk = 0xA3 || vk = 0xA4 || vk = 0xA5)
         }
@@ -2057,6 +2056,7 @@
         case 7: tx := wl,      ty := wt,      tw := hw, th := hh
         case 8: tx := wl,      ty := wt,      tw := aw, th := hh
         case 9: tx := wl + hw, ty := wt,      tw := rw, th := hh
+        catch
         catch
         catch
         catch
@@ -2526,6 +2526,7 @@
         if (!approachOk && prevAt && now > prevAt) {
         if (!BreatheCursorActive) {
         if (!ClockWarnedNoCity) {
+        if (!cls || IsShellSurface(hwnd, cls))
         if (!DllCall("IsWindow", "ptr", hwnd))
         if (!DllCall("IsWindow", "ptr", hwnd))
         if (!DllCall("IsWindow", "ptr", hwnd))
@@ -2567,7 +2568,6 @@
         if (BreathingEnabled && IsRestorable(hwnd)) {
         if (c != "")
         if (candidate != "")
-        if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd")
         if (cls == "TrayNotifyWnd") {
         if (cmdLine != "" && RegExMatch(cmdLine, cmdLineArgs))
         if (ComCall(0, pCtl, "Ptr", MC_Iid(MC_IID_IAudioSessionControl2), "Ptr*", &pCtl2, "Int") != 0 || !pCtl2)
@@ -2891,8 +2891,8 @@
         Loop count {
         Loop count {
         loop gridY {
-        Loop MonitorGetCount() {
         loop MonitorGetCount() {
+        Loop MonitorGetCount() {
         loop nDev {
         Loop Reg, "HKLM\SOFTWARE\WOW6432Node\Microsoft\VisualStudio\SxS\VS7", "V" {
         lp := ((sY & 0xFFFF) << 16) | (sX & 0xFFFF)
@@ -3967,6 +3967,7 @@
         try CleanShatter(animKey)
         try ClosePiP(src)
         try cls := WinGetClass(ahwnd)
+        try cls := WinGetClass(hwnd)
         try cls := WinGetClass(hwnd)
         try CustomClockGui.Destroy()
         try CustomClockTempText.Value := info
@@ -5837,6 +5838,10 @@
     if (!CarouselActive)
     if (!CarouselActive)
     if (!ClockWeatherEnabled) {
+    if (!cls || IsShellSurface(hwnd, cls) || cls == "AutoHotkeyGUI") {
+    if (!cls || IsShellSurface(hwnd, cls))
+    if (!cls || IsShellSurface(hwnd, cls))
+    if (!cls || IsShellSurface(srcHwnd, cls))
     if (!ContextMenuAnimEnabled || !hwnd || idObject != 0 || idChild != 0)
     if (!CustomClockGui) {
     if (!DllCall("IsWindow", "ptr", ElasticHwnd) || DragHwnd == ElasticHwnd) {
@@ -5959,11 +5964,7 @@
     if (cls != "#32768")
     if (cls != "#32770")
     if (cls ~= skip)
-    if (cls = "" || cls = "WorkerW" || cls = "Progman" || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd")
-    if (cls = "" || cls = "WorkerW" || cls = "Progman" || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd")
-    if (cls = "" || cls = "WorkerW" || cls = "Progman" || cls = "Shell_TrayWnd")
-    if (cls = "WorkerW" || cls = "Progman" || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd" || cls = "AutoHotkeyGUI") {
-    if (cls == "" || cls == "AutoHotkeyGUI" || cls == "WorkerW"
+    if (cls == "")
     if (code = 0)
     if (code = 1 || code = 2)
     if (code >= 95)
@@ -6043,6 +6044,7 @@
     if (IsObject(restoredRect) && restoredRect.HasOwnProp("w")) {
     if (IsSet(LivePipEnabled) && !LivePipEnabled && IsSet(PipGuis)) {
     if (IsSet(ProximityGhostEnabled) && !ProximityGhostEnabled && IsSet(GhostWindows)) {
+    if (IsShellSurface(hwnd, cls) || cls = "AutoHotkeyGUI") {
     if (isVisible && !StartMenuBlurGui) {
     if (key = "")
     if (key = "")
@@ -6579,8 +6581,8 @@
     NumPut("Int", 0, props, 8)
     NumPut("int", 0, props, 8)
     NumPut("int", 0x88222222, accent, 8)
-    NumPut("Int", 1, props, 40)
     NumPut("int", 1, props, 40)
+    NumPut("Int", 1, props, 40)
     NumPut("Int", 1, props, 44)
     NumPut("int", 16, data, A_PtrSize + A_PtrSize)
     NumPut("int", 19, data, 0)
@@ -6870,6 +6872,7 @@
     return "🔊"
     return (Abs(cx - orig.px) <= 2 && Abs(cy - orig.py) <= 2
     return (caption < 30) ? 35 : caption
+    return (cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd" || cls == "Progman" || cls == "WorkerW")
     return (cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd")
     return (now - lastAt) >= holdMs
     return (peak > eps) || (muted = 1)
@@ -6879,10 +6882,10 @@
     return (v = 0)
     return (v >= 256) ? 255 : v
     return {alpha: Round(255 - f * (255 - TuneAlpha("parallaxMin"))), fade: f}
-    return 0
-    return 0
-    return 0
     Return 0
+    return 0
+    return 0
+    return 0
     return 1
     return 1
     return 1
@@ -8304,6 +8307,7 @@ $!F4::GravityClose()
 }
 }
 }
+}
 ~Delete:: {
 ~Esc:: {
 ~Esc::CloseCarousel(false)
@@ -8805,6 +8809,7 @@ IsFileDialog(hwnd) {
 IsMainApplicationWindow(hwnd) {
 IsMouseOverTaskbar() {
 IsRestorable(hwnd) {
+IsShellSurface(hwnd, cls := "") {
 IsSnappable(hwnd, allowMax := false) {
 IsSpotlightActive() {
 IsTaskbarDark() {

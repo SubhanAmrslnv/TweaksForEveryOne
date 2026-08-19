@@ -204,6 +204,14 @@ ClassifyWindowImpl(hwnd) {
     return "Main"
 }
 
+IsShellSurface(hwnd, cls := "") {
+    if (cls == "")
+        try cls := WinGetClass(hwnd)
+        catch
+            return false
+    return (cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd" || cls == "Progman" || cls == "WorkerW")
+}
+
 ; Pending position writes, keyed by window key. Same shape as SaveSettings ->
 ; WriteSettings, and for exactly the same measured reason: one IniWrite costs
 ; ~771 us, this wrote FOUR of them, and it runs at the end of every drag and

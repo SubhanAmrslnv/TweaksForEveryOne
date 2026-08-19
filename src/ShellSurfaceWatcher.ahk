@@ -74,7 +74,7 @@ SmartTaskbarMonitorStep() {
                 continue
                 
             cls := WinGetClass(hwnd)
-            if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd")
+            if (IsShellSurface(hwnd, cls))
                 continue
                 
             if (WinGetExStyle(hwnd) & 0x80) ; WS_EX_TOOLWINDOW

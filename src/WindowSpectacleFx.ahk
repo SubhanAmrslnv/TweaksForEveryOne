@@ -43,8 +43,7 @@ GravityClose() {
 
     cls := ""
     try cls := WinGetClass(hwnd)
-    if (cls == "" || cls == "AutoHotkeyGUI" || cls == "WorkerW"
-        || cls == "Progman" || cls == "Shell_TrayWnd") {
+    if (!cls || IsShellSurface(hwnd, cls) || cls == "AutoHotkeyGUI") {
         Send("!{F4}")
         return
     }
