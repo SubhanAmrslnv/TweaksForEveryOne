@@ -52,10 +52,18 @@
 #Include InputBindings.ahk
 
 ; ----- Features -----
-#Include WindowCommands.ahk
+#Include CmdWindowGeometry.ahk
+#Include CmdTransparency.ahk
+#Include CmdRestoreAll.ahk
+#Include CmdRollUp.ahk
+#Include CmdAltDrag.ahk
+#Include CmdTrayMinimize.ahk
 #Include DragPipeline.ahk
 #Include DropPlacement.ahk
-#Include WindowLifecycle.ahk
+#Include WindowClassification.ahk
+#Include PositionMemory.ahk
+#Include ShellHook.ahk
+#Include WindowOpenAnim.ahk
 #Include AmbientDimming.ahk
 #Include ScreenEdgeGestures.ahk
 #Include AudioOsd.ahk
@@ -65,7 +73,11 @@
 #Include MouseGestureFx.ahk
 #Include ShellSurfaceWatcher.ahk
 #Include TaskbarClock.ahk
-#Include WindowSpectacleFx.ahk
+#Include FxGravity.ahk
+#Include FxCurtain.ahk
+#Include FxCarousel.ahk
+#Include FxBlackHole.ahk
+#Include FxShatter.ahk
 
 ; ----- Bolt-on: also runs standalone, so it keeps its own config and GUI -----
 #Include StealthPanic.ahk

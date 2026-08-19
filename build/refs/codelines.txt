@@ -1422,14 +1422,14 @@
             RS_SetPos(hwnd, x, destY, -1, -1, RS_PRI_USER)
             RS_SetPos(hwnd, x, y + shrink, w, h - shrink*2, RS_PRI_ANIM)
             RS_SetPos(hwnd, x, y, -1, -1, RS_PRI_USER)
-            RS_SetPos(hwnd, X, Y, W, H, RS_PRI_ANIM)
             RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
+            RS_SetPos(hwnd, X, Y, W, H, RS_PRI_ANIM)
             RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
             RS_SetRegion(ActiveBorderGui.Hwnd, rect1 "  " rect2 "  " rect3 "  " rect4, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "", RS_PRI_ANIM)
+            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
+            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "0-0 w" w " h" curH, RS_PRI_ANIM)
-            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
-            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
             RS_SetRegion(MicOsdGui.Hwnd, "0-0 w240 h70 r20-20", RS_PRI_ANIM)
             RS_SetRegion(OsdGui.Hwnd, "0-0 w280 h64 r20-20", RS_PRI_ANIM)
             RS_UpdateDwmThumbnail(s.thumb, [0, 0, Round(curW), Round(curH)], [Round(s.srcX), Round(s.srcY), s.w, s.h], alpha, true, true)
@@ -1592,8 +1592,8 @@
             try WinGetPos(&cx, &cy, &cw, &ch, OsdGui.Hwnd)
             try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
             try WinGetPos(&wx, &wy, &ww, &wh, hwndToMin)
-            try WinGetPos(&X, &Y, &W, &H, hwnd)
             try WinGetPos(&x, &y, &w, &h, hwnd)
+            try WinGetPos(&X, &Y, &W, &H, hwnd)
             try WinGetPos(&x, &y, &w, &h, hwnd)
             try WinHide(hwnd)
             try WinMove(ElasticBaseX, ElasticBaseY,,, ElasticHwnd)
@@ -6860,8 +6860,8 @@
     return {alpha: Round(255 - f * (255 - TuneAlpha("parallaxMin"))), fade: f}
     return 0
     return 0
-    Return 0
     return 0
+    Return 0
     return 1
     return 1
     return 1
@@ -7592,9 +7592,9 @@
     try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
     try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
     try WinGetPos(&x, &cy, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&X, &Y, &W, &H, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
