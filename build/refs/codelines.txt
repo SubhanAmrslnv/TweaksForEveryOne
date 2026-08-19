@@ -1422,8 +1422,8 @@
             RS_SetPos(hwnd, x, destY, -1, -1, RS_PRI_USER)
             RS_SetPos(hwnd, x, y + shrink, w, h - shrink*2, RS_PRI_ANIM)
             RS_SetPos(hwnd, x, y, -1, -1, RS_PRI_USER)
-            RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
             RS_SetPos(hwnd, X, Y, W, H, RS_PRI_ANIM)
+            RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
             RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
             RS_SetRegion(ActiveBorderGui.Hwnd, rect1 "  " rect2 "  " rect3 "  " rect4, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "", RS_PRI_ANIM)
@@ -1592,8 +1592,8 @@
             try WinGetPos(&cx, &cy, &cw, &ch, OsdGui.Hwnd)
             try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
             try WinGetPos(&wx, &wy, &ww, &wh, hwndToMin)
-            try WinGetPos(&x, &y, &w, &h, hwnd)
             try WinGetPos(&X, &Y, &W, &H, hwnd)
+            try WinGetPos(&x, &y, &w, &h, hwnd)
             try WinGetPos(&x, &y, &w, &h, hwnd)
             try WinHide(hwnd)
             try WinMove(ElasticBaseX, ElasticBaseY,,, ElasticHwnd)
@@ -1675,6 +1675,7 @@
         || (MC_FallbackExe.Count && (MC_LiveSessionExe.Count || !MC_FALLBACK_NEEDS_SESSION)))
         || GetKeyState("MButton", "P")) {
         || vk = 0xA0 || vk = 0xA1 || vk = 0xA2 || vk = 0xA3 || vk = 0xA4 || vk = 0xA5)
+        }
         }
         }
         }
@@ -2450,6 +2451,7 @@
         hwnd := 0
         hwnd := 0
         hwnd := CarouselWindows[CarouselIndex]
+        hwnd := DragHwnd
         hwnd := lParam
         hwnd := WinExist("A")
         hwnd := WinExist("A")
@@ -2776,7 +2778,7 @@
         if DllCall("IsWindowVisible", "ptr", hwnd) {
         if DllCall("MoveFileExW", "wstr", tmpPath, "wstr", targetPath
         if DllCall("QueryFullProcessImageNameW", "ptr", hProc, "uint", 0,
-        if DllCall("SystemParametersInfoW", "uint", 0x26, "uint", 0, "ptr", buf, "uint", 0)
+        if DllCall("SystemParametersInfoW", "uint", 0x26, "uint", 0, "ptr", buf, "uint", 0) {
         if FileExist(appPath) {
         if FileExist(appPath) {
         if FileExist(cached) {
@@ -2880,8 +2882,8 @@
         Loop count {
         Loop count {
         loop gridY {
-        loop MonitorGetCount() {
         Loop MonitorGetCount() {
+        loop MonitorGetCount() {
         loop nDev {
         Loop Reg, "HKLM\SOFTWARE\WOW6432Node\Microsoft\VisualStudio\SxS\VS7", "V" {
         lp := ((sY & 0xFFFF) << 16) | (sX & 0xFFFF)
@@ -2987,6 +2989,7 @@
         notify := DllCall("FindWindowExW", "ptr", tbHwnd, "ptr", 0
         Notify("Cannot pin this window to the desktop")
         Notify("Could not open Stealth Panic settings")
+        Notify("Enabled 'Show window contents while dragging' (Parallax / Glide)")
         Notify("Failed to set Always on top (Access Denied)")
         Notify("Focus Mode OFF")
         Notify("Focus Mode ON")
@@ -3175,6 +3178,7 @@
         RestoreFromBottom(hwnd)
         RestoreFromTray(hwnd)
         RestoreStealthPanic()
+        return
         return
         return
         return
@@ -3958,6 +3962,7 @@
         try CustomClockTimeText.Value := FormatTime(, "HH:mm") "`n" FormatTime(, "dd.MM.yyyy")
         try DirCreate(dirOnly)
         try DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", thumbId)
+        try DllCall("SystemParametersInfoW", "uint", 0x25, "uint", 1, "uint", 0, "uint", 3)
         try DllCall("UnhookWinEvent", "ptr", MenuEventHook)
         try DllCall("UnhookWinEvent", "ptr", WinEventHook)
         try epCur := RegRead(EP_KEY, "OldTaskbar", 0)
@@ -4139,6 +4144,7 @@
     , step: step, dec: dec, page: page, label: label, hint: hint}
     {
     {key: key, sec: sec, ini: ini, def: def, lo: lo, hi: hi
+    }
     }
     }
     }
@@ -5317,7 +5323,7 @@
     global CustomClockTimeText, CustomClockTempText, CustomClockWeather, CustomClockWind
     global CustomClockWeather, ClockLocation, WeatherWarnedFor
     global CustomClockWeather, LastWeatherFetch, WeatherNextMs, ClockWeatherEnabled, ClockAnchor
-    global CustomTrans, PendingTransMsg
+    global CustomTrans, PendingTransMsg, DragHwnd
     global CustomTrans, WinCurrentAlpha, WinTargetAlpha
     global DEBUG, LogBuf, LOG_FLUSH_BYTES
     global DragHwnd
@@ -5760,10 +5766,10 @@
     if !hwnd || !IsRestorable(hwnd)
     if !hwnd || !IsRestorable(hwnd)
     if !hwnd || !IsRestorable(hwnd)
-    if !hwnd || !IsRestorable(hwnd)
     if !hwnd || !LayoutUndo.Has(hwnd) {
     if !hwnd || !RS_AlphaState.Has(hwnd)
     if !hwnd || !RS_AlphaState.Has(hwnd)
+    if !hwnd || (!IsRestorable(hwnd) && hwnd != (IsSet(DragHwnd) ? DragHwnd : 0))
     if !info
     if !InitShakeFind()
     if !isHidden
@@ -5870,6 +5876,7 @@
     if (!MC_LivePid.Count && !MC_LiveExe.Count && !MC_FallbackExe.Count)
     if (!MicOsdGui)
     if (!MultiMonitorDimmerEnabled)
+    if (!on) {
     if (!OsdGui)
     if (!ParallaxEnabled && !GlideEnabled)
     if (!path || !FileExist(path) || InStr(FileExist(path), "D"))
@@ -6036,6 +6043,7 @@
     if (IsObject(restoredRect) && restoredRect.HasOwnProp("w")) {
     if (IsObject(restoredRect) && restoredRect.HasOwnProp("w")) {
     if (IsObject(restoredRect) && restoredRect.HasOwnProp("w")) {
+    if (IsSet(DragHwnd) && DragHwnd)
     if (IsSet(LivePipEnabled) && !LivePipEnabled && IsSet(PipGuis)) {
     if (IsSet(ProximityGhostEnabled) && !ProximityGhostEnabled && IsSet(GhostWindows)) {
     if (IsShellSurface(hwnd, cls) || cls = "AutoHotkeyGUI") {
@@ -6860,8 +6868,8 @@
     return {alpha: Round(255 - f * (255 - TuneAlpha("parallaxMin"))), fade: f}
     return 0
     return 0
-    return 0
     Return 0
+    return 0
     return 1
     return 1
     return 1
@@ -7592,8 +7600,8 @@
     try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
     try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
     try WinGetPos(&x, &cy, &w, &h, hwnd)
-    try WinGetPos(&X, &Y, &W, &H, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&X, &Y, &W, &H, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)

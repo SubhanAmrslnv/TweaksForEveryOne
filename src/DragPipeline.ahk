@@ -225,8 +225,14 @@ CheckDragFullWindows() {
     on := 1
     try {
         buf := Buffer(4, 0)
-        if DllCall("SystemParametersInfoW", "uint", 0x26, "uint", 0, "ptr", buf, "uint", 0)
+        if DllCall("SystemParametersInfoW", "uint", 0x26, "uint", 0, "ptr", buf, "uint", 0) {
             on := NumGet(buf, 0, "int")
+        }
+    }
+    if (!on) {
+        Notify("Enabled 'Show window contents while dragging' (Parallax / Glide)")
+        try DllCall("SystemParametersInfoW", "uint", 0x25, "uint", 1, "uint", 0, "uint", 3)
+        return
     }
     if (on)
         return

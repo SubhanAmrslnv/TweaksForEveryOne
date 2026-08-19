@@ -1,9 +1,11 @@
 global CustomTrans := Map()
 
 ChangeTransparency(dir) {
-    global CustomTrans, PendingTransMsg
+    global CustomTrans, PendingTransMsg, DragHwnd
     hwnd := WinExist("A")
-    if !hwnd || !IsRestorable(hwnd)
+    if (IsSet(DragHwnd) && DragHwnd)
+        hwnd := DragHwnd
+    if !hwnd || (!IsRestorable(hwnd) && hwnd != (IsSet(DragHwnd) ? DragHwnd : 0))
         return
 
     current := CustomTrans.Has(hwnd) ? CustomTrans[hwnd] : 255
