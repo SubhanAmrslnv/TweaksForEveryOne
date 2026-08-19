@@ -264,8 +264,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build\Build-Installer.ps1 
 
 **One AutoHotkey v2 process** for everything except the Stealth Panic settings GUI (below). `src\WindowTweaks.ahk` is the sole entry point; the `#Include` lines at the top pull the rest in at load time. `#SingleInstance Force` is the only cross-instance coordination.
 
-**32 modules, flat in `src\`.** The largest is 979 lines; nothing else is close
-to the ~1000-line review threshold.
+**44 modules, flat in `src\`.** The largest is 939 lines (`SettingsWindow.ahk`);
+nothing else is close to the ~1000-line review threshold.
+
+Phase 12 (`de0525d`) split the last three grab-bags, so three names that older
+notes still reference no longer exist: `WindowCommands.ahk` became the six
+`Cmd*.ahk` files, `WindowLifecycle.ahk` became `WindowClassification.ahk` /
+`PositionMemory.ahk` / `WindowOpenAnim.ahk` / `ShellHook.ahk`, and
+`WindowSpectacleFx.ahk` became the five `Fx*.ahk` files.
 
 *Entry and process lifecycle*
 
@@ -311,10 +317,18 @@ to the ~1000-line review threshold.
 
 | File | Role |
 |---|---|
-| `src\WindowCommands.ahk` | What a keystroke does to the active window: place, tile, cycle, opacity, roll-up, tray-hide, boss key |
+| `src\CmdWindowGeometry.ahk` | Place, tile, cycle size, next monitor, undo, maximize. Owns `ApplyLayout()` |
+| `src\CmdTransparency.ahk` | The opacity wheel, reset, and the `CustomTrans` registry |
+| `src\CmdAltDrag.ahk` | `Alt+LButton` move and `Alt+RButton` resize |
+| `src\CmdRollUp.ahk` | Window shade / roll-up |
+| `src\CmdTrayMinimize.ahk` | Minimize to tray, and the boss key |
+| `src\CmdRestoreAll.ahk` | `Shift+Alt+Y` — the recovery path for state the user cannot see |
 | `src\DragPipeline.ahk` | MOVESIZE/menu hooks, velocity sampling, drag end, magnetic groups |
 | `src\DropPlacement.ahk` | Where a released window lands: snap, verify, glide, bounce, throw, seam flash, tiling grid |
-| `src\WindowLifecycle.ahk` | Classify / remember / restore / animate-in a window. Owns the shell hook |
+| `src\WindowClassification.ahk` | Is this a main application window? The WMI-backed classifier |
+| `src\PositionMemory.ahk` | Remember and restore per-app size/position; the buffered `window-positions.ini` writer |
+| `src\WindowOpenAnim.ahk` | Animate a brand-new window in: unroll, ghost slide-in, portal scale-in |
+| `src\ShellHook.ahk` | `RegisterShellHookWindow` + `ShellEvent`; re-registers on `TaskbarCreated` |
 | `src\AmbientDimming.ahk` | Breathing windows, monitor dimmer, and the MediaCore bridge that suspends them |
 | `src\ScreenEdgeGestures.ahk` | Hot corners and infinite cursor wrap |
 | `src\AudioOsd.ahk` | Volume and microphone OSDs and their input |
@@ -324,7 +338,11 @@ to the ~1000-line review threshold.
 | `src\MouseGestureFx.ahk` | Pointer-motion / idle / wheel driven: shake-find, yawn, ripples, drag trail, spark typing, motion blur |
 | `src\ShellSurfaceWatcher.ahk` | The one poll over shell surfaces: auto-hide, taskbar wave, lightsaber, Start blur, toasts |
 | `src\TaskbarClock.ahk` | The custom taskbar clock, and the only network egress in the program |
-| `src\WindowSpectacleFx.ahk` | One-shot desktop takeovers: gravity close, curtain drop, carousel Alt-Tab, black hole, shatter |
+| `src\FxGravity.ahk` | Gravity-drop close (`Alt+F4`) |
+| `src\FxShatter.ahk` | Shatter to close (`Shift+Alt+F4`) |
+| `src\FxCurtain.ahk` | Curtain drop on `Win+D`, and `RestoreCurtain()` |
+| `src\FxCarousel.ahk` | 3D carousel Alt-Tab |
+| `src\FxBlackHole.ahk` | Black-hole minimize and delete |
 
 *Stealth Panic — a bolt-on that also runs standalone*
 
@@ -795,7 +813,7 @@ When adding new features or modifying the code, AI agents must strictly adhere t
 - Windows 11, developed and tested on 25H2 build 26200. All taskbar findings are build-specific; `docs\TASKBAR-AND-INTERNALS.md` documents four dead ends (`TaskbarSi`, `TaskbarSmallIcons`, two feature flags) so nobody retries them.
 - Hotkeys are inert against elevated windows unless the app itself is elevated.
 - **Windows' own Snap Assist wins at screen edges, by design** — the app skips windows Windows has maximised. Judge snapping by **window-to-window** magnetism, not screen edges.
-- `DragFullWindows=1` is a hard functional dependency, not cosmetic: with it off Windows drags a hollow outline and the glide is invisible.
+- `DragFullWindows=1` is a hard functional dependency, not cosmetic: with it off Windows drags a hollow outline, the window rect does not move until release, so `SampleVelocityStep` measures zero on every frame and drag parallax, the ice glide and velocity-based snapping all silently do nothing. **`CheckDragFullWindows()` now enables it at boot** rather than only warning — a persisted, system-wide `SPI_SETDRAGFULLWINDOWS` with `SPIF_UPDATEINIFILE | SPIF_SENDCHANGE`, logged and notified, re-read afterwards to confirm it took, and deliberately **not** reverted by `Bye()`. It only runs when parallax or glide is on.
 - **Title-bar drags cannot be automated.** Injected clicks don't engage the window's move loop.
 
 ## Docs

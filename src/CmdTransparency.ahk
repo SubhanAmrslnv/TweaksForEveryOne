@@ -1,12 +1,29 @@
 global CustomTrans := Map()
 
+; The wheel targets the window being dragged if there is one, and the active
+; window otherwise.
+;
+; Two separate reasons for the drag branch, and both need it to skip IsRestorable
+; rather than merely tolerate it. Windows' modal move loop can leave WinExist("A")
+; pointing somewhere else for the duration of the drag, so the active window is
+; not reliably the one under the hand; and IsRestorable goes through IsSnappable,
+; which rejects a window mid-move. DragHwnd is the window MOVESIZESTART accepted,
+; so it has already passed that same predicate - re-testing it here could only
+; ever produce a false negative.
+;
+; It used to read `!IsRestorable(hwnd) && hwnd != DragHwnd`, which is unreachable:
+; hwnd had just been assigned DragHwnd on the line above, so the guard was dropped
+; entirely rather than deliberately skipped. DragHwnd is a super-global
+; initialised in DragPipeline.ahk, so the IsSet() around it was dead too.
 ChangeTransparency(dir) {
     global CustomTrans, PendingTransMsg, DragHwnd
-    hwnd := WinExist("A")
-    if (IsSet(DragHwnd) && DragHwnd)
+    if (DragHwnd && DllCall("IsWindow", "ptr", DragHwnd)) {
         hwnd := DragHwnd
-    if !hwnd || (!IsRestorable(hwnd) && hwnd != (IsSet(DragHwnd) ? DragHwnd : 0))
-        return
+    } else {
+        hwnd := WinExist("A")
+        if (!hwnd || !IsRestorable(hwnd))
+            return
+    }
 
     current := CustomTrans.Has(hwnd) ? CustomTrans[hwnd] : 255
 

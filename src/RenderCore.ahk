@@ -70,10 +70,24 @@ global RS_LastRegion := Map()   ; hwnd -> last region string written
 ; PERSISTENT, unlike the four pending Maps above. One record per FOREIGN window
 ; that something is currently dimming:
 ;
-;   base    the user's explicit opacity, 0-255. Only the user sets this.
-;   layers  named multiplicative modifiers, each 0.0 - 1.0.
+;   baseAlpha  the user's explicit opacity, 0-255. Only the user sets this.
+;   layers     named multiplicative modifiers, each 0.0 - 1.0.
 ;
-; final = base * product(layers).
+; final = baseAlpha * product(layers).
+;
+; THE FIELD CANNOT BE CALLED `base`. In AHK v2 `base` is the prototype slot on
+; every object, and an object literal honours it: `{base: 255, layers: Map()}`
+; does not create a field, it tries to set the object's prototype to the integer
+; 255 and throws `Error: Invalid base.` (verified on 2.0.26 in this repo).
+;
+; That threw on the ONE line that creates a record, so it fired the first time
+; anything dimmed a given window - which is every window - and took the whole
+; composed-alpha system with it: drag parallax, breathing, the proximity ghost,
+; focus depth, the open animations, gravity close and the user's own
+; Shift+Alt+Wheel all silently did nothing. It was invisible because the throw
+; happened inside an animation callback, where the scheduler's bare `catch`
+; retired the animation without a word (see AnimationScheduler.ahk) - the whole
+; feature set was dead with an empty log and a clean parse.
 ;
 ; Clearing one layer therefore cannot destroy the base or any other layer, and
 ; that is the entire point. Before this existed every producer wrote an ABSOLUTE,
@@ -83,11 +97,11 @@ global RS_LastRegion := Map()   ; hwnd -> last region string written
 ; Breathing had already grown two hand-written compositions to work around it.
 ;
 ; Bounded the same way the pending Maps are, just keyed on a different event: a
-; record is DELETED the moment it goes neutral (base 255, no layers), so this
+; record is DELETED the moment it goes neutral (baseAlpha 255, no layers), so this
 ; only ever holds windows that are currently non-default. RS_RemoveHwnd drops a
 ; record when a window dies and RS_SweepDead is the backstop, exactly as for
 ; RS_LastAlpha - without both, a recycled HWND inherits a stranger's opacity.
-global RS_AlphaState := Map()   ; hwnd -> {base, layers}
+global RS_AlphaState := Map()   ; hwnd -> {baseAlpha, layers}
 
 ; ----- stats ------------------------------------------------------------------
 global RS_FlushCount   := 0     ; total flushes
@@ -234,13 +248,13 @@ RS_SetBaseAlpha(hwnd, alpha, pri := 40) {
         numAlpha := 0
     if RS_AlphaState.Has(hwnd) {
         rec := RS_AlphaState[hwnd]
-        if (rec.base == numAlpha)
+        if (rec.baseAlpha == numAlpha)
             return
-        rec.base := numAlpha
+        rec.baseAlpha := numAlpha
     } else {
         if (numAlpha >= 255)
             return                     ; neutral, and no record to make neutral
-        RS_AlphaState[hwnd] := {base: numAlpha, layers: Map()}
+        RS_AlphaState[hwnd] := {baseAlpha: numAlpha, layers: Map()}
     }
     RS_RecomposeAlpha(hwnd, pri)
     RS_PruneAlphaState(hwnd)
@@ -249,7 +263,7 @@ RS_SetBaseAlpha(hwnd, alpha, pri := 40) {
 ; Read the user's opacity back. 255 means "none set".
 RS_BaseAlpha(hwnd) {
     global RS_AlphaState
-    return RS_AlphaState.Has(hwnd) ? RS_AlphaState[hwnd].base : 255
+    return RS_AlphaState.Has(hwnd) ? RS_AlphaState[hwnd].baseAlpha : 255
 }
 
 ; Install or update one named modifier.
@@ -274,7 +288,7 @@ RS_SetAlphaLayer(hwnd, name, factor, pri := 20) {
         if (rec.layers.Has(name) && rec.layers[name] == factor)
             return
     } else {
-        rec := {base: 255, layers: Map()}
+        rec := {baseAlpha: 255, layers: Map()}
         RS_AlphaState[hwnd] := rec
     }
     rec.layers[name] := factor
@@ -323,7 +337,7 @@ RS_ResetAllAlphaState(pri := 40) {
 ; A record is neutral when nothing is dimming the window: full base, no layers.
 ; This is a STRUCTURAL test, not a numeric one, and that distinction is
 ; load-bearing - see the note in RS_RecomposeAlpha.
-RS_IsNeutralAlpha(rec) => (rec.base >= 255 && rec.layers.Count == 0)
+RS_IsNeutralAlpha(rec) => (rec.baseAlpha >= 255 && rec.layers.Count == 0)
 
 RS_PruneAlphaState(hwnd) {
     global RS_AlphaState
@@ -358,7 +372,7 @@ RS_RecomposeAlpha(hwnd, pri) {
     if RS_IsNeutralAlpha(rec) {
         iv := 256
     } else {
-        v := rec.base + 0.0
+        v := rec.baseAlpha + 0.0
         for name, f in rec.layers
             v *= f
         iv := Integer(v + 0.5)

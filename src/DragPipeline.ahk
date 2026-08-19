@@ -212,6 +212,20 @@ ParallaxAlpha(speed) {
     return {alpha: Round(255 - f * (255 - TuneAlpha("parallaxMin"))), fade: f}
 }
 
+; SPI_GETDRAGFULLWINDOWS. Defaults to "on" when the query itself fails: assuming
+; the dependency is met is the harmless guess, because the only cost of being
+; wrong is that the effects do nothing, whereas assuming it is off would flip a
+; system-wide setting on the strength of a failed read.
+ReadDragFullWindows() {
+    on := 1
+    try {
+        buf := Buffer(4, 0)
+        if DllCall("SystemParametersInfoW", "uint", 0x26, "uint", 0, "ptr", buf, "uint", 0)
+            on := NumGet(buf, 0, "int")
+    }
+    return on
+}
+
 ; DragFullWindows is a hard functional dependency of every drag-driven effect, and
 ; the failure is completely silent: with it off Windows drags a hollow outline, so
 ; the window rect does not move until release, SampleVelocityStep measures zero
@@ -222,21 +236,26 @@ CheckDragFullWindows() {
     global ParallaxEnabled, GlideEnabled
     if (!ParallaxEnabled && !GlideEnabled)
         return
-    on := 1
-    try {
-        buf := Buffer(4, 0)
-        if DllCall("SystemParametersInfoW", "uint", 0x26, "uint", 0, "ptr", buf, "uint", 0) {
-            on := NumGet(buf, 0, "int")
-        }
-    }
-    if (!on) {
+    if ReadDragFullWindows()
+        return
+
+    ; Turn it on rather than only complaining about it. SPIF_UPDATEINIFILE |
+    ; SPIF_SENDCHANGE (3) persists the change and broadcasts WM_SETTINGCHANGE, so
+    ; this is a real, system-wide edit to the user's machine and not a local
+    ; override - hence the log line and the notification. Bye() deliberately does
+    ; NOT put it back: the setting is a Windows default, the user is far more
+    ; likely to have hit it by accident than to want outline dragging, and
+    ; silently reverting it at exit would make the fix look intermittent.
+    try DllCall("SystemParametersInfoW", "uint", 0x25, "uint", 1, "ptr", 0, "uint", 3)
+
+    ; Confirm rather than assume. Group policy and some remote-desktop sessions
+    ; refuse this, and the old code reported success either way.
+    if ReadDragFullWindows() {
+        WriteLog("DragFullWindows was off - enabled it so drag transparency and ice glide can work")
         Notify("Enabled 'Show window contents while dragging' (Parallax / Glide)")
-        try DllCall("SystemParametersInfoW", "uint", 0x25, "uint", 1, "uint", 0, "uint", 3)
         return
     }
-    if (on)
-        return
-    WriteLog("DragFullWindows is off - drag transparency and ice glide cannot work")
+    WriteLog("DragFullWindows is off and could not be enabled - drag transparency and ice glide cannot work")
     Notify("Windows is dragging window outlines only.`nTurn on Show window contents while dragging, or the drag effects do nothing.")
 }
 

@@ -10,9 +10,19 @@ AltDragMove() {
     if !hwnd || !IsRestorable(hwnd)
         return
 
-    ; Geometry only. See the MOVESIZESTART hook for why the region animation is
-    ; left alone despite the old list naming Unroll_.
+    ; Geometry AND alpha, exactly as the MOVESIZESTART hook does. See that hook
+    ; for why the region animation is left alone despite the old list naming
+    ; Unroll_.
+    ;
+    ; The alpha release is not optional. Releasing a title-bar drag starts a 190 ms
+    ; FadeBack_<hwnd> on the "alpha" channel, and grabbing the same window with
+    ; Alt+LButton inside that window left the fade running: two owners writing the
+    ; "drag" layer at the same RS_PRI_DRAG, which is the one-owner-per-layer rule
+    ; in RenderCore.ahk's header broken inside a single layer. The fade won the
+    ; frames it produced last and then ended with RS_ClearAlphaLayer, wiping the
+    ; alt-drag's own fade mid-drag.
     Anim_Release(hwnd, "geom")
+    Anim_Release(hwnd, "alpha")
 
     try {
         if WinGetMinMax(hwnd) != 0

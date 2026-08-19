@@ -109,6 +109,12 @@ RenderFrame() {
     global ActiveAnimations, SchedulerLastTime, FRAME_MS
     global FrameProduceMs, FrameRenderMs, FrameOverbudget
 
+    ; Last time each animation key was reported as throwing. Bounded rather than
+    ; pruned: keys are per-HWND ("Glide_12345"), so an unbounded Map would grow
+    ; for the whole session. It only ever gains an entry when a callback actually
+    ; throws, so in a healthy process it stays empty and the cap never fires.
+    static lastThrow := Map()
+
     now := QPC()
     ; dt is real elapsed milliseconds since the last frame, clamped.
     ;
@@ -151,10 +157,34 @@ RenderFrame() {
             if !ActiveAnimations.Has(key)          ; cancelled since the snapshot
                 continue
             anim := ActiveAnimations[key]
+            ; Swallowing the throw is right - one bad callback must not kill the
+            ; frame timer and take every other animation with it - but swallowing
+            ; it SILENTLY is what made "parallax does nothing" undiagnosable: a
+            ; single throw inside SampleVelocityStep retires the drag pipeline for
+            ; that whole drag, so parallax, velocity sampling and group towing all
+            ; stop at once with nothing logged anywhere.
+            ;
+            ; Throttled per key, not globally: a callback that throws on every
+            ; frame would otherwise put 65 lines a second into the log buffer, and
+            ; a genuinely broken animation is exactly the case where the log has
+            ; to stay readable. WriteLog buffers in RAM and is flushed by an idle
+            ; one-shot, so this never touches the disk on the 15 ms path.
             try
                 keepAlive := anim.Call(dt, now)
-            catch
+            catch as e {
                 keepAlive := false
+                if (!lastThrow.Has(key) || now - lastThrow[key] > 1000) {
+                    if (lastThrow.Count > 64)
+                        lastThrow.Clear()      ; bound it; worst case is one repeated line
+                    lastThrow[key] := now
+                    ; File/line/what, not just the message: "Invalid base." on its
+                    ; own names neither the expression nor the module, and these
+                    ; callbacks are closures several files away from here.
+                    detail := ""
+                    try detail := " at " e.What " " e.File ":" e.Line
+                    WriteLog("animation '" key "' threw and was retired: " e.Message detail)
+                }
+            }
             if keepAlive
                 continue
             ; Only retire what we actually ran: a callback is allowed to

@@ -94,7 +94,8 @@ Boot() {
     SyncTextExpander()
     SyncCustomClockTimer()
     ; Not a Sync: a one-off probe of a Windows setting that the drag effects
-    ; cannot work without. It only ever logs and notifies.
+    ; cannot work without. If it is off this ENABLES it - a persisted, system-wide
+    ; change - then logs and notifies. It is not undone by Bye().
     CheckDragFullWindows()
     UpdateKeyboardHook()
     ; Last of all. ShellEvent is the widest-reaching callback in the program -

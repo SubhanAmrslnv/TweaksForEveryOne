@@ -17,6 +17,7 @@
                         GroupWindows(hwnd, other)
                         hdwp := 0
                         if (StrCompare(openPath, targetPath) == 0) {
+                        lastThrow.Clear()      ; bound it; worst case is one repeated line
                         LS_Alpha := 180
                         LS_Gui.Show("NA x" edgeX " y" my " w" edgeW " h2")
                         LS_Gui.Show("NA x" mx " y" edgeY " w2 h" edgeH)
@@ -66,6 +67,7 @@
                     continue
                     count := Abs(dx) // step
                     count := Abs(dy) // step
+                    detail := ""
                     DimmerGuis.Delete(A_Index)
                     DimmerGuis[A_Index] := g
                     DllCall("EndDeferWindowPos", "ptr", hdwp)
@@ -99,6 +101,7 @@
                     if (cursor == "SizeWE")
                     if (dx < 0)
                     if (dy < 0)
+                    if (lastThrow.Count > 64)
                     if (LS_Alpha > 180)
                     if (LS_Progress > 1)
                     if (resizeMask & 1)
@@ -110,6 +113,7 @@
                     if FileExist(fullPath)
                     isEdge := true
                     isEdge := true
+                    lastThrow[key] := now
                     LS_Active := true
                     LS_Alpha += 25
                     LS_Progress := 0
@@ -148,6 +152,7 @@
                     t := (now - start) / ms
                     touches := false
                     try {
+                    try detail := " at " e.What " " e.File ":" e.Line
                     vel := Sqrt(dragVX**2 + dragVY**2)
                     WinGetPos(&ox, &oy, &ow, &oh, other)
                     WinGetPos(&tx, &ty, &tw, &th, FocusTargetHwnd)
@@ -158,6 +163,7 @@
                     WinSetTransparent(LS_Alpha, LS_Hwnd)
                     WinSetTransparent(Round(255 * (1 - (t**2))), obj.gui.Hwnd)
                     WinSetTransparent(Round(255 * (t**3)), obj.gui.Hwnd)
+                    WriteLog("animation '" key "' threw and was retired: " e.Message detail)
                    "ptr", buf, "uint*", &size, "int")
                  , "uint", 0x1 | 0x8, "int")
                  . "|ForegroundStaging|TaskListThumbnailWnd|Button|MultitaskingViewFrame"
@@ -166,6 +172,7 @@
                 , "int", 0, "int", 0, "int", 0, "int", 0, "uint", entry.flags)
                 , "x" CLOCK_GAP " y" textY " w" (tempW - CLOCK_GAP)
                 . " h" (2 * lineH) " Center", "")
+                }
                 }
                 }
                 }
@@ -312,6 +319,7 @@
                 if !DllCall("IsWindowVisible", "ptr", other)
                 if !MC_MeterWarned {
                 if (!isClickThrough)
+                if (!lastThrow.Has(key) || now - lastThrow[key] > 1000) {
                 if (!LS_Active) {
                 if (Abs(dx) >= step) {
                 if (Abs(dy) >= step) {
@@ -645,6 +653,7 @@
             }
             }
             }
+            }
             } catch as e {
             } catch as e {
             } catch as e {
@@ -704,10 +713,10 @@
             catch
             catch
             catch
-            catch
             catch {
             catch {
             catch {
+            catch as e {
             CleanDeleteGui(animKey)
             CleanShatter(animKey)
             Cleanup()
@@ -1278,6 +1287,7 @@
             return
             return
             return
+            return
             return                     ; neutral, and no record to make neutral
             return ""
             return "Transient"
@@ -1427,9 +1437,9 @@
             RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
             RS_SetRegion(ActiveBorderGui.Hwnd, rect1 "  " rect2 "  " rect3 "  " rect4, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "", RS_PRI_ANIM)
-            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
-            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "0-0 w" w " h" curH, RS_PRI_ANIM)
+            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
+            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
             RS_SetRegion(MicOsdGui.Hwnd, "0-0 w240 h70 r20-20", RS_PRI_ANIM)
             RS_SetRegion(OsdGui.Hwnd, "0-0 w280 h64 r20-20", RS_PRI_ANIM)
             RS_UpdateDwmThumbnail(s.thumb, [0, 0, Round(curW), Round(curH)], [Round(s.srcX), Round(s.srcY), s.w, s.h], alpha, true, true)
@@ -1592,9 +1602,9 @@
             try WinGetPos(&cx, &cy, &cw, &ch, OsdGui.Hwnd)
             try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
             try WinGetPos(&wx, &wy, &ww, &wh, hwndToMin)
+            try WinGetPos(&x, &y, &w, &h, hwnd)
+            try WinGetPos(&x, &y, &w, &h, hwnd)
             try WinGetPos(&X, &Y, &W, &H, hwnd)
-            try WinGetPos(&x, &y, &w, &h, hwnd)
-            try WinGetPos(&x, &y, &w, &h, hwnd)
             try WinHide(hwnd)
             try WinMove(ElasticBaseX, ElasticBaseY,,, ElasticHwnd)
             try WinSetAlwaysOnTop(1, OsdGui.Hwnd)
@@ -1628,8 +1638,8 @@
             winCy := wy + wh/2
             WinGetPos(&ex, &ey, &ew, &eh, "ahk_id " h)
             WinGetPos(&gx, &gy, &gw, &gh, hwnd)
-            WinGetPos(&wx, &wy, &ww, &wh, hwnd)
             WinGetPos(&wX, &wY, &wW, &wH, hwnd)
+            WinGetPos(&wx, &wy, &ww, &wh, hwnd)
             WinGetPos(&wx, &wy, &ww, &wh, mHwnd)
             WinGetPos(&X, &Y, &W, &H, hwnd)
             WinLastActive.Delete(hwnd)
@@ -1675,7 +1685,6 @@
         || (MC_FallbackExe.Count && (MC_LiveSessionExe.Count || !MC_FALLBACK_NEEDS_SESSION)))
         || GetKeyState("MButton", "P")) {
         || vk = 0xA0 || vk = 0xA1 || vk = 0xA2 || vk = 0xA3 || vk = 0xA4 || vk = 0xA5)
-        }
         }
         }
         }
@@ -2456,6 +2465,7 @@
         hwnd := WinExist("A")
         hwnd := WinExist("A")
         hwnd := WinExist("A")
+        hwnd := WinExist("A")
         hwnd := WinExist("ahk_class CabinetWClass")
         hwnd := WinExist("ahk_class Shell_TrayWnd")
         hwnd := WinExist("ahk_class Shell_TrayWnd")
@@ -2531,6 +2541,7 @@
         if (!DragTrailGui) {
         if (!GhostWindows.Has(hwnd))
         if (!GridActive)
+        if (!hwnd || !IsRestorable(hwnd))
         if (!intersecting) {
         if (!KnownToasts.Has(hwnd)) {
         if (!MC_FALLBACK_NEEDS_SESSION || MC_LiveSessionExe.Has(info.exe))
@@ -2689,7 +2700,7 @@
         if (px >= m.l && px < m.r && py >= m.t && py < m.b)
         if (raw == TuneFormat(s, v))
         if (reach < 1)
-        if (rec.base == numAlpha)
+        if (rec.baseAlpha == numAlpha)
         if (rec.layers.Has(name) && rec.layers[name] == factor)
         if (res == 2) {
         if (res == 2) {
@@ -2778,7 +2789,7 @@
         if DllCall("IsWindowVisible", "ptr", hwnd) {
         if DllCall("MoveFileExW", "wstr", tmpPath, "wstr", targetPath
         if DllCall("QueryFullProcessImageNameW", "ptr", hProc, "uint", 0,
-        if DllCall("SystemParametersInfoW", "uint", 0x26, "uint", 0, "ptr", buf, "uint", 0) {
+        if DllCall("SystemParametersInfoW", "uint", 0x26, "uint", 0, "ptr", buf, "uint", 0)
         if FileExist(appPath) {
         if FileExist(appPath) {
         if FileExist(cached) {
@@ -3147,10 +3158,10 @@
         raw := ""
         raw := IniRead(INI, section, key, defaultVal)
         reach := SNAP_DISTANCE * (1 + adapt * (Min(spd, 900) / 900 * 2 - 1))
-        rec := {base: 255, layers: Map()}
+        rec := {baseAlpha: 255, layers: Map()}
         rec := RS_AlphaState[hwnd]
         rec := RS_AlphaState[hwnd]
-        rec.base := numAlpha
+        rec.baseAlpha := numAlpha
         rect := Buffer(16)
         rect := Buffer(16, 0)
         region := "0-0 W" FocusBounds.w " H" FocusBounds.h
@@ -3178,7 +3189,6 @@
         RestoreFromBottom(hwnd)
         RestoreFromTray(hwnd)
         RestoreStealthPanic()
-        return
         return
         return
         return
@@ -3621,7 +3631,7 @@
         RotateLog()
         RS_Alpha := Map()
         RS_AlphaState.Delete(hwnd)
-        RS_AlphaState[hwnd] := {base: numAlpha, layers: Map()}
+        RS_AlphaState[hwnd] := {baseAlpha: numAlpha, layers: Map()}
         RS_AlphaState[hwnd] := rec
         RS_ClearAlphaLayer(hwnd, "drag", RS_PRI_DRAG)
         RS_ClearAlphaLayer(hwnd, "drag", RS_PRI_DRAG)
@@ -3962,7 +3972,6 @@
         try CustomClockTimeText.Value := FormatTime(, "HH:mm") "`n" FormatTime(, "dd.MM.yyyy")
         try DirCreate(dirOnly)
         try DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", thumbId)
-        try DllCall("SystemParametersInfoW", "uint", 0x25, "uint", 1, "uint", 0, "uint", 3)
         try DllCall("UnhookWinEvent", "ptr", MenuEventHook)
         try DllCall("UnhookWinEvent", "ptr", WinEventHook)
         try epCur := RegRead(EP_KEY, "OldTaskbar", 0)
@@ -4064,7 +4073,7 @@
         UpdateMicOSD(isMuted)
         UpdateOSD(vol, isMuted)
         UpdateSmartGrid()
-        v := rec.base + 0.0
+        v := rec.baseAlpha + 0.0
         v := RS_Alpha[hwnd].value
         v := RS_LastAlpha[hwnd]
         v := TuneClean(s, raw)
@@ -4126,6 +4135,7 @@
         wmi := ""
         WriteLog("  remembered " key " -> " x "," y " " w "x" h)
         WriteLog("ApplyUi: could not read a control - " e.Message)
+        WriteLog("DragFullWindows was off - enabled it so drag transparency and ice glide can work")
         WriteLog("magnifier unavailable - " e.Message)
         WriteLog("restored " key " -> " rx "," ry " " rw "x" rh)
         WriteLog("skip: window ended maximized")
@@ -4144,6 +4154,7 @@
     , step: step, dec: dec, page: page, label: label, hint: hint}
     {
     {key: key, sec: sec, ini: ini, def: def, lo: lo, hi: hi
+    }
     }
     }
     }
@@ -4633,6 +4644,7 @@
     } else {
     } else {
     } else {
+    } else {
     } else if (!isVisible && StartMenuBlurGui) {
     } else if (crashX < -4) {
     } else if (crashY < -4) {
@@ -4676,6 +4688,7 @@
     Anim_Claim(hwnd, "region", animKey, UnrollStep)
     Anim_Forget(key)
     Anim_Forget(key)                       ; this key may have owned another slot
+    Anim_Release(hwnd, "alpha")
     Anim_Release(hwnd, "geom")
     Anim_Release(hwnd, "geom")
     Anim_Release(hwnd, "geom")
@@ -5665,7 +5678,6 @@
     hwnd := WinExist("A")
     hwnd := WinExist("A")
     hwnd := WinExist("A")
-    hwnd := WinExist("A")
     hwnd := WinExist("ahk_class Shell_TrayWnd")
     hwnds := WinGetList("ahk_class WorkerW")
     hwnds := WinGetList("ahk_exe " exeName)
@@ -5769,7 +5781,6 @@
     if !hwnd || !LayoutUndo.Has(hwnd) {
     if !hwnd || !RS_AlphaState.Has(hwnd)
     if !hwnd || !RS_AlphaState.Has(hwnd)
-    if !hwnd || (!IsRestorable(hwnd) && hwnd != (IsSet(DragHwnd) ? DragHwnd : 0))
     if !info
     if !InitShakeFind()
     if !isHidden
@@ -5876,7 +5887,6 @@
     if (!MC_LivePid.Count && !MC_LiveExe.Count && !MC_FallbackExe.Count)
     if (!MicOsdGui)
     if (!MultiMonitorDimmerEnabled)
-    if (!on) {
     if (!OsdGui)
     if (!ParallaxEnabled && !GlideEnabled)
     if (!path || !FileExist(path) || InStr(FileExist(path), "D"))
@@ -5993,6 +6003,7 @@
     if (DllCall("dwmapi\DwmGetWindowAttribute", "ptr", hwnd, "int", 9, "ptr", rc, "int", 16) = 0) {
     if (DllCall("GetAncestor", "ptr", hwnd, "uint", 2, "ptr") != hwnd)
     if (DllCall("ole32\CLSIDFromString", "WStr", guid, "Ptr", buf, "Int") != 0)
+    if (DragHwnd && DllCall("IsWindow", "ptr", DragHwnd)) {
     if (DragHwnd || GetKeyState("LButton", "P") || GetKeyState("RButton", "P")
     if (DragHwnd == hwnd)
     if (dt <= 0)
@@ -6043,7 +6054,6 @@
     if (IsObject(restoredRect) && restoredRect.HasOwnProp("w")) {
     if (IsObject(restoredRect) && restoredRect.HasOwnProp("w")) {
     if (IsObject(restoredRect) && restoredRect.HasOwnProp("w")) {
-    if (IsSet(DragHwnd) && DragHwnd)
     if (IsSet(LivePipEnabled) && !LivePipEnabled && IsSet(PipGuis)) {
     if (IsSet(ProximityGhostEnabled) && !ProximityGhostEnabled && IsSet(GhostWindows)) {
     if (IsShellSurface(hwnd, cls) || cls = "AutoHotkeyGUI") {
@@ -6097,7 +6107,6 @@
     if (now < cooldownUntil)
     if (numAlpha < 0)
     if (numAlpha > 255)
-    if (on)
     if (OpenAnim != "None" && WillAnimateOpen(hwnd)) {
     if (OriginalTaskbarState == -1)
     if (OsdGui)
@@ -6295,6 +6304,8 @@
     if PushedBackWindows.Count {
     if pVol    ObjRelease(pVol)
     if qualifies
+    if ReadDragFullWindows()
+    if ReadDragFullWindows() {
     if RegExMatch(body, '"weather_code"\s*:\s*([0-9]+)', &mC)
     if RegExMatch(body, '"wind_speed_10m"\s*:\s*(-?[0-9.]+)', &mW)
     if RegExMatch(text, "^[\d\+\-\*\/\.\(\)\s]+$") && RegExMatch(text, "\d") {
@@ -6868,8 +6879,8 @@
     return {alpha: Round(255 - f * (255 - TuneAlpha("parallaxMin"))), fade: f}
     return 0
     return 0
-    Return 0
     return 0
+    Return 0
     return 1
     return 1
     return 1
@@ -6912,9 +6923,10 @@
     return ms
     return name
     return ok
+    return on
     return out
     return pg.AddText(pos " w" w " c" col, txt)
-    return RS_AlphaState.Has(hwnd) ? RS_AlphaState[hwnd].base : 255
+    return RS_AlphaState.Has(hwnd) ? RS_AlphaState[hwnd].baseAlpha : 255
     return s ? TuneFormat(s, Tune(key)) : ""
     return ScreenGeom
     return SpotlightGui && WinActive("ahk_id " SpotlightGui.Hwnd)
@@ -7207,6 +7219,7 @@
     static lastCheck := 0
     static LastCorner := "None", EnteredAt := 0, Fired := false
     static lastSnippets := Chr(1)      ; sentinel: never equal to a real read
+    static lastThrow := Map()
     static lastTriggers := Map()
     static lastX := 0, lastY := 0, lastAt := 0     ; previous sample, for speed
     static ownPid := DllCall("GetCurrentProcessId", "uint")
@@ -7489,6 +7502,7 @@
     try DestroyActiveBorder()
     try DllCall("DeregisterShellHookWindow", "ptr", A_ScriptHwnd)
     try DllCall("dwmapi\DwmUnregisterThumbnail", "ptr", pip.ThumbId)
+    try DllCall("SystemParametersInfoW", "uint", 0x25, "uint", 1, "ptr", 0, "uint", 3)
     try EP_IconSize := RegRead(ADVANCED_KEY, "TaskbarSmallIcons", 0) != 0 ? "Small" : "Large"
     try EP_Style := RegRead(EP_KEY, "OldTaskbar", 0) != 0 ? "Win10" : "Win11"
     try exStyle := WinGetExStyle(hwnd)
@@ -7601,10 +7615,10 @@
     try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
     try WinGetPos(&x, &cy, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&X, &Y, &W, &H, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(, , &bounceW, &bounceH, hwnd)
     try WinGetPos(, , &winW, &winH, hwnd)
@@ -7749,7 +7763,7 @@
     WinSetTransparent(220, guiObj.Hwnd)
     WinTargetAlpha.Clear(), WinCurrentAlpha.Clear(), WinLastActive.Clear()
     WriteLog("=== Window Tweaks " VERSION " started ===")
-    WriteLog("DragFullWindows is off - drag transparency and ice glide cannot work")
+    WriteLog("DragFullWindows is off and could not be enabled - drag transparency and ice glide cannot work")
     WriteLog("explorer restarted - shell hook re-registered (" (ok ? "ok" : "FAILED") ")")
     WriteLog("Taskbar temperature: " why " (location: " key ")")
     WriteLog(Format("  corrected L={1} T={2} -> L={3} T={4}", vL, vT, newL, newT))
@@ -7904,6 +7918,7 @@ $!F4::GravityClose()
 ]
 ^!v:: {
 ^g:: {
+}
 }
 }
 }
@@ -8663,7 +8678,7 @@ global Ripples := []
 global RolledUpWindows := Map()
 global RollUpEnabled := false
 global RS_Alpha      := Map()   ; hwnd -> {value, pri}     value 256 = "Off"
-global RS_AlphaState := Map()   ; hwnd -> {base, layers}
+global RS_AlphaState := Map()   ; hwnd -> {baseAlpha, layers}
 global RS_FlushCount   := 0     ; total flushes
 global RS_LastAlpha  := Map()   ; hwnd -> last alpha written
 global RS_LastFlushMs  := 0     ; ms spent in the last flush
@@ -8872,6 +8887,7 @@ PulseWindow(hwnd) {
 PushBackWindow(hwnd) {
 PutIni(value, section, key) {
 QPC() {
+ReadDragFullWindows() {
 RegisterAnimation(key, callback) {
 RegisterShellHook() {
 RememberLayout(hwnd, x, y, w, h) {
@@ -8903,7 +8919,7 @@ RS_ClearAlphaLayer(hwnd, name, pri := 20) {
 RS_Commit() => RS_Flush()
 RS_CurrentAlpha(hwnd, defaultVal := 255) {
 RS_Flush() {
-RS_IsNeutralAlpha(rec) => (rec.base >= 255 && rec.layers.Count == 0)
+RS_IsNeutralAlpha(rec) => (rec.baseAlpha >= 255 && rec.layers.Count == 0)
 RS_PruneAlphaState(hwnd) {
 RS_RecomposeAlpha(hwnd, pri) {
 RS_RemoveHwnd(hwnd) {
