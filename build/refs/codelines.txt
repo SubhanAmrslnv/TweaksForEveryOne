@@ -278,7 +278,6 @@
                 d      := Abs(lo - v)
                 dead := []
                 dead.Push(hwnd)
-                DllCall("dwmapi\DwmUpdateThumbnailProperties", "ptr", pipGui.ThumbId, "ptr", props)
                 DllCall("SetWindowPos", "ptr", obj.gui.Hwnd, "ptr", -1, "int", wx, "int", wy, "int", ww, "int", wh, "uint", 0x14 | 0x40)
                 DllCall("SetWindowPos", "ptr", obj.gui.Hwnd, "ptr", -1, "int", wx, "int", wy, "int", ww, "int", wh, "uint", 0x14)
                 DllCall("ShowWindow", "ptr", LS_Hwnd, "int", 0)
@@ -390,8 +389,6 @@
                 needsAnimation := true
                 newLo     := cand
                 newX := wX, newY := wY, newW := wW, newH := wH
-                NumPut("UChar", alpha, props, 36)
-                NumPut("UInt", 0x04, props, 0)
                 obj.active := false
                 obj.active := false
                 obj.active := true
@@ -405,7 +402,6 @@
                 pip.Opt("+Border +Caption")
                 pip.Title := "PiP (Interactive) - MClick to exit"
                 pipGui.LastAlpha := alpha
-                props := Buffer(48, 0)
                 PulseWindow(lParam)
                 PushedBackWindows.Delete(lParam)
                 R := L + w, B := T + h
@@ -458,6 +454,7 @@
                 RS_SetPos(hwnd, wX, wY, wW, wH, RS_PRI_DRAG)
                 RS_SetRegion(hwnd, "", RS_PRI_ANIM)
                 RS_SetRegion(hwnd, "0-0 W" w " H" caption, RS_PRI_ANIM)
+                RS_UpdateDwmThumbnail(pipGui.ThumbId, "", "", alpha)
                 Run("explorer.exe " args)
                 Run(appStr)
                 Run(cmd)
@@ -811,7 +808,6 @@
             DllCall("DeleteObject", "ptr", hbm)
             DllCall("Dwmapi\DwmRegisterThumbnail", "ptr", guiObj.Hwnd, "ptr", hwnd, "ptr*", &thumb)
             DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", s.thumb)
-            DllCall("Dwmapi\DwmUpdateThumbnailProperties", "ptr", s.thumb, "ptr", props)
             DllCall("PrintWindow", "ptr", hwnd, "ptr", hdcMem, "uint", 2)
             DllCall("SelectObject", "ptr", hdcMem, "ptr", oldObj)
             DllCall("SelectObject", "ptr", hdcMem, "ptr", oldObj)
@@ -1160,10 +1156,6 @@
             NotchAnim(OsdGui.Hwnd, cy, visibleY, true)
             NotchAnim(OsdGui.Hwnd, y, visibleY, true)
             Notify("Taskbar clock: set a Location in Shift+Alt+W, Taskbar Clock`nto show the temperature.")
-            NumPut("char", alpha, props, 36)
-            NumPut("int", 0, props, 4)
-            NumPut("int", 0, props, 8)
-            NumPut("int", 1, props, 40)
             NumPut("int", cx, lParam, rectOffset + 8)
             NumPut("int", cx, lParam, rectOffset)
             NumPut("int", cy, lParam, rectOffset + 12)
@@ -1172,13 +1164,6 @@
             NumPut("int", mx + 10, lParam, rectOffset + 8)
             NumPut("int", my - 10, lParam, rectOffset + 4)
             NumPut("int", my + 10, lParam, rectOffset + 12)
-            NumPut("int", Round(curH), props, 16)
-            NumPut("int", Round(curW), props, 12)
-            NumPut("int", Round(s.srcX + s.w), props, 28)
-            NumPut("int", Round(s.srcX), props, 20)
-            NumPut("int", Round(s.srcY + s.h), props, 32)
-            NumPut("int", Round(s.srcY), props, 24)
-            NumPut("uint", 0x01 | 0x02 | 0x04 | 0x08 | 0x10, props, 0)
             NumPut("uint", 40, monInfo)
             obj.active := false
             ok := true
@@ -1228,7 +1213,6 @@
             pos += StrLen(val)
             PrivacyBlurEnabled := false
             PrivacyBlurEnabled := val
-            props := Buffer(48, 0)
             ProximityGhostEnabled := false
             ProximityGhostEnabled := val
             PulseEnabled := false
@@ -1439,8 +1423,8 @@
             RS_SetPos(hwnd, x, y + shrink, w, h - shrink*2, RS_PRI_ANIM)
             RS_SetPos(hwnd, x, y, -1, -1, RS_PRI_USER)
             RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
-            RS_SetPos(hwnd, X, Y, W, H, RS_PRI_ANIM)
             RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
+            RS_SetPos(hwnd, X, Y, W, H, RS_PRI_ANIM)
             RS_SetRegion(ActiveBorderGui.Hwnd, rect1 "  " rect2 "  " rect3 "  " rect4, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "", RS_PRI_ANIM)
             RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
@@ -1448,6 +1432,7 @@
             RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
             RS_SetRegion(MicOsdGui.Hwnd, "0-0 w240 h70 r20-20", RS_PRI_ANIM)
             RS_SetRegion(OsdGui.Hwnd, "0-0 w280 h64 r20-20", RS_PRI_ANIM)
+            RS_UpdateDwmThumbnail(s.thumb, [0, 0, Round(curW), Round(curH)], [Round(s.srcX), Round(s.srcY), s.w, s.h], alpha, true, true)
             Run(appStr)
             rx := wl + 40
             ry := wt + 40
@@ -2195,8 +2180,7 @@
         DllCall("Dwmapi\DwmRegisterThumbnail", "ptr", TaskbarWaveGui.Hwnd, "ptr", hwnd, "ptr*", &TaskbarWaveThumb)
         DllCall("dwmapi\DwmSetWindowAttribute", "ptr", g.Hwnd, "uint", 20, "int*", 1, "uint", 4)
         DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", obj.thumb)
-        DllCall("Dwmapi\DwmUpdateThumbnailProperties", "ptr", thumb, "ptr", props)
-        DllCall("Dwmapi\DwmUpdateThumbnailProperties", "ptr", Thumbnails[idx], "ptr", props)
+        DllCall("Dwmapi\DwmUpdateThumbnailProperties", "ptr", thumbId, "ptr", props)
         DllCall("Magnification\MagSetWindowSource", "ptr", MagChildHwnd, "ptr", SourceRect)
         DllCall("Magnification\MagSetWindowTransform", "ptr", MagChildHwnd, "ptr", Transform)
         DllCall("ole32\CLSIDFromString", "WStr", "{5CDF2C82-841E-4546-9722-0CF74078229A}", "Ptr", IID_IAudioEndpointVolume)
@@ -2332,6 +2316,11 @@
         Fired := true
         fL := NumGet(rc, 0,  "int")
         fL := winX, fT := winY, fR := winX + ww, fB := winY + wh
+        flags |= 0x01 ; DWM_TNP_RECTDESTINATION
+        flags |= 0x02 ; DWM_TNP_RECTSOURCE
+        flags |= 0x04 ; DWM_TNP_OPACITY
+        flags |= 0x08 ; DWM_TNP_VISIBLE
+        flags |= 0x10 ; DWM_TNP_SOURCECLIENTAREAONLY
         FlushLog()
         FlyMinimizeEnabled := C["fly"].Value
         fn := %fnName%
@@ -2891,8 +2880,8 @@
         Loop count {
         Loop count {
         loop gridY {
-        loop MonitorGetCount() {
         Loop MonitorGetCount() {
+        loop MonitorGetCount() {
         loop nDev {
         Loop Reg, "HKLM\SOFTWARE\WOW6432Node\Microsoft\VisualStudio\SxS\VS7", "V" {
         lp := ((sY & 0xFFFF) << 16) | (sX & 0xFFFF)
@@ -3019,23 +3008,20 @@
         NumPut("float", 1.0, Transform, 32)
         NumPut("float", 2.0, Transform, 0)
         NumPut("float", 2.0, Transform, 16)
-        NumPut("int", 0, props, 4)
-        NumPut("int", 0, props, 8)
-        NumPut("int", 1, props, 40)
-        NumPut("int", curH, props, 16)
-        NumPut("int", curW, props, 12)
+        NumPut("int", clientOnly ? 1 : 0, props, 44)
+        NumPut("int", destRect[1] + destRect[3], props, 12)
+        NumPut("int", destRect[1], props, 4)
+        NumPut("int", destRect[2] + destRect[4], props, 16)
+        NumPut("int", destRect[2], props, 8)
         NumPut("int", mx - 35, SourceRect, 0)
         NumPut("int", mx + 35, SourceRect, 8)
         NumPut("int", my - 35, SourceRect, 4)
         NumPut("int", my + 35, SourceRect, 12)
-        NumPut("int", px + w, props, 12)
-        NumPut("int", px, props, 4)
-        NumPut("int", py + h, props, 16)
-        NumPut("int", py, props, 8)
-        NumPut("int", Round(srcX + size), props, 28)
-        NumPut("int", Round(srcX), props, 20)
-        NumPut("int", Round(srcY + size), props, 32)
-        NumPut("int", Round(srcY), props, 24)
+        NumPut("int", srcRect[1] + srcRect[3], props, 28)
+        NumPut("int", srcRect[1], props, 20)
+        NumPut("int", srcRect[2] + srcRect[4], props, 32)
+        NumPut("int", srcRect[2], props, 24)
+        NumPut("int", visible ? 1 : 0, props, 40)
         NumPut("Int", WL, "Int", WT, "Int", WR, "Int", WB, rect)
         NumPut("Int", X, pt, 0)
         NumPut("Int", Y, pt, 4)
@@ -3044,13 +3030,11 @@
         NumPut("ptr", hide ? 1 : 2, abd, A_PtrSize == 8 ? 40 : 32)
         NumPut("ptr", hwnd, abd, A_PtrSize == 8 ? 8 : 4)
         NumPut("ptr", hwnd, abd, A_PtrSize == 8 ? 8 : 4)
-        NumPut("uint", (idx == CarouselIndex) ? 255 : Round(100 * scale), props, 32)
-        NumPut("uint", 0x01 | 0x02 | 0x04 | 0x08 | 0x10, props, 0)
-        NumPut("uint", 0x01 | 0x08, props, 0)
         NumPut("uint", cbSize, abd, 0)
         NumPut("uint", cbSize, abd, 0)
         NumPut("uint", cbSize, nid, 0)
         NumPut("uint", cbSize, nid, 0)
+        NumPut("uint", flags, props, 0)
         NumPut("uint", hwnd, nid, A_PtrSize == 8 ? 16 : 8)
         NumPut("uint", hwnd, nid, A_PtrSize == 8 ? 16 : 8)
         nw := Round(fromW + (toW - fromW) * e)
@@ -3129,8 +3113,6 @@
         PrivacyBlurEnabled := C["privacyblur"].Value
         PrivacyBlurWindows.Delete(hwnd)
         PrivacyBlurWindows.Delete(hwnd)
-        props := Buffer(48, 0)
-        props := Buffer(48, 0)
         ProximityGhostEnabled := C["ghost"].Value
         pt := Buffer(8)
         PulseEnabled   := C["pulse"].Value
@@ -3696,6 +3678,8 @@
         RS_SetRegion(hwnd, "", RS_PRI_USER)
         RS_SetZOrder(StartMenuBlurGui.Hwnd, startHwnd, 0x13, RS_PRI_USER)
         RS_SweepDead()
+        RS_UpdateDwmThumbnail(thumb, [0, 0, curW, curH], [Round(srcX), Round(srcY), size, size], alpha, true, true)
+        RS_UpdateDwmThumbnail(Thumbnails[idx], [px, py, w, h], "", (idx == CarouselIndex) ? 255 : Round(100 * scale), true, false)
         RS_ZOrder := Map()
         Run 'notepad.exe "' LOG_FILE '"'
         Run 'notepad.exe "' p '"'
@@ -4583,6 +4567,12 @@
     }
     }
     }
+    }
+    }
+    }
+    }
+    }
+    }
     } catch
     } catch
     } catch
@@ -5035,8 +5025,6 @@
     DllCall("CloseHandle", "ptr", hProc)
     DllCall("DeregisterShellHookWindow", "ptr", A_ScriptHwnd)
     DllCall("Dwmapi\DwmRegisterThumbnail", "ptr", guiObj.Hwnd, "ptr", hwnd, "ptr*", &thumb)
-    DllCall("dwmapi\DwmUpdateThumbnailProperties", "ptr", guiObj.ThumbId, "ptr", props)
-    DllCall("Dwmapi\DwmUpdateThumbnailProperties", "ptr", TaskbarWaveThumb, "ptr", props)
     DllCall("QueryPerformanceCounter", "Int64*", &count:=0)
     DllCall("SetParent", "ptr", hwnd, "ptr", 0, "ptr")
     DllCall("SetWindowPos", "ptr", TaskbarWaveGui.Hwnd, "ptr", -1, "int", destX, "int", destY, "int", size, "int", size, "uint", 0x10 | 0x40)
@@ -5119,6 +5107,7 @@
     Finish() {
     finished := false
     finished := true
+    flags := 0
     flash := Gui("-Caption +ToolWindow +AlwaysOnTop -DPIScale +E0x20", "SeamFlash")
     flash.BackColor := "00E5FF"
     flash.MarginX := 0, flash.MarginY := 0
@@ -5942,6 +5931,7 @@
     if (ActiveDeleteGuis.Has(animKey)) {
     if (ActiveShatters.Has(animKey)) {
     if (ahwnd != QuickLookGui.Hwnd && cls != "CabinetWClass")
+    if (alpha != "") {
     if (AnimOwner.Has(slot) && AnimOwner[slot] != key)
     if (AnimOwner.Has(slot) && AnimOwner[slot] == key)
     if (args == "") {
@@ -5959,6 +5949,7 @@
     if (CarouselIndex > CarouselWindows.Length)
     if (CarouselIndex >= 1 && CarouselIndex <= CarouselWindows.Length)
     if (channel != "") {
+    if (clientOnly != "") {
     if (ClockLocation == "") {
     if (ClockUnits == "Fahrenheit")
     if (cls != "#32768")
@@ -5984,6 +5975,7 @@
     if (CustomClockTempText) {
     if (CustomClockTimeText)
     if (cx = "" || cw = "")
+    if (destRect != "") {
     if (dir == 1) {
     if (dir > 0)
     if (dirOnly != "" && !DirExist(dirOnly))
@@ -6009,6 +6001,7 @@
     if (exStyle & 0x20)
     if (factor < 0.0)
     if (factor > 1.0)
+    if (flags) {
     if (FocusModeEnabled && FocusGuis.Length) {
     if (FocusModeEnabled) {
     if (FrameProduceMs > 12) {
@@ -6140,6 +6133,7 @@
     if (SpotlightGui) {
     if (SpotlightTarget.x != newTarget.x || SpotlightTarget.y != newTarget.y || SpotlightTarget.w != newTarget.w || SpotlightTarget.h != newTarget.h) {
     if (squeezeX == 0 && squeezeY == 0)
+    if (srcRect != "") {
     if (stage == "geo") {
     if (startA >= 254) {
     if (startHwnd && DllCall("IsWindowVisible", "ptr", startHwnd)) {
@@ -6198,6 +6192,7 @@
     if (uiOldSmartTb != "" && uiOldSmartTb && !SmartTaskbarEnabled && OriginalTaskbarState != -1)
     if (v == "")
     if (v == Chr(1))
+    if (visible != "") {
     if (vL = newL && vT = newT)
     if (vol < 30)
     if (vol < 70)
@@ -6574,35 +6569,16 @@
     num := CarouselWindows.Length
     numAlpha := (alpha == "Off") ? 255 : Integer(alpha)
     numAlpha := (alpha == "Off") ? 256 : Integer(alpha)
-    NumPut("char", 255, props, 36)
     NumPut("int", 0, accent, 12)
-    NumPut("Int", 0, props, 4)
-    NumPut("int", 0, props, 4)
-    NumPut("Int", 0, props, 8)
-    NumPut("int", 0, props, 8)
     NumPut("int", 0x88222222, accent, 8)
-    NumPut("int", 1, props, 40)
-    NumPut("Int", 1, props, 40)
-    NumPut("Int", 1, props, 44)
     NumPut("int", 16, data, A_PtrSize + A_PtrSize)
     NumPut("int", 19, data, 0)
     NumPut("int", 2, accent, 4)
     NumPut("int", 3, accent, 0)
-    NumPut("Int", height, props, 16)
-    NumPut("int", size, props, 12)
-    NumPut("int", size, props, 16)
-    NumPut("int", srcX + srcW, props, 28)
-    NumPut("int", srcX, props, 20)
-    NumPut("int", srcY + srcH, props, 32)
-    NumPut("int", srcY, props, 24)
-    NumPut("Int", width, props, 12)
     NumPut("ptr", A_ScriptHwnd, nid, A_PtrSize == 8 ? 8 : 4)
     NumPut("ptr", accent.Ptr, data, A_PtrSize)
     NumPut("ptr", hIcon, nid, A_PtrSize == 8 ? 32 : 20)
-    NumPut("UChar", alpha, props, 36)
-    NumPut("uint", 0x01 | 0x02 | 0x04 | 0x08 | 0x10, props, 0)
     NumPut("uint", 0x1000, nid, A_PtrSize == 8 ? 24 : 16)
-    NumPut("UInt", 0x1D, props, 0) ; 0x19 | 0x04 = 0x1D
     NumPut("uint", 0x7, nid, A_PtrSize == 8 ? 20 : 12)
     NumPut("uint", cbSize, nid, 0)
     NumPut("uint", hwnd, nid, A_PtrSize == 8 ? 16 : 8)
@@ -6709,7 +6685,6 @@
     PrivacyBlurEnabled := IniStr("window", "privacyblur", "1") = "1"
     PrivacyBlurWindows[hwnd] := {gui: guiObj, active: false}
     produceStart := QPC()
-    props := Buffer(48, 0)
     props := Buffer(48, 0)
     ProximityGhostEnabled := IniStr("memory", "ghost", "1") = "1"
     pSE := 0
@@ -7042,6 +7017,8 @@
     RS_SetZOrder(CustomClockGui.Hwnd, -1, 0x0013, RS_PRI_AMBIENT)
     RS_SetZOrder(hwnd, 0, 0x0013, RS_PRI_USER)      ; HWND_TOP
     RS_Shutdown()
+    RS_UpdateDwmThumbnail(guiObj.ThumbId, [0, 0, width, height], "", alpha, true, true)
+    RS_UpdateDwmThumbnail(TaskbarWaveThumb, [0, 0, size, size], [srcX, srcY, srcW, srcH], 255, true, true)
     RS_ZOrder[hwnd] := {insertAfter: insertAfter, flags: flags, pri: pri}
     Run "explorer.exe"
     RunWait('taskkill /f /im explorer.exe', , "Hide")
@@ -7615,9 +7592,9 @@
     try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
     try WinGetPos(&x, &cy, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&X, &Y, &W, &H, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(, , &bounceW, &bounceH, hwnd)
@@ -7916,6 +7893,7 @@ $!F4::GravityClose()
 ]
 ^!v:: {
 ^g:: {
+}
 }
 }
 }
@@ -8930,6 +8908,7 @@ RS_SetRegion(hwnd, regionStr, pri := 20) {
 RS_SetZOrder(hwnd, insertAfter, flags := 0x0013, pri := 20) {
 RS_Shutdown() {
 RS_SweepDead() {
+RS_UpdateDwmThumbnail(thumbId, destRect := "", srcRect := "", alpha := "", visible := "", clientOnly := "") {
 SampleTaskbarColor(tx, ty, th, blockX) {
 SampleVelocityStep(dt, now) {
 SaveSettings() {

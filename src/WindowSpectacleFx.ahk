@@ -416,15 +416,7 @@ CarouselCallback(dt, now) {
         px := Round(x - w/2)
         py := Round(y - h/2)
         
-        props := Buffer(48, 0)
-        NumPut("uint", 0x01 | 0x08, props, 0) 
-        NumPut("int", px, props, 4)
-        NumPut("int", py, props, 8)
-        NumPut("int", px + w, props, 12)
-        NumPut("int", py + h, props, 16)
-        NumPut("uint", (idx == CarouselIndex) ? 255 : Round(100 * scale), props, 32) 
-        
-        DllCall("Dwmapi\DwmUpdateThumbnailProperties", "ptr", Thumbnails[idx], "ptr", props)
+        RS_UpdateDwmThumbnail(Thumbnails[idx], [px, py, w, h], "", (idx == CarouselIndex) ? 255 : Round(100 * scale), true, false)
     }
     return true
 }
@@ -515,23 +507,8 @@ TriggerBlackHoleDelete(hwnd) {
         DllCall("SetWindowPos", "ptr", guiObj.Hwnd, "ptr", -1, "int", Round(curX), "int", Round(curY), "int", curW, "int", curH, "uint", 0x14) 
         
         ; See the struct layout note in UpdateCarousel.
-        props := Buffer(48, 0)
-        NumPut("uint", 0x01 | 0x02 | 0x04 | 0x08 | 0x10, props, 0)
-        NumPut("int", 0, props, 4)
-        NumPut("int", 0, props, 8)
-        NumPut("int", curW, props, 12)
-        NumPut("int", curH, props, 16)
-
-        NumPut("int", Round(srcX), props, 20)
-        NumPut("int", Round(srcY), props, 24)
-        NumPut("int", Round(srcX + size), props, 28)
-        NumPut("int", Round(srcY + size), props, 32)
-
         alpha := Round(255 * (1 - ease))
-        NumPut("char", alpha, props, 36)
-        NumPut("int", 1, props, 40)
-
-        DllCall("Dwmapi\DwmUpdateThumbnailProperties", "ptr", thumb, "ptr", props)
+        RS_UpdateDwmThumbnail(thumb, [0, 0, curW, curH], [Round(srcX), Round(srcY), size, size], alpha, true, true)
         return true
     }
     RegisterAnimation(animKey, Step)
@@ -730,22 +707,7 @@ TriggerShatterClose(hwnd) {
             DllCall("SetWindowPos", "ptr", s.gui.Hwnd, "ptr", -1, "int", Round(curX), "int", Round(curY), "int", Round(curW), "int", Round(curH), "uint", 0x14 | 0x40) 
             
             ; See the struct layout note in UpdateCarousel.
-            props := Buffer(48, 0)
-            NumPut("uint", 0x01 | 0x02 | 0x04 | 0x08 | 0x10, props, 0)
-            NumPut("int", 0, props, 4)
-            NumPut("int", 0, props, 8)
-            NumPut("int", Round(curW), props, 12)
-            NumPut("int", Round(curH), props, 16)
-
-            NumPut("int", Round(s.srcX), props, 20)
-            NumPut("int", Round(s.srcY), props, 24)
-            NumPut("int", Round(s.srcX + s.w), props, 28)
-            NumPut("int", Round(s.srcY + s.h), props, 32)
-
-            NumPut("char", alpha, props, 36)
-            NumPut("int", 1, props, 40)
-
-            DllCall("Dwmapi\DwmUpdateThumbnailProperties", "ptr", s.thumb, "ptr", props)
+            RS_UpdateDwmThumbnail(s.thumb, [0, 0, Round(curW), Round(curH)], [Round(s.srcX), Round(s.srcY), s.w, s.h], alpha, true, true)
         }
         return true
     }

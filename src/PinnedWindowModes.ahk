@@ -208,16 +208,7 @@ PipGuiResize(guiObj, minMax, width, height) {
             alpha := a
     }
 
-    props := Buffer(48, 0)
-    NumPut("UInt", 0x1D, props, 0) ; 0x19 | 0x04 = 0x1D
-    NumPut("Int", 0, props, 4)
-    NumPut("Int", 0, props, 8)
-    NumPut("Int", width, props, 12)
-    NumPut("Int", height, props, 16)
-    NumPut("UChar", alpha, props, 36)
-    NumPut("Int", 1, props, 40)
-    NumPut("Int", 1, props, 44)
-    DllCall("dwmapi\DwmUpdateThumbnailProperties", "ptr", guiObj.ThumbId, "ptr", props)
+    RS_UpdateDwmThumbnail(guiObj.ThumbId, [0, 0, width, height], "", alpha, true, true)
 }
 
 PipGuiContextMenu(guiObj, *) {
@@ -245,10 +236,7 @@ PiPMonitorStep() {
                 alpha := 255
             if (!pipGui.HasProp("LastAlpha") || pipGui.LastAlpha != alpha) {
                 pipGui.LastAlpha := alpha
-                props := Buffer(48, 0)
-                NumPut("UInt", 0x04, props, 0)
-                NumPut("UChar", alpha, props, 36)
-                DllCall("dwmapi\DwmUpdateThumbnailProperties", "ptr", pipGui.ThumbId, "ptr", props)
+                RS_UpdateDwmThumbnail(pipGui.ThumbId, "", "", alpha)
             }
         }
     }

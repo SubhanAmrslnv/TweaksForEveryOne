@@ -601,3 +601,40 @@ RS_Apply() {
         }
     }
 }
+
+; Immediate mode - DWM thumbnails do not go through the flush cycle because they
+; write to a DWM handle, not an HWND property.
+RS_UpdateDwmThumbnail(thumbId, destRect := "", srcRect := "", alpha := "", visible := "", clientOnly := "") {
+    props := Buffer(48, 0)
+    flags := 0
+    if (destRect != "") {
+        flags |= 0x01 ; DWM_TNP_RECTDESTINATION
+        NumPut("int", destRect[1], props, 4)
+        NumPut("int", destRect[2], props, 8)
+        NumPut("int", destRect[1] + destRect[3], props, 12)
+        NumPut("int", destRect[2] + destRect[4], props, 16)
+    }
+    if (srcRect != "") {
+        flags |= 0x02 ; DWM_TNP_RECTSOURCE
+        NumPut("int", srcRect[1], props, 20)
+        NumPut("int", srcRect[2], props, 24)
+        NumPut("int", srcRect[1] + srcRect[3], props, 28)
+        NumPut("int", srcRect[2] + srcRect[4], props, 32)
+    }
+    if (alpha != "") {
+        flags |= 0x04 ; DWM_TNP_OPACITY
+        NumPut("char", alpha, props, 36)
+    }
+    if (visible != "") {
+        flags |= 0x08 ; DWM_TNP_VISIBLE
+        NumPut("int", visible ? 1 : 0, props, 40)
+    }
+    if (clientOnly != "") {
+        flags |= 0x10 ; DWM_TNP_SOURCECLIENTAREAONLY
+        NumPut("int", clientOnly ? 1 : 0, props, 44)
+    }
+    if (flags) {
+        NumPut("uint", flags, props, 0)
+        DllCall("Dwmapi\DwmUpdateThumbnailProperties", "ptr", thumbId, "ptr", props)
+    }
+}

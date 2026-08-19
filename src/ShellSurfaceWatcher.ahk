@@ -189,22 +189,7 @@ RenderTaskbarWave() {
     
     ; See the struct layout note in UpdateCarousel. rcSource IS written here, so
     ; DWM_TNP_RECTSOURCE (0x02) is correct.
-    props := Buffer(48, 0)
-    NumPut("uint", 0x01 | 0x02 | 0x04 | 0x08 | 0x10, props, 0)
-    NumPut("int", 0, props, 4)
-    NumPut("int", 0, props, 8)
-    NumPut("int", size, props, 12)
-    NumPut("int", size, props, 16)
-
-    NumPut("int", srcX, props, 20)
-    NumPut("int", srcY, props, 24)
-    NumPut("int", srcX + srcW, props, 28)
-    NumPut("int", srcY + srcH, props, 32)
-
-    NumPut("char", 255, props, 36)
-    NumPut("int", 1, props, 40)
-
-    DllCall("Dwmapi\DwmUpdateThumbnailProperties", "ptr", TaskbarWaveThumb, "ptr", props)
+    RS_UpdateDwmThumbnail(TaskbarWaveThumb, [0, 0, size, size], [srcX, srcY, srcW, srcH], 255, true, true)
 }
 
 global StartMenuBlurGui := ""
