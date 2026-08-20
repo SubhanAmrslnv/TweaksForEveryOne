@@ -812,6 +812,7 @@ global LastNonModifierKeyTime := 0
 UpdateKeyboardHook() {
     global SparkHook, SparkTypingEnabled, MicKillSwitchEnabled, SpotlightEnabled, SmoothCaretEnabled, TypingSoundsEnabled
     SparkHook.OnKeyDown := OnObservedKeyDown
+    SparkHook.KeyOpt("{All}", "+N")
     if (SparkTypingEnabled || MicKillSwitchEnabled || SpotlightEnabled || SmoothCaretEnabled || TypingSoundsEnabled) {
         try SparkHook.Start()
     } else {
