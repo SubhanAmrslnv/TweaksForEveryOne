@@ -1,0 +1,6 @@
+g := Gui()
+g.SetFont("s20", "Segoe UI")
+g.Add("Text", "w100 h50", Chr(0x2600) Chr(0xFE0F))
+g.Add("Text", "w100 h50", Chr(0x26C5) Chr(0xFE0F))
+g.Show()
+Sleep(2000)

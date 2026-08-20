@@ -147,6 +147,11 @@ LoadSettings() {
     TaskbarScrollEnabled := IniStr("memory", "taskbarscroll", "1") = "1"
     QuickFolderJumpEnabled := IniStr("memory", "quickfolder", "1") = "1"
     PlainPasteEnabled := IniStr("memory", "plainpaste", "1") = "1"
+    MorphingPasteEnabled := IniStr("memory", "morphingpaste", "1") = "1"
+    ClipboardAppendEnabled := IniStr("memory", "clipboardappend", "1") = "1"
+    SmoothCaretEnabled := IniStr("mouse", "smoothcaret", "1") = "1"
+    TypingSoundsEnabled := IniStr("mouse", "typingsounds", "1") = "1"
+    CopyFeedbackEnabled := IniStr("mouse", "copyfeedback", "1") = "1"
     SmartCapsEnabled := IniStr("memory", "smartcaps", "1") = "1"
     SmartCapsAction := IniPick("memory", "smartcaps_act", CAPS_ACTIONS, "Escape")
     ParallaxEnabled := IniStr("memory", "parallax", "1") = "1"
@@ -265,6 +270,11 @@ WriteSettings() {
     PutIni(TaskbarScrollEnabled ? 1 : 0, "memory", "taskbarscroll")
     PutIni(QuickFolderJumpEnabled ? 1 : 0, "memory", "quickfolder")
     PutIni(PlainPasteEnabled ? 1 : 0, "memory", "plainpaste")
+    PutIni(MorphingPasteEnabled ? 1 : 0, "memory", "morphingpaste")
+    PutIni(ClipboardAppendEnabled ? 1 : 0, "memory", "clipboardappend")
+    PutIni(SmoothCaretEnabled ? 1 : 0, "mouse", "smoothcaret")
+    PutIni(TypingSoundsEnabled ? 1 : 0, "mouse", "typingsounds")
+    PutIni(CopyFeedbackEnabled ? 1 : 0, "mouse", "copyfeedback")
     PutIni(SmartCapsEnabled ? 1 : 0, "memory", "smartcaps")
     PutIni(SmartCapsAction, "memory", "smartcaps_act")
     PutIni(ParallaxEnabled ? 1 : 0, "memory", "parallax")

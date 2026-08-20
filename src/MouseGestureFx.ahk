@@ -622,17 +622,20 @@ SparkCallback(idx, dt, now) {
         return false
         
     t := now - r.Start
-    if (t > 400) {
+    if (t > 200) {
         r.Active := false
         RS_SetAlpha(r.Gui.Hwnd, "Off", RS_PRI_ANIM)
         r.Gui.Hide()
         return false
     }
     
-    r.vy += 0.2 
+    r.vy += 0.4
     r.x += r.vx
     r.y += r.vy
-    alpha := Round(200 * (1 - (t / 400)))
+    
+    p := t / 200
+    ease := 1 - (1 - p)**3
+    alpha := Round(80 * (1 - ease))
     
     RS_SetAlpha(r.Gui.Hwnd, alpha, RS_PRI_ANIM)
     RS_SetPos(r.Gui.Hwnd, r.x, r.y, -1, -1, RS_PRI_ANIM)
@@ -693,4 +696,235 @@ MotionBlurCallback(dt, now) {
     RS_SetAlpha(MotionBlurGui.Hwnd, Round(Abs(MotionBlurScrollSpeed) * 3), RS_PRI_ANIM)
     RS_SetPos(MotionBlurGui.Hwnd, x, y, w, h, RS_PRI_ANIM)
     return true
+}
+
+; ====== Clipboard Feedback ======
+global ClipAnimGui := ""
+
+TriggerCopyFeedback(isDouble := false) {
+    if !InitClipGui("44AAFF")
+        return
+    PlayAcousticSound("vacuum")
+    RunClipAnim(-30, isDouble ? 250 : 200)
+}
+
+TriggerCutFeedback() {
+    if !InitClipGui("FF4444")
+        return
+    PlayAcousticSound("snip")
+    RunClipAnim(30, 200)
+}
+
+TriggerPasteFeedback() {
+    if !InitClipGui("44FF44")
+        return
+    PlayAcousticSound("stamp")
+    RunClipAnim(0, 300, true)
+}
+
+InitClipGui(color) {
+    global ClipAnimGui
+    if (!ClipAnimGui) {
+        ClipAnimGui := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
+    }
+    ClipAnimGui.BackColor := color
+    return true
+}
+
+RunClipAnim(yDir, duration, expand := false) {
+    global ClipAnimGui
+    CaretGetPos(&cx, &cy)
+    if (!cx)
+        MouseGetPos(&cx, &cy)
+        
+    ClipAnimGui.Show("NA x-1000 y-1000 w16 h16")
+    start := QPC()
+    animKey := "ClipAnim_" . ClipAnimGui.Hwnd
+    
+    Step(dt, now) {
+        t := now - start
+        if (t > duration) {
+            RS_SetAlpha(ClipAnimGui.Hwnd, "Off", RS_PRI_ANIM)
+            ClipAnimGui.Hide()
+            return false
+        }
+        
+        p := t / duration
+        ease := 1 - (1 - p) ** 3
+        
+        yOff := yDir * ease
+        size := expand ? Round(16 + 10 * ease) : Round(16 - 8 * ease)
+        if expand {
+            WinSetRegion("0-0 w" size " h" size " r8-8", ClipAnimGui.Hwnd)
+            RS_SetPos(ClipAnimGui.Hwnd, cx - size//2, cy - size//2 + yOff, size, size, RS_PRI_ANIM)
+            RS_SetAlpha(ClipAnimGui.Hwnd, Round(150 * (1 - p)), RS_PRI_ANIM)
+        } else {
+            WinSetRegion("0-0 w" size " h" size " r" (size//2) "-" (size//2), ClipAnimGui.Hwnd)
+            RS_SetPos(ClipAnimGui.Hwnd, cx - size//2, cy - size//2 + yOff, size, size, RS_PRI_ANIM)
+            RS_SetAlpha(ClipAnimGui.Hwnd, Round(200 * (1 - p)), RS_PRI_ANIM)
+        }
+        return true
+    }
+    RegisterAnimation(animKey, Step)
+}
+
+; ====== Acoustic Keystrokes (MIDI) ======
+global hMidiOut := 0
+
+InitMidi() {
+    global hMidiOut
+    if !hMidiOut
+        DllCall("winmm.dll\midiOutOpen", "ptr*", &hMidiOut, "uint", 0, "ptr", 0, "ptr", 0, "uint", 0)
+}
+
+PlayAcousticSound(type) {
+    global TypingSoundsEnabled, hMidiOut
+    if (!TypingSoundsEnabled)
+        return
+    if !hMidiOut
+        InitMidi()
+    if !hMidiOut
+        return
+
+    note := 0
+    vel := 80
+    
+    if (type == "normal") {
+        note := 76 ; Woodblock
+        vel := 60
+    } else if (type == "structural") {
+        note := 37 ; Rimshot
+        vel := 75
+    } else if (type == "operator") {
+        note := 42 ; Closed Hi-Hat
+        vel := 50
+    } else if (type == "space") {
+        note := 35 ; Acoustic Bass Drum
+        vel := 65
+    } else if (type == "enter") {
+        note := 36 ; Bass Drum 1
+        vel := 100
+    } else if (type == "vacuum" || type == "snip") {
+        note := 29 ; Scratch Push
+        vel := 90
+    } else if (type == "stamp") {
+        note := 28 ; Slap
+        vel := 90
+    } else if (type == "backspace") {
+        note := 39 ; Hand Clap (softened by vel)
+        vel := 40
+    }
+    
+    if note {
+        msg := 0x99 | (note << 8) | (vel << 16)
+        DllCall("winmm.dll\midiOutShortMsg", "ptr", hMidiOut, "uint", msg)
+    }
+}
+
+; ====== Smooth Gliding Caret & Word Pop ======
+global SmoothCaretGui := ""
+global LastCaretX := 0, LastCaretY := 0
+global CaretVelX := 0, CaretVelY := 0
+
+UpdateSmoothCaret() {
+    global SmoothCaretEnabled, SmoothCaretGui, LastCaretX, LastCaretY, CaretVelX, CaretVelY
+    if (!SmoothCaretEnabled)
+        return
+        
+    if !CaretGetPos(&cx, &cy)
+        return
+        
+    if (!SmoothCaretGui) {
+        SmoothCaretGui := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
+        SmoothCaretGui.BackColor := "0078D7"
+        LastCaretX := cx
+        LastCaretY := cy
+    }
+    
+    distX := Abs(cx - LastCaretX)
+    distY := Abs(cy - LastCaretY)
+    
+    ; If moved too far (new line or clicked elsewhere), warp immediately
+    if (distX > 200 || distY > 40) {
+        LastCaretX := cx
+        LastCaretY := cy
+        CaretVelX := 0
+        CaretVelY := 0
+    }
+    
+    SmoothCaretGui.Show("NA x-1000 y-1000 w2 h20")
+    WinSetRegion("0-0 w2 h20 E", SmoothCaretGui.Hwnd)
+    
+    animKey := "SmoothCaret_" . SmoothCaretGui.Hwnd
+    
+    Step(dt, now) {
+        if !CaretGetPos(&tx, &ty) {
+            RS_SetAlpha(SmoothCaretGui.Hwnd, "Off", RS_PRI_ANIM)
+            SmoothCaretGui.Hide()
+            return false
+        }
+        
+        dx := tx - LastCaretX
+        dy := ty - LastCaretY
+        
+        steps := dt / 15
+        CaretVelX += dx * 0.4 * steps
+        CaretVelY += dy * 0.4 * steps
+        CaretVelX *= Exp(-0.5 * steps)
+        CaretVelY *= Exp(-0.5 * steps)
+        
+        LastCaretX += CaretVelX * steps
+        LastCaretY += CaretVelY * steps
+        
+        if (Abs(dx) < 1 && Abs(dy) < 1 && Abs(CaretVelX) < 1 && Abs(CaretVelY) < 1) {
+            LastCaretX := tx
+            LastCaretY := ty
+            RS_SetPos(SmoothCaretGui.Hwnd, Round(LastCaretX), Round(LastCaretY), 2, 20, RS_PRI_ANIM)
+            RS_SetAlpha(SmoothCaretGui.Hwnd, 200, RS_PRI_ANIM)
+            return false
+        }
+        
+        stretch := 1 + Abs(CaretVelX) * 0.05
+        w := Round(2 * stretch)
+        
+        RS_SetPos(SmoothCaretGui.Hwnd, Round(LastCaretX), Round(LastCaretY), w, 20, RS_PRI_ANIM)
+        RS_SetAlpha(SmoothCaretGui.Hwnd, 200, RS_PRI_ANIM)
+        return true
+    }
+    RegisterAnimation(animKey, Step)
+}
+
+WordPop() {
+    global SmoothCaretEnabled
+    if (!SmoothCaretEnabled)
+        return
+    CaretGetPos(&cx, &cy)
+    if (!cx)
+        return
+        
+    g := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
+    g.BackColor := "0078D7"
+    g.Show("NA x-1000 y-1000 w10 h20")
+    WinSetRegion("0-0 w10 h20 r4-4", g.Hwnd)
+    
+    animKey := "WordPop_" . g.Hwnd
+    start := QPC()
+    
+    Step(dt, now) {
+        t := now - start
+        if (t > 150) {
+            RS_SetAlpha(g.Hwnd, "Off", RS_PRI_ANIM)
+            g.Destroy()
+            return false
+        }
+        
+        p := t / 150
+        alpha := Round(100 * (1 - p))
+        size := 10 + 15 * p
+        
+        RS_SetPos(g.Hwnd, cx - size//2, cy, size, 20, RS_PRI_ANIM)
+        RS_SetAlpha(g.Hwnd, alpha, RS_PRI_ANIM)
+        return true
+    }
+    RegisterAnimation(animKey, Step)
 }

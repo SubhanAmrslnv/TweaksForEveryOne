@@ -57,7 +57,7 @@ BuildWin() {
     global BlackHoleMinimizeEnabled, MomentumTiltEnabled, FocusDepthEnabled
     global CurtainDropEnabled, SparkTypingEnabled, CarouselAltTabEnabled, MotionBlurScrollEnabled
     global TaskbarWaveEnabled, CustomClockEnabled, ClockLocation, ClockUnits, ClockAnchor, ClockWeatherEnabled, StartMenuBlurEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled, CursorYawnEnabled, ShatterEnabled, LightsaberSeamEnabled
-    global RestoreEnabled, BreathingEnabled, PulseEnabled, OpenAnim, FlyMinimizeEnabled, RollUpEnabled, TrayMinimizeEnabled, BossKeyEnabled, AltDragEnabled, TaskbarScrollEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, SmartCapsEnabled, SmartCapsAction, ParallaxEnabled, EP_Style, EP_IconSize, PrivacyBlurEnabled
+    global RestoreEnabled, BreathingEnabled, PulseEnabled, OpenAnim, FlyMinimizeEnabled, RollUpEnabled, TrayMinimizeEnabled, BossKeyEnabled, AltDragEnabled, TaskbarScrollEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, MorphingPasteEnabled, ClipboardAppendEnabled, SmoothCaretEnabled, TypingSoundsEnabled, CopyFeedbackEnabled, SmartCapsEnabled, SmartCapsAction, ParallaxEnabled, EP_Style, EP_IconSize, PrivacyBlurEnabled
     global NAV, SEL, SELF, FG
 
     dark := IsDark()
@@ -240,6 +240,12 @@ BuildWin() {
     Sub(pg, CW, cSub, "Holding CapsLock for 0.4s toggles CapsLock. Tapping it sends Esc or Backspace.", "xm y+8")
     
     C["plainpaste"] := Box(pg, CW, FG, "Plain-Text Paste (Ctrl+Alt+V)", PlainPasteEnabled, "xm y+16")
+    
+    C["morphingpaste"] := Box(pg, CW, FG, "Morphing Paste (Ctrl+V + Scroll)", MorphingPasteEnabled, "xm y+16")
+    Sub(pg, CW, cSub, "Scroll wheel while holding Ctrl+V to cycle casing (camelCase, snake_case).", "xm y+8")
+
+    C["clipboardappend"] := Box(pg, CW, FG, "Clipboard Append (Double Ctrl+C)", ClipboardAppendEnabled, "xm y+16")
+    Sub(pg, CW, cSub, "Double-tap Ctrl+C to append selection to the current clipboard content.", "xm y+8")
 
     ; Editable at last: this drives MediaCore's fallback list, which decides
     ; which programs are never dimmed by breathing or the monitor dimmer, and
@@ -281,6 +287,15 @@ BuildWin() {
     
     C["spark"] := Box(pg, CW, FG, "Spark Typing (Neon caret trail)", SparkTypingEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Spawns neon sparks behind the text caret while typing.", "xm y+8")
+
+    C["typingsounds"] := Box(pg, CW, FG, "Acoustic Keystrokes (MIDI)", TypingSoundsEnabled, "xm y+16")
+    Sub(pg, CW, cSub, "Zero-latency physical typing sounds matching structural characters and typing velocity.", "xm y+8")
+
+    C["smoothcaret"] := Box(pg, CW, FG, "Smooth Gliding Caret & Word Pop", SmoothCaretEnabled, "xm y+16")
+    Sub(pg, CW, cSub, "Premium macOS-style gliding caret interpolation and word completion feedback.", "xm y+8")
+
+    C["copyfeedback"] := Box(pg, CW, FG, "Minimal Copy/Paste Feedback", CopyFeedbackEnabled, "xm y+16")
+    Sub(pg, CW, cSub, "Subtle visual vacuum collection and paste glow indicators.", "xm y+8")
 
     C["motionblur"] := Box(pg, CW, FG, "Motion Blur Scroll (Vertical speed blur)", MotionBlurScrollEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Applies a cinematic vertical motion blur to text when scrolling fast.", "xm y+8")
@@ -361,6 +376,7 @@ BuildWin() {
     Sub(pg, 250, cSub, "TrayEdge covers nothing", "x+12 yp+3")
     Sub(pg, CW, cSub, "Clock puts it right beside the clock, but then it covers the tray buttons in", "xm y+8")
     Sub(pg, CW, cSub, "that space. TrayEdge sits left of every tray icon and hides nothing at all.", "xm y+2")
+    Sub(pg, CW, cSub, "TaskbarLeft places it at the far left of the taskbar.", "xm y+2")
 
     TuneRow(pg, "clockFont", FG, cSub)
 
@@ -700,6 +716,11 @@ ApplyUi(writeBack := false) {
         FocusDepthEnabled := C["focusdepth"].Value
         CurtainDropEnabled := C["curtain"].Value
         SparkTypingEnabled := C["spark"].Value
+        TypingSoundsEnabled := C["typingsounds"].Value
+        SmoothCaretEnabled := C["smoothcaret"].Value
+        CopyFeedbackEnabled := C["copyfeedback"].Value
+        MorphingPasteEnabled := C["morphingpaste"].Value
+        ClipboardAppendEnabled := C["clipboardappend"].Value
         CarouselAltTabEnabled := C["carousel"].Value
         MotionBlurScrollEnabled := C["motionblur"].Value
         TaskbarWaveEnabled := C["twave"].Value

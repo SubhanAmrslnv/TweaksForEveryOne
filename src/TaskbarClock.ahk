@@ -199,16 +199,16 @@ IsTaskbarDark() {
 ; Static control.
 WeatherIcon(code) {
     if (code = 0)
-        return Chr(0x2600)                      ; clear
+        return Chr(0x2600) Chr(0xFE0F)          ; clear
     if (code = 1 || code = 2)
-        return Chr(0x26C5)                      ; mainly clear / partly cloudy
+        return Chr(0x26C5) Chr(0xFE0F)          ; mainly clear / partly cloudy
     if (code >= 95)
-        return Chr(0x26C8)                      ; thunderstorm
+        return Chr(0x26C8) Chr(0xFE0F)          ; thunderstorm
     if ((code >= 71 && code <= 77) || code = 85 || code = 86)
-        return Chr(0x2744)                      ; snow
+        return Chr(0x2744) Chr(0xFE0F)          ; snow
     if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82))
-        return Chr(0x2614)                      ; drizzle / rain / showers
-    return Chr(0x2601)                          ; overcast, fog, anything else
+        return Chr(0x2614) Chr(0xFE0F)          ; drizzle / rain / showers
+    return Chr(0x2601) Chr(0xFE0F)              ; overcast, fog, anything else
 }
 
 ; The colour of the taskbar itself, so the block can be painted to disappear into
@@ -299,19 +299,6 @@ UpdateCustomClockImpl() {
         return
     }
 
-    anchorLeft := ResolveClockAnchor(tbHwnd)
-    if (!anchorLeft) {
-        ; Nothing to measure against, so no way to prove we are not covering
-        ; something. Draw nothing rather than guess.
-        HideCustomClock()
-        return
-    }
-
-    ; Widths from the font, not from a setting. The content is known - five glyphs
-    ; of time over ten of date, at most six of temperature - so a width control
-    ; could only ever be used to make it wrong. Segoe UI digits run about 0.6 em and
-    ; em is about 4/3 of the point size at 96 dpi, which is what makes this follow
-    ; the text size and the DPI instead of assuming either.
     fpt := Integer(Tune("clockFont"))
     glyph := fpt * 4 / 3 * 0.6
     dateW := Ceil(glyph * 10) + CLOCK_GAP
@@ -321,10 +308,22 @@ UpdateCustomClockImpl() {
     ; merely unconfigured look like a feature that was broken.
     tempW := ClockWeatherEnabled ? Ceil(glyph * 9) + CLOCK_GAP : 0
     boxW := CLOCK_GAP + tempW + dateW + CLOCK_GAP
-    x := anchorLeft - CLOCK_GAP - boxW
-    if (x < tx) {
-        HideCustomClock()
-        return
+
+    if (ClockAnchor == "TaskbarLeft") {
+        x := tx + CLOCK_GAP
+    } else {
+        anchorLeft := ResolveClockAnchor(tbHwnd)
+        if (!anchorLeft) {
+            ; Nothing to measure against, so no way to prove we are not covering
+            ; something. Draw nothing rather than guess.
+            HideCustomClock()
+            return
+        }
+        x := anchorLeft - CLOCK_GAP - boxW
+        if (x < tx) {
+            HideCustomClock()
+            return
+        }
     }
 
     ; Two stacked lines, centred vertically by hand: the taskbar can be 30 px or

@@ -364,6 +364,271 @@ GetActiveExplorerPath() {
 }
 #HotIf
 
+; ====== Morphing Paste ======
+global MorphMode := false
+global MorphFormats := ["camelCase", "PascalCase", "snake_case", "kebab-case", "UPPERCASE"]
+global MorphIndex := 1
+global MorphOriginalText := ""
+
+; Morphing is an IDENTIFIER-renaming gesture, not a general clipboard transform:
+; every format concatenates words and drops the delimiters, so anything that is
+; not already a symbol comes back corrupted - measured, "C:\Program Files\x.exe"
+; morphed to "c:\programFiles\x.exe" and "SELECT * FROM t" to "select*FromT".
+; A payload longer than this is far more likely to be prose or a document than a
+; name, so the gesture declines and pastes normally instead.
+;
+; It is the cost gate too. One morph of a 54,000 char clipboard measured 16 ms,
+; and it runs again on every wheel notch.
+global MORPH_MAX_LEN := 512
+; Display only. The preview label and its region are sized from the string, and
+; an unbounded one asked for a 432,020 px wide region (measured, from a 48,000
+; char morph). The clipboard still receives the full text.
+global MORPH_PREVIEW_CHARS := 60
+
+MorphString(text, format) {
+    ; Two splits, not one. The lower->Upper pattern alone leaves an acronym glued
+    ; to the word after it - "HTTPServerError" came out as "httpserverError" -
+    ; because there is no lowercase letter before the "S" that starts "Server".
+    ; This first pattern breaks a capital run before its LAST capital, which is
+    ; the one that belongs to the next word.
+    text := RegExReplace(text, "([A-Z]+)([A-Z][a-z])", "$1 $2")
+    text := RegExReplace(text, "([a-z])([A-Z])", "$1 $2")
+    ; \s, not just a space: a tab or a newline is a word break as much as an
+    ; underscore is. Without it a multi-line clipboard morphed to one "word" with
+    ; its CRLFs still embedded, so the paste inserted line breaks mid-identifier.
+    raw := StrSplit(RegExReplace(Trim(text), "[_\-\s]+", " "), " ")
+    ; Empty words are dropped here rather than tolerated in the loop below. A
+    ; leading delimiter put "" at index 1, so the first REAL word landed at index
+    ; 2 and took the not-first branch: camelCase("_leading") returned "Leading".
+    words := []
+    for word in raw {
+        if (word != "")
+            words.Push(word)
+    }
+    out := ""
+    for i, word in words {
+        if (format == "camelCase")
+            out .= (i == 1) ? StrLower(word) : StrTitle(StrLower(word))
+        else if (format == "PascalCase")
+            out .= StrTitle(StrLower(word))
+        else if (format == "snake_case")
+            out .= (i == 1 ? "" : "_") . StrLower(word)
+        else if (format == "kebab-case")
+            out .= (i == 1 ? "" : "-") . StrLower(word)
+        else if (format == "UPPERCASE")
+            out .= (i == 1 ? "" : " ") . StrUpper(word)
+    }
+    return out
+}
+
+; One line, whitespace flattened and length capped - see MORPH_PREVIEW_CHARS.
+MorphPreviewLine(s) {
+    global MORPH_PREVIEW_CHARS
+    s := StrReplace(s, "`r", " ")
+    s := StrReplace(s, "`n", " ")
+    s := StrReplace(s, "`t", " ")
+    if (StrLen(s) > MORPH_PREVIEW_CHARS)
+        s := SubStr(s, 1, MORPH_PREVIEW_CHARS - 3) . "..."
+    return s
+}
+
+ShowMorphPreview(fmt, result) {
+    global MorphGui, MorphText, MORPH_PREVIEW_CHARS
+    line := MorphPreviewLine(result)
+    text := fmt . "`n" . line
+
+    if (!IsSet(MorphGui) || !MorphGui) {
+        MorphGui := Gui("-Caption +ToolWindow +AlwaysOnTop -DPIScale +E0x20")
+        MorphGui.BackColor := "1E1E1E"
+        MorphGui.SetFont("s11 cWhite", "Segoe UI")
+        ; No "h24" on the label. It carries TWO lines - the format name and the
+        ; result - and a fixed 24 px Static clipped the second one away no matter
+        ; what AutoSize did to the window around it. The size is set explicitly
+        ; below instead, on every call, because a Static does not re-fit itself
+        ; when its .Text is replaced with something longer.
+        MorphText := MorphGui.AddText("vMorphText x10 y5 BackgroundTrans", text)
+        RS_SetAlpha(MorphGui.Hwnd, 0, RS_PRI_ANIM)
+        RS_Commit()
+    }
+    MorphText.Text := text
+
+    ; ~9 px per character at s11 Segoe UI, and both lines are already capped, so
+    ; the widest this can ask for is bounded.
+    cols := Max(StrLen(fmt), StrLen(line))
+    tw := cols * 9
+    th := 44
+    MorphText.Move(, , tw, th)
+    winW := tw + 20
+    winH := th + 10
+
+    CaretGetPos(&cx, &cy)
+    if (!cx)
+        MouseGetPos(&cx, &cy)
+
+    ; Region before Show, and Show straight to the final coordinates. The first
+    ; version showed at AHK's default position and let the queued RS_SetPos drag
+    ; the window over on the next frame, which is one frame of a hard-edged panel
+    ; sitting in the middle of the screen - the same flash the Spotlight launcher
+    ; used to have.
+    RS_SetRegion(MorphGui.Hwnd, "0-0 w" winW " h" winH " r8-8", RS_PRI_ANIM)
+    RS_Commit()
+    MorphGui.Show("NoActivate x" (cx + 10) " y" (cy - winH - 10) " w" winW " h" winH)
+    try WinSetAlwaysOnTop(1, MorphGui.Hwnd)
+    FadeGui(MorphGui, 220)
+}
+
+HideMorphPreview() {
+    global MorphGui
+    if (IsSet(MorphGui) && MorphGui) {
+        guiObj := MorphGui
+        MorphGui := ""
+        FadeGui(guiObj, 0, 0, true)
+    }
+}
+
+#HotIf MorphingPasteEnabled
+$^v:: {
+    global MorphMode, MorphIndex, MorphOriginalText, MorphFormats, MORPH_MAX_LEN
+    ; #MaxThreadsPerHotkey is 2 process-wide (WindowTweaks.ahk), and both KeyWaits
+    ; below are interruptible - verified with a harness: a second Ctrl+V reaches
+    ; this handler while the first thread is still parked, and key auto-repeat
+    ; alone is enough to produce one. Two threads then ran ClipboardAll() ->
+    ; overwrite -> restore against each other, and whichever snapshotted second
+    ; restored the MORPHED text as the user's clipboard, permanently.
+    static busy := false
+    if busy
+        return
+    busy := true
+    try {
+        ; Released inside 150 ms: an ordinary paste, and the gesture stays out of
+        ; the way. Note this does mean a paste lands on key-up rather than
+        ; key-down, so hold-to-repeat paste is not available while this is on.
+        if KeyWait("v", "T0.15") {
+            Send("^{v}")
+            TriggerPasteFeedback()
+            return
+        }
+
+        MorphOriginalText := A_Clipboard
+        ; "" covers both an empty clipboard and an image/binary one, which
+        ; A_Clipboard reports as blank. The length cap covers the other end - see
+        ; MORPH_MAX_LEN. Either way, fall back to the paste the user asked for
+        ; rather than swallowing the keypress.
+        if (MorphOriginalText == "" || StrLen(MorphOriginalText) > MORPH_MAX_LEN) {
+            KeyWait("v")
+            Send("^{v}")
+            TriggerPasteFeedback()
+            return
+        }
+
+        MorphMode := true
+        MorphIndex := 1
+        ShowMorphPreview(MorphFormats[MorphIndex], MorphString(MorphOriginalText, MorphFormats[MorphIndex]))
+        KeyWait("v")
+        MorphMode := false
+        HideMorphPreview()
+
+        ClipSaved := ClipboardAll()
+        A_Clipboard := MorphString(MorphOriginalText, MorphFormats[MorphIndex])
+        Send("^{v}")
+        Sleep(100)
+        A_Clipboard := ClipSaved
+        ClipSaved := ""
+        TriggerPasteFeedback()
+    } finally {
+        ; Both of these unconditionally, on every exit path including a throw:
+        ; MorphMode left true would leave the wheel hijacked for good, and busy
+        ; left true would kill Ctrl+V for the rest of the session.
+        MorphMode := false
+        busy := false
+    }
+}
+#HotIf
+
+#HotIf MorphMode
+WheelUp:: {
+    global MorphIndex, MorphFormats, MorphOriginalText
+    MorphIndex--
+    if (MorphIndex < 1)
+        MorphIndex := MorphFormats.Length
+    ShowMorphPreview(MorphFormats[MorphIndex], MorphString(MorphOriginalText, MorphFormats[MorphIndex]))
+}
+WheelDown:: {
+    global MorphIndex, MorphFormats, MorphOriginalText
+    MorphIndex++
+    if (MorphIndex > MorphFormats.Length)
+        MorphIndex := 1
+    ShowMorphPreview(MorphFormats[MorphIndex], MorphString(MorphOriginalText, MorphFormats[MorphIndex]))
+}
+#HotIf
+
+; ====== Clipboard Append & Copy Feedback ======
+global OldClipboard := ""
+global LastCtrlC_Time := 0
+
+; CLIP_BACKUP_MS must stay LONGER than CLIP_DOUBLE_MS, and that ordering is the
+; whole mechanism rather than a safety margin.
+;
+; A single Ctrl+C arms the backup timer, and the timer is what records "the
+; clipboard as it stands" so that a later double-tap has something to append TO.
+; A double-tap therefore has to CANCEL that timer while it is still pending,
+; which only works if the backup fires after the double-tap window has closed.
+;
+; With the original 200 ms against a 400 ms window, a tap gap anywhere in 200-400
+; ms found the timer already fired: OldClipboard had been overwritten with the
+; selection just copied, and the append produced "B\r\nB" instead of "A\r\nB".
+global CLIP_DOUBLE_MS := 400
+global CLIP_BACKUP_MS := 450
+
+SaveOldClipboard() {
+    global OldClipboard
+    OldClipboard := A_Clipboard
+}
+
+#HotIf ClipboardAppendEnabled || CopyFeedbackEnabled
+~^c:: {
+    global OldClipboard, LastCtrlC_Time, CLIP_DOUBLE_MS, CLIP_BACKUP_MS
+    ; Same re-entrancy hazard as $^v, and worse here because the body is a
+    ; read-modify-write of the clipboard wrapped around an interruptible Sleep:
+    ; a third Ctrl+C landing inside that Sleep appended the same selection twice.
+    static busy := false
+    if busy
+        return
+    busy := true
+    isDouble := false
+    try {
+        ; LastCtrlC_Time has to be non-zero as well as recent. A_TickCount is time
+        ; since boot, so within the first 400 ms of a session "A_TickCount - 0" is
+        ; itself inside the window and the very first Ctrl+C read as a double-tap.
+        if (ClipboardAppendEnabled && LastCtrlC_Time && A_TickCount - LastCtrlC_Time < CLIP_DOUBLE_MS) {
+            SetTimer(SaveOldClipboard, 0)     ; verified: deletes a pending one-shot
+            Sleep(100)                        ; let the app finish putting the copy on the clipboard
+            if (OldClipboard != "" && A_Clipboard != "") {
+                A_Clipboard := OldClipboard "`r`n" A_Clipboard
+                isDouble := true
+                OldClipboard := A_Clipboard
+            }
+            LastCtrlC_Time := 0
+        } else {
+            LastCtrlC_Time := A_TickCount
+            SetTimer(SaveOldClipboard, -CLIP_BACKUP_MS)
+        }
+    } finally {
+        busy := false
+    }
+
+    ; Unconditional: the flag test lives inside the feedback function now, so the
+    ; one place that can tear its overlay down is also the place that decides
+    ; whether to build it.
+    TriggerCopyFeedback(isDouble)
+}
+
+~^x:: {
+    TriggerCutFeedback()
+}
+#HotIf
+
+
 #HotIf SmartCapsEnabled
 *CapsLock:: {
     global SmartCapsAction
@@ -545,14 +810,9 @@ global SparkHook := InputHook("V L0")
 global LastNonModifierKeyTime := 0
 
 UpdateKeyboardHook() {
-    global SparkHook, SparkTypingEnabled, MicKillSwitchEnabled, SpotlightEnabled
-    ; Idempotent, and the reason the wiring lives here rather than beside the
-    ; declaration: assigning the same Func again is free, while a top-level
-    ; assignment would have to sit after OnObservedKeyDown is parsed.
+    global SparkHook, SparkTypingEnabled, MicKillSwitchEnabled, SpotlightEnabled, SmoothCaretEnabled, TypingSoundsEnabled
     SparkHook.OnKeyDown := OnObservedKeyDown
-    ; Braces are required. AHK v2 has a Try/Catch/Else form, so a bare
-    ; "try X" followed by "else" binds the else to the try, not to the if.
-    if (SparkTypingEnabled || MicKillSwitchEnabled || SpotlightEnabled) {
+    if (SparkTypingEnabled || MicKillSwitchEnabled || SpotlightEnabled || SmoothCaretEnabled || TypingSoundsEnabled) {
         try SparkHook.Start()
     } else {
         try SparkHook.Stop()
@@ -569,4 +829,25 @@ OnObservedKeyDown(ih, vk, sc) {
         LastNonModifierKeyTime := A_TickCount
 
     OnTypingSpark(ih, vk, sc)
+    
+    if SmoothCaretEnabled
+        UpdateSmoothCaret()
+        
+    if TypingSoundsEnabled {
+        name := GetKeyName(Format("vk{:x}", vk))
+        if (name = "Space") {
+            PlayAcousticSound("space")
+            WordPop()
+        } else if (name = "Enter" || name = "NumpadEnter") {
+            PlayAcousticSound("enter")
+        } else if (name = "Backspace") {
+            PlayAcousticSound("backspace")
+        } else if ((vk >= 0x41 && vk <= 0x5A) || (vk >= 0x30 && vk <= 0x39)) {
+            PlayAcousticSound("normal")
+        } else if (name = "[" || name = "]" || name = "(" || name = ")" || name = "{" || name = "}") {
+            PlayAcousticSound("structural")
+        } else if !(vk = 0x10 || vk = 0x11 || vk = 0x12 || vk = 0x5B || vk = 0x5C || vk = 0xA0 || vk = 0xA1 || vk = 0xA2 || vk = 0xA3 || vk = 0xA4 || vk = 0xA5) {
+            PlayAcousticSound("operator")
+        }
+    }
 }

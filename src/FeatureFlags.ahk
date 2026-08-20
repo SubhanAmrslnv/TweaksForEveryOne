@@ -137,6 +137,11 @@ global AltDragEnabled := true
 global TaskbarScrollEnabled := true
 global QuickFolderJumpEnabled := true
 global PlainPasteEnabled := true
+global MorphingPasteEnabled := true
+global ClipboardAppendEnabled := true
+global SmoothCaretEnabled := true
+global TypingSoundsEnabled := true
+global CopyFeedbackEnabled := true
 global SmartCapsEnabled := true
 global SmartCapsAction := "Escape"
 global SmartTaskbarEnabled := false
@@ -189,7 +194,7 @@ global CLOCK_UNITS    := ["Celsius", "Fahrenheit"]
 ; "corrupted tray" complaint all over again. So "TrayEdge", which covers nothing,
 ; is the default, and "Clock" is there for anyone who wants strict adjacency and
 ; accepts the cost.
-global CLOCK_ANCHORS  := ["TrayEdge", "Clock"]
+global CLOCK_ANCHORS  := ["TrayEdge", "Clock", "TaskbarLeft"]
 
 ; Accent colour for the active-window border. Not in TUNE_SPEC because it is not
 ; a number; "auto" follows the Windows accent colour.
