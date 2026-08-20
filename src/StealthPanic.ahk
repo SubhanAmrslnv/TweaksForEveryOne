@@ -176,7 +176,7 @@ EnterStealthPanic() {
     for hwnd in hwnds {
         cls := ""
         try cls := WinGetClass(hwnd)
-        if (!cls || IsShellSurface(hwnd, cls))
+        if (!cls || cls = "Progman" || cls = "WorkerW" || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd")
             continue
         pid := 0
         try pid := WinGetPID(hwnd)
