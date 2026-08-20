@@ -6,7 +6,12 @@ code**, only design.
 
 ## Read this first
 
-**This is an early scaffold. It does not build, and if it built it would not manage windows.**
+**This is an early scaffold. It does not manage windows.**
+
+The two configure-time build failures are fixed (see *Commands*), and the pure core now has a
+headless test suite and a structural checker. It has **not** been compiled or run on a real
+Linux box from this tree - there is no C++ toolchain on the machine the fixes were written on -
+so treat "builds" as "the known blockers are removed", not as "verified".
 
 `linux/docs/IMPLEMENTATION-AUDIT.md` is the authority on what exists — it was written against
 the files and lists every gap. `ARCHITECTURE.md`, `FEATURE-MATRIX.md` and
@@ -15,8 +20,9 @@ revision of the audit claimed the port was complete across the board; that is wh
 is at the top of every one of those files now. **Do not add a completion claim to any doc here
 without pointing at the code that backs it.**
 
-Roughly: ~1,100 lines here, of which the platform layer is 0% implemented, against ~11,600
-lines of shipping AutoHotkey on the Windows side.
+Roughly: ~2,300 lines here, of which the platform layer is still 0% implemented, against
+~11,400 lines of shipping AutoHotkey on the Windows side. The gap is not going to close by
+writing more `core/`; it closes by implementing `X11Adapter`.
 
 ## What this is
 
@@ -41,17 +47,33 @@ chmod +x install.sh && ./install.sh
 ./build/tweaksd
 ```
 
-**The build fails at configure time, for two independent reasons.** Both are in
-`CMakeLists.txt`:
+```bash
+# Headless tests and the structural checks. Neither needs a display.
+ctest --test-dir build --output-on-failure
+./scripts/check-layers.sh
+```
 
-1. `add_library(TweakUI src/ui/SettingsWindow.cpp src/ui/TrayIcon.cpp)` — `src/ui/` is an
-   empty directory. CMake reports "Cannot find source file".
+**The two configure-time failures are fixed.** For the record, so nobody reintroduces them:
+
+1. `add_library(TweakUI src/ui/SettingsWindow.cpp src/ui/TrayIcon.cpp)` named sources in a
+   directory that does not exist. The target is **deleted** until those files are real; do not
+   paper over it with `file(GLOB)`, which would silently produce an empty library. `Qt6 Gui`
+   and `Widgets` went with it, so a headless box needs only Core/DBus/Network.
 2. `find_package(XCB REQUIRED COMPONENTS ...)` — CMake ships no `FindXCB.cmake` and this
-   repository provides none. Use `pkg_check_modules` via `FindPkgConfig` instead, or vendor a
-   finder into `cmake/`.
+   repository provides none. Now `pkg_check_modules(XCB REQUIRED IMPORTED_TARGET ...)`. Do not
+   vendor a finder into `cmake/`: every xcb component ships a `.pc`, and a hand-written finder
+   would drift.
 
-There is no test runner, no linter and no CI. `find linux -type d -empty` is the fastest
-honest status check in the tree.
+Two more that would have bitten immediately afterwards: `std::thread` with no
+`Threads::Threads` (fails to link on several toolchains, not on all), and
+`install(DIRECTORY ... DESTINATION ~/...)`, which creates a literal `~` directory because
+**CMake does not expand `~`**.
+
+There is no CI and no linter. `./scripts/check-layers.sh` is the closest thing to
+`scripts\Check-Split.ps1` on the Windows side, and `ls linux/src/ui linux/src/platform/kde
+linux/config` is still the fastest honest status check - those three are ABSENT, not empty, and
+git does not track empty directories, so `find -type d -empty` returns nothing and reads as a
+pass.
 
 ## Architecture
 
@@ -62,16 +84,20 @@ geometry and physics live. A backend applies state; it never computes it.
 | Path | Role |
 | --- | --- |
 | `src/core/AnimationScheduler.*` | One thread, one frame loop, keyed callbacks. `registerAnimation(key, cb)` overwrites the same key; `cb` returns `false` to retire. Calls `RenderQueue::flush()` once per frame. |
-| `src/core/RenderQueue.*` | The only thing that talks to a `PlatformAdapter`. Coalesces per window, arbitrates by priority, batches. |
+| `src/core/RenderQueue.*` | The only thing that talks to a `PlatformAdapter`. Coalesces per window, arbitrates by priority **per attribute**, batches. Four attributes: geometry, alpha, region, z-order. Caches the last applied alpha and region so a redundant write is skipped - and records it **only when the adapter call succeeded**. |
 | `src/core/SnapGeometry.*` | `computeSnap(moving, obstacles, workArea, &dx, &dy)`. Each axis resolved independently. |
-| `src/core/Physics.*` | Glide math. Currently a friction model — see *Defects*. |
+| `src/core/Physics.*` | Glide math: quintic ease-out, settle bump, `glideDurationMs`, `predictThrow`, and `parallaxAlpha` (the drag opacity ramp). Pure, no state. |
+| `src/core/VelocitySampler.*` | Drag velocity in **px/s**, smoothed by a time constant rather than a per-frame ratio, plus the drag-opacity smoothing. This is the input `predictThrow()` had no caller for. |
+| `src/core/Geometry.h` | `Rect`, `Point`, `RegionSpec`, `ZOrderSpec`, `AlphaCommand`. Depends on nothing, so `RenderQueue` can use a rectangle without depending on snapping. |
 | `src/core/WeatherFetcher.*` | `QNetworkAccessManager` + `QTimer`, emits `weatherUpdated`. |
 | `src/core/PlatformAdapter.h` | The backend contract. `init`, `pollEvents`, `setWindowGeometry`, `setWindowAlpha`, `setWindowState`, `beginBatch`/`commitBatch`, `getWindowState`, `getActiveWindow`. |
 | `src/platform/x11/` | XCB backend. Stubs only. |
 | `src/platform/wayland/` | `DBusDaemon` — the Wayland strategy is D-Bus, not direct protocol access. |
 | `src/platform/gnome/` | GNOME Shell extension (GJS, ESM). Panel clock only. |
 | `src/platform/kde/` | KWin script. **Empty.** |
-| `src/ui/` | Qt6 settings window + SNI tray. **Empty.** |
+| `src/ui/` | Qt6 settings window + SNI tray. **Absent** - the CMake target that named it is deleted until the sources exist. |
+| `tests/` | Headless unit tests for the pure core, plus `FakeAdapter`. No Catch2/FetchContent: the tree must configure with no network. |
+| `scripts/check-layers.sh` | Structural checks - the `Check-Split.ps1` analogue. Wired into `ctest`. |
 | `config/` | Default configuration. **Empty** — tuning values are hardcoded today. |
 
 Namespaces: `TweakCore` for `core/`, `TweakPlatform` for backends.
@@ -85,7 +111,7 @@ The three pillars were ported deliberately; keep them aligned when changing eith
 | `RenderQueue` | `src/RenderCore.ahk` | Nothing outside this layer mutates window state. Priority arbitration is **per flush**: `Ambient(0) < Animation(1) < Drag(2) < User(3)` mirrors `RS_PRI_*` 10/20/30/40. |
 | `AnimationScheduler` | `src/AnimationScheduler.ahk` | Produce from every callback, then flush **exactly once** per frame. A callback that always returns `true` is a polling monitor and does not belong here. |
 | `SnapGeometry` | `src/SnapCore.ahk` | Pure geometry, no side effects. Axes resolve independently. |
-| `Physics` | `Glide()` in `src/WindowTweaks.ahk` | Parameterise on elapsed time, never on frame count. Velocity is **pixels per second** on both sides, and the throw gain (0.18 px per px/s at unit gain) is shared. |
+| `Physics`, `VelocitySampler` | `Glide()` in `src/DropPlacement.ahk`, `ParallaxAlpha()`/`SampleVelocityStep()` in `src/DragPipeline.ahk` | Parameterise on elapsed time, never on frame count. Velocity is **pixels per second** on both sides, and the throw gain (0.18 px per px/s at unit gain) is shared. Smoothing constants are **time constants** (`1 - exp(-dt/tau)`), never per-frame ratios. |
 
 Both of the invariants that used to be listed here as "not yet expressible" now are, and both
 were ported from the Windows side rather than invented:
@@ -141,13 +167,14 @@ as unsupported, not hacked in.
 
 | Target | Session | Path |
 | --- | --- | --- |
-| **Linux Mint / Cinnamon** | X11 | Native backend, no extension needed. This is the simplest path to a working feature and the best place to start. |
+| **Linux Mint / Cinnamon** | X11 | Native backend for window management, no extension needed. This is the simplest path to a working feature and the best place to start. A **Cinnamon extension is still required** for anything panel-level or actor-level (the taskbar clock, the taskbar wave) - a plain X11 client cannot reach those either. |
 | **GNOME** | Wayland by default | Extension at `~/.local/share/gnome-shell/extensions/tweakforeveryone@linux.local`, enabled with `gnome-extensions enable`. |
-| **KDE Neon / Plasma 6** | Wayland by default | KWin script at `~/.local/share/kwin/scripts/tweakforeveryone`. **No script exists**, so this path is entirely inert. |
+| **KDE Neon / Plasma 6** | Wayland by default | Nothing exists, so this path is entirely inert - and what has to be written is a **compiled KWin plugin**, not the JS script these docs keep promising: the KWin scripting API cannot receive D-Bus signals at all, so a script could never have driven anything from the daemon. |
 
-**Plasma 6 renamed the tooling.** `install.sh` and `INSTALLATION.md` still use the Plasma 5
-names `kpackagetool5` and `qdbus`; on KDE Neon (Plasma 6) these are `kpackagetool6` and
-`qdbus6`. Support both, or detect.
+**Plasma 6 renamed the tooling.** On KDE Neon (Plasma 6) `kpackagetool5` and `qdbus` are
+`kpackagetool6` and `qdbus6`. `install.sh` now detects both and falls back to the 5 names;
+`INSTALLATION.md` already documented the correct ones. Keep the detection rather than picking a
+side - one script has to serve Plasma 5 and 6.
 
 ## Traps
 
@@ -192,8 +219,38 @@ because the fix is easy to undo by accident. Full list with reproduction in
   perpendicular-overlap gating (every obstacle contributed to both axes, so a window at the top
   of the screen could snap to a window at the bottom), speed-adaptive reach, and edge hysteresis.
   Obstacle collection is still missing - nothing enumerates windows.
-- **`main.cpp` never constructs a `PlatformAdapter`**, so nothing can reach a window.
-- **`install.sh`'s KDE branch aborts** under `set -e`, copying from an empty directory.
+- ~~**`main.cpp` never constructs a `PlatformAdapter`**~~ **Fixed.** It now detects the session,
+  builds the adapter, the `RenderQueue` and the `AnimationScheduler`, installs a log sink and
+  tears them down in order. It still cannot reach a window, because `X11Adapter` is stubs.
+- ~~**`install.sh`'s KDE branch aborts** under `set -e`~~ **Fixed.** Guarded on the payload
+  existing, and it now detects `kpackagetool6`/`qdbus6` with a fallback to the Plasma 5 names.
+- ~~**Composed alpha never emitted a neutral state.**~~ **Fixed.** `recomposeAlphaLocked` queued
+  `composed()` - `1.0f` - for a neutral record, where Windows emits "Off". Fully opaque and
+  still layered is not the same thing: on X11 it leaves `_NET_WM_WINDOW_OPACITY` set to
+  `0xFFFFFFFF` rather than deleting the property. Alpha is now `AlphaCommand{off, value}`, and
+  `off` is emitted only on the **structural** test - base 1.0 and zero layers - never because a
+  product rounded to 1.0.
+- ~~**A throwing animation callback killed the daemon.**~~ **Fixed.** The callback ran
+  unguarded on a `std::thread` with no handler above it, so one exception called
+  `std::terminate`. It is now caught, the animation is retired, and the failure is logged once
+  per second per key through an injected sink - emitted **outside** the mutex, since a sink that
+  touched the scheduler would otherwise deadlock.
+- ~~**`RenderQueue::flush()` held its mutex across every adapter call.**~~ **Fixed** by the
+  swap-and-release pattern from `RS_Apply`: the pending map is swapped for a fresh one under the
+  lock and applied outside it, so a backend blocking on the X server or the session bus can no
+  longer stall every producer in the process.
+- **`X11Adapter` is still entirely stubs.** Every mutator returns `false` and every query
+  returns empty - honestly, which is the change: `supports()` reports nothing as available, and
+  `getWindowState()` no longer returns a hardcoded 800x600 rect that looked like a real answer.
+- **KDE needs a compiled KWin plugin, not a script.** The KWin JS scripting API cannot receive
+  D-Bus signals at all, so the `src/platform/kde/` script this tree keeps promising could never
+  have worked. Budget a `kwin_add_plugin` target.
+- **Cinnamon needs its own extension.** Mint/Cinnamon is the primary X11 target, but panel-level
+  and actor-level features - the taskbar clock, the taskbar wave - are not reachable from a
+  plain X11 client either. That is a fourth backend surface nothing in these docs accounts for.
+- **The D-Bus contract is one-way.** `DBusDaemon` declares signals only, daemon to extension, so
+  an extension has no way to report window lists, hotkey presses or drag events back. Every
+  Wayland feature is blocked by construction, not merely unwritten.
 
 ## Docs
 

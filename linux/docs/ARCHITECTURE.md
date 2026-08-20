@@ -61,9 +61,9 @@ To prevent individual features from fighting over window state (e.g., Ice Glide 
 
 ## Single Source of Truth
 
-- **Snapping Math**: Lives entirely in `src/core/SnapGeometry`. Neither the X11 backend nor the GNOME extension calculates distances or intersections. *(Holds today, though the implementation is missing `cornerBoost` and nothing yet supplies it with obstacles.)*
-- **Physics**: Velocity and easing logic belong in `src/core/Physics`. *(**Does not hold today.** The shipped code is a kinetic-friction resting-position model, not the duration-based lerp the Windows engine uses, and its `quinticEaseOut` helper is mathematically wrong — it returns 2.0 at t=0. See `IMPLEMENTATION-AUDIT.md`.)*
-- **Configuration**: A single tuning registry should handle validation, defaults, bounds, and loading. *(**Not implemented.** No parser exists and `config/` is empty; constants such as `friction = 500.0f` are hardcoded.)*
+- **Snapping Math**: Lives entirely in `src/core/SnapGeometry`. Neither the X11 backend nor the GNOME extension calculates distances or intersections. *(Holds today. `cornerBoost`, like-edge alignment, perpendicular-overlap gating, speed-adaptive reach and edge hysteresis are all present and aligned with `SnapCore.ahk`. What is still missing is the obstacle vector: `PlatformAdapter::listWindows()` now exists to supply it, but no backend implements it yet.)*
+- **Physics**: Velocity and easing logic belong in `src/core/Physics`. *(**Holds today.** The kinetic-friction model was replaced with the Windows pair — `predictThrow()` (ballistic, px/s, tunable gain) plus `glideDurationMs()` — and the `quinticEaseOut` sign was corrected. `parallaxAlpha()` and `VelocitySampler` now live here too, so the drag ramp and the px/s smoothing are shared rather than written out at each call site. All four are pinned by `tests/test_physics.cpp`.)*
+- **Configuration**: A single tuning registry should handle validation, defaults, bounds, and loading. *(**Not implemented.** No parser exists and `config/` does not exist. Tunables are still literals at their use sites — the frame period, the glide floor and slope, the throw gain, the settle normaliser, the snap backward-penalty and speed reference. The `friction = 500.0f` this used to cite is gone with the model that held it.)*
 - **D-Bus contract**: Currently duplicated between `platform/wayland/DBusDaemon.h` and `platform/gnome/extension.js`, with a third copy implied for KWin. This violates the rule above and should be generated from one definition.
 
 ## Display Server Strategy
@@ -76,7 +76,7 @@ Wayland clients are sandboxed. Therefore, the daemon acts as a central **D-Bus S
 - The GNOME Shell Extension or KWin Script subscribes to the D-Bus signals.
 - When the daemon calculates that Window `0x123` needs to move to `[X, Y]` with opacity `0.8`, it broadcasts this via D-Bus.
 - The compositor extension applies the change natively.
-- Conversely, when the user presses a feature-toggle hotkey such as `Shift+Alt+S` on Wayland, the compositor extension intercepts it and signals the daemon. (Hotkeys follow the Windows scheme: `Ctrl+Alt+<key>` acts on the active window, `Shift+Alt+<key>` toggles a feature.)
+- Conversely, when the user presses a hotkey such as `Shift+Alt+S` on Wayland, the compositor extension intercepts it and signals the daemon. (Hotkeys follow the Windows scheme, which is **one chord and no second tier**: every global hotkey is `Shift+Alt+<key>`, whether it acts on the active window or toggles a feature. The sole exception is `Ctrl+Alt+V` for plain-text paste, which shadows the paste it replaces. The `Ctrl+Alt` tier described here previously was removed on the Windows side in commit `3dadac4`, because it kept colliding with Windows' own reserved chords; `docs/HOTKEYS.md` in the repository root is the source of truth.)
 
 ### What actually runs on this path today
 

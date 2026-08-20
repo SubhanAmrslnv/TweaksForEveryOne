@@ -2,8 +2,24 @@
 
 namespace TweakCore {
 
+// Both ends of the drag-parallax ramp, in the units the settings carry them in:
+// speeds in px/s, opacity as a fraction. Defaults match the Windows TUNE_SPEC
+// rows parallaxfrom / parallaxfull / parallaxmin (40 px/s, 600 px/s, 24%).
+struct ParallaxRamp {
+    float fromPxPerSec = 40.0f;
+    float fullPxPerSec = 600.0f;
+    float minAlpha     = 0.24f;
+};
+
+struct ParallaxResult {
+    float alpha;   // 0..1, what to install as the "drag" layer's factor
+    float fade;    // 0..1, how far along the ramp we are; 0 means "not engaged"
+};
+
 // Motion curves and glide maths. Mirrors Glide() in the Windows
-// src/WindowTweaks.ahk; keep the two aligned when changing either.
+// src/DropPlacement.ahk (it lived in src/WindowTweaks.ahk until the module split
+// reduced that file to a 111-line entry point); keep the two aligned when
+// changing either.
 //
 // Invariant shared with the Windows side: parameterise on ELAPSED TIME, never on
 // frame count. Every function here takes a normalised t in [0, 1] computed from
@@ -49,6 +65,22 @@ public:
     // and the one both sides now use.
     static void predictThrow(int startX, int startY, float velXPerSec, float velYPerSec,
                              float throwGain, float maxPx, int& outX, int& outY);
+
+    // Drag parallax: how opaque a window should be while it is moving this fast.
+    //
+    // A RAMP BETWEEN TWO SPEEDS, not a gain per px/s, and that distinction is the
+    // whole point. The Windows original was `alpha = 255 - speed * 0.06`, which
+    // returned 225/255 at an ordinary 400 px/s drag - 88% opacity, which nobody
+    // can see - and reached its floor only past 3200 px/s. It was doing exactly
+    // what it said and was still indistinguishable from switched off. Naming both
+    // ends makes "invisible at a normal drag speed" a value on the settings page
+    // instead of a constant buried on a 16 ms path.
+    //
+    // `fade` is returned alongside the alpha because the caller needs to know
+    // whether the ramp is engaged AT ALL, which it used to infer from a magic
+    // `alpha < 250` - a test that threw away the first five units of every fade
+    // and left the layer installed on the way out.
+    static ParallaxResult parallaxAlpha(float speedPxPerSec, const ParallaxRamp& ramp);
 };
 
 } // namespace TweakCore

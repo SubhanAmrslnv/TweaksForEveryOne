@@ -2,11 +2,12 @@
 
 #include <vector>
 
-namespace TweakCore {
+// Rect moved to Geometry.h so RenderQueue can use it without depending on the
+// snapping module. Included rather than redeclared: two definitions of a
+// geometry type is exactly the drift this tree is trying to stop.
+#include "Geometry.h"
 
-struct Rect {
-    int x, y, width, height;
-};
+namespace TweakCore {
 
 // Tunables for one snap resolution. Mirrors the snap rows of TUNE_SPEC on the
 // Windows side; there is no config parser here yet, so a caller fills this in.

@@ -32,7 +32,7 @@ Desktop columns name the three supported targets: **Cinnamon** (Linux Mint, X11)
 | **Maximize/Restore** | Toggle maximized state | Native WM state (`_NET_WM_STATE_MAXIMIZED_VERT`, etc). | ✅ | ✅ | ✅ | ✅ | ✅ | Planned |
 | **Undo Layout** | Revert last change | Daemon state history. | ✅ | ✅ | ✅ | ✅ | ✅ | Planned |
 | **Restore All** | Unhide, unroll, unghost | Daemon recovery loop. | ✅ | 🔌 | ✅ | 🔌 | 🔌 | Planned |
-| **Transparency Wheel**| `Alt+Ctrl+Wheel` sets opacity | `_NET_WM_WINDOW_OPACITY` on X11, specific extension APIs on Wayland. | ✅ | 🔌 | ✅ | 🔌 | 🔌 | Planned |
+| **Transparency Wheel**| `Shift+Alt+Wheel` sets opacity | `_NET_WM_WINDOW_OPACITY` on X11, specific extension APIs on Wayland. | ✅ | 🔌 | ✅ | 🔌 | 🔌 | Planned |
 | **Focus/Cinema Mode** | Dims background windows | Set opacity on all other windows or draw overlay behind active window. | ✅ | 🔌 | ✅ | 🔌 | 🔌 | Planned |
 | **Smart Caps Lock** | Tap=Esc, Hold=Caps | `evdev` / `uinput` interception (requires `input` group or compositor help). | ✅ | 🔌 | ✅ | 🔌 | 🔌 | Planned |
 | **Global Text Paste** | Paste as plain text | Clipboard manager interception. | ✅ | ✅ | ✅ | ✅ | ✅ | Planned |

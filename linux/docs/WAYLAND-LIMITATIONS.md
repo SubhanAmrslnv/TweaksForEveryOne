@@ -18,9 +18,12 @@ The Linux implementation uses a **Core Daemon + Extension** model:
 2. **X11 Backend**: For X11 (including Cinnamon and Xorg sessions of KDE/GNOME), the daemon communicates directly with the X server (via XCB) to manipulate windows and intercept input.
 3. **Wayland Extensions**: For Wayland, the daemon communicates over D-Bus with a compositor-specific extension (e.g., GNOME Shell Extension, KWin Script). The extension provides the raw window handles, acts as the "renderer" by applying the geometries computed by the daemon, and intercepts global hotkeys.
 
-Hotkeys follow the Windows scheme: `Ctrl+Alt+<key>` acts on the active window, `Shift+Alt+<key>`
-toggles a feature. On Wayland the compositor extension must grab these and signal the daemon,
-since a client cannot grab keys for itself.
+Hotkeys follow the Windows scheme, which is **one chord and no second tier**: every global
+hotkey is `Shift+Alt+<key>`, whether it acts on the active window or toggles a feature. The sole
+exception is `Ctrl+Alt+V` for plain-text paste. (A `Ctrl+Alt` tier was described here previously;
+it was removed on the Windows side in commit `3dadac4` and no longer exists. `docs/HOTKEYS.md`
+in the repository root is the source of truth.) On Wayland the compositor extension must grab
+these and signal the daemon, since a client cannot grab keys for itself.
 
 The bus is `org.tweakforeveryone.Daemon` at `/org/tweakforeveryone/Daemon`, carrying
 `SetWindowGeometry(u,i,i,i,i)`, `SetWindowAlpha(u,d)` and `WeatherUpdated(s)`. Only the last of

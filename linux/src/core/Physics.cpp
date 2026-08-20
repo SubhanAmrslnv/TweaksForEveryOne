@@ -38,4 +38,20 @@ void Physics::predictThrow(int startX, int startY, float velXPerSec, float velYP
     outY = startY + static_cast<int>(dy);
 }
 
+ParallaxResult Physics::parallaxAlpha(float speedPxPerSec, const ParallaxRamp& ramp) {
+    float lo = ramp.fromPxPerSec;
+    float hi = ramp.fullPxPerSec;
+    // Degenerate or inverted ends would divide by zero or run the ramp
+    // backwards. Windows guards this the same way rather than validating at the
+    // settings layer, because both values are independently typed by the user.
+    if (hi <= lo) {
+        hi = lo + 1.0f;
+    }
+
+    const float fade = std::clamp((speedPxPerSec - lo) / (hi - lo), 0.0f, 1.0f);
+    const float minA = std::clamp(ramp.minAlpha, 0.0f, 1.0f);
+
+    return ParallaxResult{ 1.0f - fade * (1.0f - minA), fade };
+}
+
 } // namespace TweakCore

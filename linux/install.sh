@@ -61,12 +61,30 @@ if ask_yes_no "[?] Do you want to install the Wayland extension for your Desktop
         echo "[*] Enabling GNOME Shell Extension..."
         gnome-extensions enable tweakforeveryone@linux.local || echo "[!] Could not enable extension automatically. Please enable it in GNOME Extensions."
     elif [[ "$XDG_CURRENT_DESKTOP" == *"KDE"* ]]; then
-        echo "[*] Installing KDE KWin Script..."
-        SCRIPT_DIR="$HOME/.local/share/kwin/scripts/tweakforeveryone"
-        mkdir -p "$SCRIPT_DIR"
-        cp -r src/platform/kde/* "$SCRIPT_DIR/"
-        kpackagetool5 --type=KWin/Script -u "$SCRIPT_DIR" || kpackagetool5 --type=KWin/Script -i "$SCRIPT_DIR"
-        qdbus org.kde.KWin /KWin reconfigure || true
+        # Guarded, because this branch used to abort the whole script.
+        # `cp -r src/platform/kde/*` on a directory that does not exist returns
+        # non-zero, and `set -e` at the top turns that into an exit - so every
+        # KDE user lost the autostart step too, for a script that was never
+        # written. Skip loudly instead.
+        if [ -d src/platform/kde ] && [ -n "$(ls -A src/platform/kde 2>/dev/null)" ]; then
+            echo "[*] Installing KDE KWin Script..."
+            SCRIPT_DIR="$HOME/.local/share/kwin/scripts/tweakforeveryone"
+            mkdir -p "$SCRIPT_DIR"
+            cp -r src/platform/kde/* "$SCRIPT_DIR/"
+
+            # Plasma 6 renamed both tools. KDE Neon has kpackagetool6/qdbus6 and
+            # NOT the 5 names; a Plasma 5 system is the other way round. Detect
+            # rather than pick, so one script serves both.
+            if command -v kpackagetool6 &> /dev/null; then KPKG=kpackagetool6; else KPKG=kpackagetool5; fi
+            if command -v qdbus6 &> /dev/null; then QDBUS=qdbus6; else QDBUS=qdbus; fi
+
+            "$KPKG" --type=KWin/Script -u "$SCRIPT_DIR" || "$KPKG" --type=KWin/Script -i "$SCRIPT_DIR"
+            "$QDBUS" org.kde.KWin /KWin reconfigure || true
+        else
+            echo "[!] No KWin script exists yet (src/platform/kde is absent or empty)."
+            echo "[!] KDE Wayland is therefore unsupported for now - log in to a"
+            echo "[!] 'Plasma (X11)' session, which needs no compositor extension."
+        fi
     else
         echo "[*] DE is neither GNOME nor KDE, assuming X11/Cinnamon (No Wayland extension needed)."
     fi
