@@ -175,6 +175,8 @@ global ProximityGhostEnabled := true
 global ShakeFindEnabled := true
 global GhostWindows := Map()
 global MediaFallbackList := "youtube.exe; spotify.exe; vlc.exe; potplayermini64.exe; mpc-hc64.exe; netflix.exe"
+global GameModeActive := false
+global GameModeSuspendedFeatures := Map()
 
 ; The single source of truth for every enumerated setting: LoadSettings validates
 ; against these lists and BuildWin populates its dropdowns from the same ones, so

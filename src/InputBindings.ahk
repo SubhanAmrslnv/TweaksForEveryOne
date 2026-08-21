@@ -30,7 +30,7 @@
 ; layout keys.
 
 ; =========================================================== Hotkeys ===========================================================
-#HotIf
+#HotIf !GameModeActive
 +!w::ShowWin()
 +!s::ToggleSnap()
 +!m::ToggleMemory()
@@ -40,19 +40,22 @@
 +!e::ToggleBreathing()
 +!Esc::ToggleBossKey()
 
-#HotIf AlwaysOnBottomEnabled
+#HotIf !GameModeActive && (AlwaysOnBottomEnabled
+)
 +!b::ToggleAlwaysOnBottom()
-#HotIf
+#HotIf !GameModeActive
 
-#HotIf ProximityGhostEnabled
+#HotIf !GameModeActive && (ProximityGhostEnabled
+)
 +!g::ToggleGhostMode()
-#HotIf
+#HotIf !GameModeActive
 *+!WheelUp::ChangeTransparency(1)
 *+!WheelDown::ChangeTransparency(-1)
 
-#HotIf LivePipEnabled
+#HotIf !GameModeActive && (LivePipEnabled
+)
 +!p::TogglePiP()
-#HotIf
+#HotIf !GameModeActive
 
 ; ----- Window layout ---------------------------------------------------------
 ; Shift+Alt+<key> acts on the active window. 
@@ -93,21 +96,24 @@
 ; Each of these already has a gesture; the gesture stays. A double-tap has to be
 ; disambiguated from two ordinary shortcuts (see IsDoublePress below), so an
 ; unambiguous key for the same action is worth having.
-#HotIf SpotlightEnabled
+#HotIf !GameModeActive && (SpotlightEnabled
+)
 +!l::ToggleSpotlight()
-#HotIf
+#HotIf !GameModeActive
 
-#HotIf MicKillSwitchEnabled
+#HotIf !GameModeActive && (MicKillSwitchEnabled
+)
 +!a:: {
     state := ToggleDefaultMic()
     if (state != -1)
         ShowMicOSD(state)
 }
-#HotIf
+#HotIf !GameModeActive
 
-#HotIf QuickLookEnabled && WinActive("ahk_class CabinetWClass")
+#HotIf !GameModeActive && (QuickLookEnabled && WinActive("ahk_class CabinetWClass")
+)
 +!q::ToggleQuickLook()
-#HotIf
+#HotIf !GameModeActive
 
 ; ----- Feature toggles: Shift+Alt+<key> ---------------------------------
 ; These seven flags already persist to settings.ini; before this the only way to
@@ -119,6 +125,11 @@
 +!t::ToggleSmartTaskbar()
 +!j::ToggleMagneticGroups()
 +!Space::ToggleGrabPan()
+
+#HotIf
++!F12::ToggleGameMode()
+
+#HotIf !GameModeActive
 
 ; Helper function for modifier key double presses (ignores auto-repeat)
 IsDoublePress(Timeout := 400) {
@@ -152,7 +163,8 @@ IsDoublePress(Timeout := 400) {
     return true
 }
 
-#HotIf MicKillSwitchEnabled
+#HotIf !GameModeActive && (MicKillSwitchEnabled
+)
 ~LAlt up:: {
     if IsDoublePress() {
         state := ToggleDefaultMic()
@@ -160,9 +172,10 @@ IsDoublePress(Timeout := 400) {
             ShowMicOSD(state)
     }
 }
-#HotIf
+#HotIf !GameModeActive
 
-#HotIf SpotlightEnabled
+#HotIf !GameModeActive && (SpotlightEnabled
+)
 ~LCtrl up:: {
     if IsDoublePress()
         ToggleSpotlight()
@@ -171,29 +184,32 @@ IsDoublePress(Timeout := 400) {
     if IsDoublePress()
         ToggleSpotlight()
 }
-#HotIf
+#HotIf !GameModeActive
 
 IsSpotlightActive() {
     global SpotlightGui
     return SpotlightGui && WinActive("ahk_id " SpotlightGui.Hwnd)
 }
 
-#HotIf IsSpotlightActive()
+#HotIf !GameModeActive && (IsSpotlightActive()
+)
 Enter::SpotlightExecute()
 Escape::ToggleSpotlight()
-#HotIf
+#HotIf !GameModeActive
 
-#HotIf QuickLookEnabled && WinActive("ahk_class CabinetWClass") && !IsTypingInExplorer()
+#HotIf !GameModeActive && (QuickLookEnabled && WinActive("ahk_class CabinetWClass") && !IsTypingInExplorer()
+)
 Space:: {
     if !ToggleQuickLook()
         Send "{Space}"
 }
-#HotIf
+#HotIf !GameModeActive
 
-#HotIf QuickLookEnabled && QuickLookGui && WinActive("ahk_id " QuickLookGui.Hwnd)
+#HotIf !GameModeActive && (QuickLookEnabled && QuickLookGui && WinActive("ahk_id " QuickLookGui.Hwnd)
+)
 Space::CloseQuickLook()
 Escape::CloseQuickLook()
-#HotIf
+#HotIf !GameModeActive
 
 IsMouseOverTaskbar() {
     MouseGetPos(,, &hwnd)
@@ -207,7 +223,8 @@ IsMouseOverTaskbar() {
     return (cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd")
 }
 
-#HotIf TaskbarScrollEnabled && IsMouseOverTaskbar()
+#HotIf !GameModeActive && (TaskbarScrollEnabled && IsMouseOverTaskbar()
+)
 WheelUp:: {
     if PremiumVolumeOSDEnabled
         ChangeVolumeOSD(1)
@@ -226,9 +243,10 @@ MButton:: {
     else
         Send("{Volume_Mute}")
 }
-#HotIf
+#HotIf !GameModeActive
 
-#HotIf (ElasticScrollEnabled || MotionBlurScrollEnabled) && !IsMouseOverTaskbar()
+#HotIf !GameModeActive && ((ElasticScrollEnabled || MotionBlurScrollEnabled) && !IsMouseOverTaskbar()
+)
 ~WheelUp::
 ~WheelDown:: {
     MouseGetPos(,, &hwnd)
@@ -265,9 +283,10 @@ MButton:: {
         return
     ElasticScroll(hwnd, dir, bx, by)
 }
-#HotIf
+#HotIf !GameModeActive
 
-#HotIf !IsMouseOverTaskbar()
+#HotIf !GameModeActive && (!IsMouseOverTaskbar()
+)
 ~LButton:: {
     global TextMagnifierEnabled, RippleClickEnabled, ElasticDragEnabled
     
@@ -292,7 +311,7 @@ MButton:: {
         SetTimer(CheckElasticDrag, 16)
     }
 }
-#HotIf
+#HotIf !GameModeActive
 
 IsFileDialog(hwnd) {
     if !hwnd
@@ -326,7 +345,8 @@ GetActiveExplorerPath() {
     return ""
 }
 
-#HotIf QuickFolderJumpEnabled && IsFileDialog(WinExist("A"))
+#HotIf !GameModeActive && (QuickFolderJumpEnabled && IsFileDialog(WinExist("A"))
+)
 ^g:: {
     hwnd := WinExist("A")
     path := GetActiveExplorerPath()
@@ -346,9 +366,10 @@ GetActiveExplorerPath() {
             ControlSetText(oldText, "Edit1", hwnd)
     }
 }
-#HotIf
+#HotIf !GameModeActive
 
-#HotIf PlainPasteEnabled
+#HotIf !GameModeActive && (PlainPasteEnabled
+)
 ^!v:: {
     if (A_Clipboard == "")
         return
@@ -362,7 +383,7 @@ GetActiveExplorerPath() {
     A_Clipboard := ClipSaved
     ClipSaved := ""
 }
-#HotIf
+#HotIf !GameModeActive
 
 ; ====== Morphing Paste ======
 global MorphMode := false
@@ -486,7 +507,8 @@ HideMorphPreview() {
     }
 }
 
-#HotIf MorphingPasteEnabled
+#HotIf !GameModeActive && (MorphingPasteEnabled
+)
 $^v:: {
     global MorphMode, MorphIndex, MorphOriginalText, MorphFormats, MORPH_MAX_LEN
     ; #MaxThreadsPerHotkey is 2 process-wide (WindowTweaks.ahk), and both KeyWaits
@@ -543,9 +565,10 @@ $^v:: {
         busy := false
     }
 }
-#HotIf
+#HotIf !GameModeActive
 
-#HotIf MorphMode
+#HotIf !GameModeActive && (MorphMode
+)
 WheelUp:: {
     global MorphIndex, MorphFormats, MorphOriginalText
     MorphIndex--
@@ -560,7 +583,7 @@ WheelDown:: {
         MorphIndex := 1
     ShowMorphPreview(MorphFormats[MorphIndex], MorphString(MorphOriginalText, MorphFormats[MorphIndex]))
 }
-#HotIf
+#HotIf !GameModeActive
 
 ; ====== Clipboard Append & Copy Feedback ======
 global OldClipboard := ""
@@ -585,7 +608,8 @@ SaveOldClipboard() {
     OldClipboard := A_Clipboard
 }
 
-#HotIf ClipboardAppendEnabled || CopyFeedbackEnabled
+#HotIf !GameModeActive && (ClipboardAppendEnabled || CopyFeedbackEnabled
+)
 ~^c:: {
     global OldClipboard, LastCtrlC_Time, CLIP_DOUBLE_MS, CLIP_BACKUP_MS
     ; Same re-entrancy hazard as $^v, and worse here because the body is a
@@ -626,10 +650,11 @@ SaveOldClipboard() {
 ~^x:: {
     TriggerCutFeedback()
 }
-#HotIf
+#HotIf !GameModeActive
 
 
-#HotIf SmartCapsEnabled
+#HotIf !GameModeActive && (SmartCapsEnabled
+)
 *CapsLock:: {
     global SmartCapsAction
     if !KeyWait("CapsLock", "T0.4") {
@@ -642,14 +667,16 @@ SaveOldClipboard() {
             Send("{Blind}{Esc}")
     }
 }
-#HotIf
+#HotIf !GameModeActive
 
-#HotIf AltDragEnabled
+#HotIf !GameModeActive && (AltDragEnabled
+)
 !LButton::AltDragMove()
 !RButton::AltDragResize()
-#HotIf
+#HotIf !GameModeActive
 
-#HotIf (GrabPanEnabled || RollUpEnabled || MiddleClickCloseEnabled) && !IsMouseOverTaskbar()
+#HotIf !GameModeActive && ((GrabPanEnabled || RollUpEnabled || MiddleClickCloseEnabled) && !IsMouseOverTaskbar()
+)
 *MButton:: {
     ; Guard against a second thread starting another pan loop over the same
     ; window: both would Send wheel events and fight over StartX/StartY.
@@ -747,7 +774,7 @@ SaveOldClipboard() {
         Send("{Blind}{MButton}")
     }
 }
-#HotIf
+#HotIf !GameModeActive
 
 ; ====== Global Text Expander ======
 IsExpanderActive(*) {
@@ -852,3 +879,7 @@ OnObservedKeyDown(ih, vk, sc) {
         }
     }
 }
+
+
+
+#HotIf

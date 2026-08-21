@@ -78,6 +78,7 @@
 #Include FxCarousel.ahk
 #Include FxBlackHole.ahk
 #Include FxShatter.ahk
+#Include GameMode.ahk
 
 ; ----- Bolt-on: also runs standalone, so it keeps its own config and GUI -----
 #Include StealthPanic.ahk

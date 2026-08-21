@@ -145,7 +145,7 @@ ToggleGrabPan() {
 ; #HotIf is positional, not scoped, and bleeds across #Include boundaries: a
 ; module that leaves a context open applies it to the first hotkeys of the next
 ; included file. This one is context-free, so it opens and closes bare.
-#HotIf
+#HotIf !GameModeActive
 +!o:: {
     hwnd := WinExist("A")
     if !hwnd

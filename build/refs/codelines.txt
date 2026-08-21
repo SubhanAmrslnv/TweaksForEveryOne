@@ -207,6 +207,7 @@
                 } else {
                 } else if (resizeMask & 2) {
                 } else if (resizeMask & 8) {
+                A_Clipboard := OldClipboard "`r`n" A_Clipboard
                 ActiveAnimations.Delete(key)
                 activeMon := A_Index
                 alpha := 255
@@ -357,6 +358,7 @@
                 info.lastAlpha := targetAlpha
                 intersecting := true
                 isBottomEdge := Abs(my - (wy + wh)) < 20
+                isDouble := true
                 isLeftEdge := Abs(mx - wx) < 20
                 isRightEdge := Abs(mx - (wx + ww)) < 20
                 isTopEdge := Abs(my - wy) < 20
@@ -402,6 +404,7 @@
                 obj.active := true
                 ObjRelease(pDev)
                 okAlpha := true
+                OldClipboard := A_Clipboard
                 onDone()
                 onDone()
                 onLanded()
@@ -654,6 +657,7 @@
             }
             }
             }
+            }
             } catch as e {
             } catch as e {
             } catch as e {
@@ -672,7 +676,6 @@
             } else if (entry.value >= 256) {
             } else if (MC_MeterOk) {
             } else if (now - lastActive > BREATHE_IDLE_MS) {
-            A_Clipboard := OldClipboard "`r`n" A_Clipboard
             action := HotCornerBL
             action := HotCornerBR
             action := HotCornerTL
@@ -725,6 +728,7 @@
             ClipAnimGui.Hide()
             ClockWarnedNoCity := true
             ClosePiP(s)
+            ClosePiP(src)
             ClosePiP(srcHwnd)
             cls := ""
             cls := WinGetClass(hwnd)
@@ -921,6 +925,8 @@
             h := DllCall("FindWindowExW", "ptr", notify, "ptr", 0, "str", cls, "ptr", 0, "ptr")
             h := DllCall("FindWindowExW", "ptr", tbHwnd, "ptr", 0, "str", cls, "ptr", 0, "ptr")
             hdwp := DllCall("BeginDeferWindowPos", "int", list.Length, "ptr")
+            HideCustomClock()
+            HideCustomClock()
             hLines.Push(oTop, oBottom)
             hovered := A_Index
             hVal  := entry.h
@@ -1009,6 +1015,7 @@
             if (mx >= L && mx <= R - 1 && my >= T && my <= B - 1) {
             if (nX != mX || nY != mY) {
             if (obj.active) {
+            if (OldClipboard != "" && A_Clipboard != "") {
             if (pid == ownPid)
             if (pip.HasProp("Interactive") && pip.Interactive)
             if (pip.Hwnd == hwnd) {
@@ -1087,7 +1094,6 @@
             IniWrite(r.y, POS_FILE, key, "y")
             inside := true
             isClickThrough := (WinGetExStyle(hwnd) & 0x20)
-            isDouble := true
             isEdge := false
             isPip := true
             iv := 0
@@ -1097,6 +1103,7 @@
             KeepOnScreen(hwnd, &tx, &ty, &gR, &gB, dragVX, dragVY)
             keys.Push(hwnd)
             KeyWait("MButton")
+            KeyWait("v")
             KnownToasts.Delete(hwnd)
             KnownToasts[hwnd] := true
             L := m.l, T := m.t, R := m.r, B := m.b
@@ -1104,6 +1111,8 @@
             LastCaretX := tx
             LastCaretY := ty
             LastCorner := currentCorner
+            LastCtrlC_Time := 0
+            LastCtrlC_Time := A_TickCount
             lastSample := sampleNow
             lastX := nx, lastY := ny
             lastX := nx, lastY := ny
@@ -1305,6 +1314,10 @@
             return
             return
             return
+            return
+            return
+            return
+            return
             return                     ; neutral, and no record to make neutral
             return ""
             return "Transient"
@@ -1461,9 +1474,9 @@
             RS_SetPos(hwnd, x, destY, -1, -1, RS_PRI_USER)
             RS_SetPos(hwnd, x, y + shrink, w, h - shrink*2, RS_PRI_ANIM)
             RS_SetPos(hwnd, x, y, -1, -1, RS_PRI_USER)
+            RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
+            RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
             RS_SetPos(hwnd, X, Y, W, H, RS_PRI_ANIM)
-            RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
-            RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
             RS_SetPos(SmoothCaretGui.Hwnd, Round(LastCaretX), Round(LastCaretY), 2, 20, RS_PRI_ANIM)
             RS_SetRegion(ActiveBorderGui.Hwnd, rect1 "  " rect2 "  " rect3 "  " rect4, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "", RS_PRI_ANIM)
@@ -1484,6 +1497,8 @@
             sampleNow := QPC()
             score := d
             Send("!{F4}")
+            Send("^{v}")
+            Send("^{v}")
             Send("{Blind}{Backspace}")
             Send("{Blind}{Esc}")
             SetTaskbarAutoHide(shouldHide)
@@ -1494,6 +1509,8 @@
             SetTimer(RenderShakeFind, 0)
             SetTimer(ResetStealthEsc, 0)
             SetTimer(ResetStealthEsc, -StealthPanicTimeout)
+            SetTimer(SaveOldClipboard, 0)     ; verified: deletes a pending one-shot
+            SetTimer(SaveOldClipboard, -CLIP_BACKUP_MS)
             SF_Phase := 2
             SF_TargetSize := 0
             ShakeCount++
@@ -1511,6 +1528,7 @@
             Sleep(10)
             Sleep(10)
             Sleep(10)
+            Sleep(100)                        ; let the app finish putting the copy on the clipboard
             SmartGridGuis.Push(g)
             SmartTaskbarLastState := shouldHide
             SmoothCaretGui.Hide()
@@ -1582,6 +1600,8 @@
             token .= ".exe"
             TriggerBlackHoleMinimize(hwndToMin)
             TriggerCursorYawn()
+            TriggerPasteFeedback()
+            TriggerPasteFeedback()
             try
             try {
             try {
@@ -1643,6 +1663,7 @@
             try WinSetTransparent(alpha, guiObj.Hwnd)
             tx := gx + Clamp(Round(dragVX * GLIDE_THROW * 0.18), -GLIDE_MAX, GLIDE_MAX)
             ty := gy + Clamp(Round(dragVY * GLIDE_THROW * 0.18), -GLIDE_MAX, GLIDE_MAX)
+            UnGhostWindow(hwnd)
             UngroupWindow(DragHwnd)
             UnrollWindow(hwnd, restoredRect)
             v *= f
@@ -1693,6 +1714,7 @@
             WinTargetAlpha[hwnd] := 255
             wmi := ComObjGet("winmgmts:")
             WordPop()
+            words.Push(word)
             wVal  := entry.w
             x := forceX, y := forceY
             x := lParam << 48 >> 48
@@ -1966,8 +1988,13 @@
         }
         }
         }
+        }
+        }
+        }
+        }
         } catch {
         } catch as e {
+        } else {
         } else {
         } else {
         } else {
@@ -2008,6 +2035,8 @@
         action := "None"
         ActiveAnimations.Delete(key)
         ActiveBorderEnabled := C["border"].Value
+        ActiveBorderEnabled := false
+        ActiveBorderEnabled := GameModeSuspendedFeatures["ActiveBorderEnabled"]
         ActiveBorderGui := ""
         ActiveBorderGui := Gui("-Caption +ToolWindow +AlwaysOnTop +LastFound -DPIScale +E0x20")
         ActiveBorderGui.BackColor := (BorderColor = "auto") ? GetAccentColor() : BorderColor
@@ -2030,7 +2059,10 @@
         alpha := Round(255 * (1 - t) ** 2)
         alphas := [Round(peak * 140 / 240), Round(peak * 200 / 240), peak]
         AltDragEnabled := C["altdrag"].Value
+        AltDragEnabled := false
+        AltDragEnabled := GameModeSuspendedFeatures["AltDragEnabled"]
         AlwaysOnBottomEnabled := C["bottom"].Value
+        anchorLeft := ResolveClockAnchor(tbHwnd)
         angle := (dist + CarouselAngleOffset) * angleStep + (PI / 2)
         Anim_Claim(hwnd, "region", animKey, RollDownStep)
         Anim_Claim(hwnd, "region", animKey, RollUpStep)
@@ -2069,9 +2101,13 @@
         BreatheGui.Hide()
         BreatheGui.Show("NA")
         BreathingEnabled := C["breath"].Value
+        BreathingEnabled := false
+        BreathingEnabled := GameModeSuspendedFeatures["BreathingEnabled"]
         BringForwardWindow(newActive)
         buf := Buffer(4, 0)
         buf := Buffer(520, 0)
+        busy := false
+        busy := false
         c := PixelGetColor(px, ty + th // 2)
         c1 := 1.70158
         c1 := 1.70158
@@ -2124,6 +2160,9 @@
         CheckToasts()
         ClipAnimGui := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
         ClipboardAppendEnabled := C["clipboardappend"].Value
+        ClipboardAppendEnabled := false
+        ClipboardAppendEnabled := GameModeSuspendedFeatures["ClipboardAppendEnabled"]
+        ClipSaved := ""
         ClipSaved := ClipboardAll()
         ClockAnchor := C["clockanchor"].Text
         ClockLocation := CleanClockLocation(C["clockloc"].Value)
@@ -2151,12 +2190,16 @@
         contactSide := 0
         contactSide := side
         ContextMenuAnimEnabled := C["contextanim"].Value
+        ContextMenuAnimEnabled := false
+        ContextMenuAnimEnabled := GameModeSuspendedFeatures["ContextMenuAnimEnabled"]
         ControlFocus("Edit1", hwnd)
         ControlGetHwnd("Edit1", hwnd)
         ControlSend("{Enter}", "Edit1", hwnd)
         ControlSetText(path, "Edit1", hwnd)
         CoordMode("Pixel", "Screen")
         CopyFeedbackEnabled := C["copyfeedback"].Value
+        CopyFeedbackEnabled := false
+        CopyFeedbackEnabled := GameModeSuspendedFeatures["CopyFeedbackEnabled"]
         count := g.mons.Length
         cpx := (z.L == 0) ? -15 : ((z.R >= A_ScreenWidth) ? 15 : 0)
         cpy := (z.T == 0) ? -15 : ((z.B >= A_ScreenHeight) ? 15 : 0)
@@ -2180,6 +2223,8 @@
         CurrentDragAlpha := 255
         CurrentDragAlpha := CurrentDragAlpha + (p.alpha - CurrentDragAlpha) * ka
         CursorYawnEnabled := C["cursoryawn"].Value
+        CursorYawnEnabled := false
+        CursorYawnEnabled := GameModeSuspendedFeatures["CursorYawnEnabled"]
         curSqX := Round(sqX * decay * osc)
         curSqY := Round(sqY * decay * osc)
         CurtainDropEnabled := C["curtain"].Value
@@ -2319,12 +2364,16 @@
         ElasticBaseX := startX
         ElasticBaseY := startY
         ElasticDragEnabled := C["elasticdrag"].Value
+        ElasticDragEnabled := false
+        ElasticDragEnabled := GameModeSuspendedFeatures["ElasticDragEnabled"]
         ElasticEdgeStates[hwnd] := 0
         ElasticHwnd := 0
         ElasticHwnd := 0
         ElasticHwnd := hwnd
         ElasticOffsetY := 0
         ElasticScrollEnabled := C["elastic"].Value
+        ElasticScrollEnabled := false
+        ElasticScrollEnabled := GameModeSuspendedFeatures["ElasticScrollEnabled"]
         ElasticTargetY := 0
         ElasticVel := 0
         else
@@ -2350,6 +2399,7 @@
         else if (sy && !sx)
         else if FileExist(StartupLink())
         else if InStr(ctl.Type, "CheckBox")
+        EnterGameMode()
         entry := RS_Alpha[hwnd]
         entry := RS_Alpha[hwnd]
         entry := RS_Pos[hwnd]
@@ -2377,6 +2427,7 @@
         exe := WinGetProcessName(hwnd)
         exe := WinGetProcessName(hwnd)
         exePath := "", args := ""
+        ExitGameMode()
         exStyle := WinGetExStyle(hwnd)
         exStyle := WinGetExStyle(hwnd)
         factor := 0.0
@@ -2434,6 +2485,7 @@
         for hwnd, info in BottomWindows.Clone()
         for hwnd, info in GhostWindows.Clone()
         for hwnd, info in GhostWindows.Clone()
+        for hwnd, info in GhostWindows.Clone()
         for hwnd, obj in PrivacyBlurWindows {
         for hwnd, obj in PrivacyBlurWindows {
         for hwnd, rect in CurtainWindows {
@@ -2449,6 +2501,7 @@
         for s in obj.shards {
         for s in shards {
         for src, pip in PipGuis {
+        for src, pip in PipGuis.Clone()
         for src, pip in PipGuis.Clone()
         for src, pip in PipGuis.Clone()
         for window in ComObject("Shell.Application").Windows {
@@ -2467,6 +2520,35 @@
         g.BackColor := "White"
         g.Hide()
         g.Show("x" gx " y" gy " w" gw " h" gh " NoActivate")
+        GameModeSuspendedFeatures["ActiveBorderEnabled"] := ActiveBorderEnabled
+        GameModeSuspendedFeatures["AltDragEnabled"] := AltDragEnabled
+        GameModeSuspendedFeatures["BreathingEnabled"] := BreathingEnabled
+        GameModeSuspendedFeatures["ClipboardAppendEnabled"] := ClipboardAppendEnabled
+        GameModeSuspendedFeatures["ContextMenuAnimEnabled"] := ContextMenuAnimEnabled
+        GameModeSuspendedFeatures["CopyFeedbackEnabled"] := CopyFeedbackEnabled
+        GameModeSuspendedFeatures["CursorYawnEnabled"] := CursorYawnEnabled
+        GameModeSuspendedFeatures["ElasticDragEnabled"] := ElasticDragEnabled
+        GameModeSuspendedFeatures["ElasticScrollEnabled"] := ElasticScrollEnabled
+        GameModeSuspendedFeatures["GrabPanEnabled"] := GrabPanEnabled
+        GameModeSuspendedFeatures["HotCornersEnabled"] := HotCornersEnabled
+        GameModeSuspendedFeatures["InfiniteWrapEnabled"] := InfiniteWrapEnabled
+        GameModeSuspendedFeatures["LivePipEnabled"] := LivePipEnabled
+        GameModeSuspendedFeatures["MiddleClickCloseEnabled"] := MiddleClickCloseEnabled
+        GameModeSuspendedFeatures["MorphingPasteEnabled"] := MorphingPasteEnabled
+        GameModeSuspendedFeatures["MotionBlurScrollEnabled"] := MotionBlurScrollEnabled
+        GameModeSuspendedFeatures["MultiMonitorDimmerEnabled"] := MultiMonitorDimmerEnabled
+        GameModeSuspendedFeatures["OpenAnim"] := OpenAnim
+        GameModeSuspendedFeatures["PrivacyBlurEnabled"] := PrivacyBlurEnabled
+        GameModeSuspendedFeatures["ProximityGhostEnabled"] := ProximityGhostEnabled
+        GameModeSuspendedFeatures["PulseEnabled"] := PulseEnabled
+        GameModeSuspendedFeatures["QuickLookEnabled"] := QuickLookEnabled
+        GameModeSuspendedFeatures["RippleClickEnabled"] := RippleClickEnabled
+        GameModeSuspendedFeatures["RollUpEnabled"] := RollUpEnabled
+        GameModeSuspendedFeatures["SmartCapsEnabled"] := SmartCapsEnabled
+        GameModeSuspendedFeatures["SnapEnabled"] := SnapEnabled
+        GameModeSuspendedFeatures["SpotlightEnabled"] := SpotlightEnabled
+        GameModeSuspendedFeatures["TaskbarScrollEnabled"] := TaskbarScrollEnabled
+        GameModeSuspendedFeatures["TextMagnifierEnabled"] := TextMagnifierEnabled
         GeoFor := "-"
         GeoLat := mLa[1], GeoLon := mLo[1], GeoFor := ClockLocation
         gh := 0
@@ -2483,6 +2565,8 @@
         global SF_Hwnd
         gotIt := false
         GrabPanEnabled := C["grabpan"].Value
+        GrabPanEnabled := false
+        GrabPanEnabled := GameModeSuspendedFeatures["GrabPanEnabled"]
         GravityCloseEnabled := C["gravityclose"].Value
         GridHoverZone := hovered
         guiObj := MorphGui
@@ -2514,8 +2598,6 @@
         HideCustomClock()
         HideCustomClock()
         HideCustomClock()
-        HideCustomClock()
-        HideCustomClock()
         HideMag()
         HideMorphPreview()
         HideSmartGrid()
@@ -2525,6 +2607,8 @@
         HotCornerBL := C["corner_bl"].Text
         HotCornerBR := C["corner_br"].Text
         HotCornersEnabled := C["corners_en"].Value
+        HotCornersEnabled := false
+        HotCornersEnabled := GameModeSuspendedFeatures["HotCornersEnabled"]
         HotCornerTL := C["corner_tl"].Text
         HotCornerTR := C["corner_tr"].Text
         HotIf()
@@ -2597,10 +2681,11 @@
         if !WinCurrentAlpha.Has(hwnd) {
         if !wmi
         if (!ActiveDeleteGuis.Has(animKey))
+        if (!anchorLeft) {
         if (!approachOk && prevAt && now > prevAt) {
         if (!BreatheCursorActive) {
         if (!ClockWarnedNoCity) {
-        if (!cls || IsShellSurface(hwnd, cls))
+        if (!cls || cls = "Progman" || cls = "WorkerW" || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd")
         if (!DllCall("IsWindow", "ptr", hwnd))
         if (!DllCall("IsWindow", "ptr", hwnd))
         if (!DllCall("IsWindow", "ptr", hwnd))
@@ -2644,6 +2729,7 @@
         if (BreathingEnabled && IsRestorable(hwnd)) {
         if (c != "")
         if (candidate != "")
+        if (ClipboardAppendEnabled && LastCtrlC_Time && A_TickCount - LastCtrlC_Time < CLIP_DOUBLE_MS) {
         if (cls == "TrayNotifyWnd") {
         if (cmdLine != "" && RegExMatch(cmdLine, cmdLineArgs))
         if (ComCall(0, pCtl, "Ptr", MC_Iid(MC_IID_IAudioSessionControl2), "Ptr*", &pCtl2, "Int") != 0 || !pCtl2)
@@ -2737,6 +2823,7 @@
         if (LS_Alpha > 0) {
         if (minY > 0)
         if (MomentumTiltEnabled && (Abs(VelX) > 200 || Abs(VelY) > 200))
+        if (MorphOriginalText == "" || StrLen(MorphOriginalText) > MORPH_MAX_LEN) {
         if (MotionBlurGui) {
         if (mx <= L + thresh && my <= T + thresh)
         if (mx >= z.L && mx <= z.R && my >= z.T && my <= z.B) {
@@ -2752,7 +2839,6 @@
         if (nx != lastX || ny != lastY) {
         if (nx != lastX || ny != lastY) {
         if (ok && res)
-        if (OldClipboard != "" && A_Clipboard != "") {
         if (oldText != "")
         if (OpenAnim != "None" && WillAnimateOpen(hwnd)) {
         if (OpenAnim == "Ghost Slide-In")
@@ -2854,7 +2940,9 @@
         if (WinGetPID(hwnd) = DllCall("GetCurrentProcessId", "uint"))
         if (WinGetPID(hwnd) = DllCall("GetCurrentProcessId", "uint"))
         if (WinGetPID(hwnd) = DllCall("GetCurrentProcessId", "uint"))
+        if (word != "")
         if (writeBack) {
+        if (x < tx) {
         if ActiveAnimations.Has(animKey)
         if AnimOwner.Has(slot)
         if destroy {
@@ -2904,6 +2992,7 @@
         if IsSet(RippleClickEnabled) {
         if IsSet(SpotlightEnabled) {
         if IsSet(ToggleDefaultMic) {
+        if KeyWait("v", "T0.15") {
         if m.Has(hwnd)
         if MC_HoldExpired(ts, now, MC_HOLD_MS * 2)
         if MC_HoldExpired(ts, now, MC_HOLD_MS)
@@ -2934,6 +3023,8 @@
         iidMgr := MC_Iid(MC_IID_IAudioSessionManager2)
         IMMDeviceEnumerator := ComObject("{BCDE0395-E52F-467C-8E3D-C4579291692E}", "{A95664D2-9614-4F35-A746-DE8DB63617E6}")
         InfiniteWrapEnabled := C["wrap"].Value
+        InfiniteWrapEnabled := false
+        InfiniteWrapEnabled := GameModeSuspendedFeatures["InfiniteWrapEnabled"]
         info := (CustomClockWeather == "") ? "--" : CustomClockWeather
         IniCache[ck] := v
         InitMidi()
@@ -2961,8 +3052,6 @@
         LastCaretY := cy
         LastCaretY := cy
         LastCaretY += CaretVelY * steps
-        LastCtrlC_Time := 0
-        LastCtrlC_Time := A_TickCount
         LastNonModifierKeyTime := A_TickCount
         lastTriggers.Delete(A_ThisHotkey)
         LastWeatherFetch := 0
@@ -2970,6 +3059,8 @@
         list := []
         list := StealthPanicConfig_ReadLegacy(iniFile)
         LivePipEnabled := C["pip"].Value
+        LivePipEnabled := false
+        LivePipEnabled := GameModeSuspendedFeatures["LivePipEnabled"]
         LogLaunch("`nParsing command: " appInput)
         LogLaunch("Expanded environment variables: " appStr)
         LogLaunch("Resolution failed. Falling back to ShellExecute / Run()...")
@@ -2983,8 +3074,8 @@
         Loop count {
         Loop count {
         loop gridY {
-        Loop MonitorGetCount() {
         loop MonitorGetCount() {
+        Loop MonitorGetCount() {
         loop nDev {
         Loop Reg, "HKLM\SOFTWARE\WOW6432Node\Microsoft\VisualStudio\SxS\VS7", "V" {
         lp := ((sY & 0xFFFF) << 16) | (sX & 0xFFFF)
@@ -3029,6 +3120,8 @@
         MicOsdGui["Text"].Text := "🎙️ Mic Active"
         MicOsdGui["Text"].Text := "🎙️ Mic Muted"
         MiddleClickCloseEnabled := C["midclose"].Value
+        MiddleClickCloseEnabled := false
+        MiddleClickCloseEnabled := GameModeSuspendedFeatures["MiddleClickCloseEnabled"]
         minSpeed := Tune("wrapSpeed")
         minY := 0
         minY := height - h
@@ -3050,12 +3143,17 @@
         MorphIndex := 1
         MorphIndex := MorphFormats.Length
         MorphingPasteEnabled := C["morphingpaste"].Value
+        MorphingPasteEnabled := false
+        MorphingPasteEnabled := GameModeSuspendedFeatures["MorphingPasteEnabled"]
         MorphMaximize(hwnd, fromX, fromY, fromW, fromH)
+        MorphMode := false
         MorphMode := false
         MorphMode := true
         MorphOriginalText := A_Clipboard
-        MorphText := MorphGui.AddText("vMorphText x10 y5 h24 BackgroundTrans Center", text)
+        MorphText := MorphGui.AddText("vMorphText x10 y5 BackgroundTrans", text)
         MotionBlurScrollEnabled := C["motionblur"].Value
+        MotionBlurScrollEnabled := false
+        MotionBlurScrollEnabled := GameModeSuspendedFeatures["MotionBlurScrollEnabled"]
         MotionBlurScrollSpeed := 0
         MotionBlurScrollSpeed := 0
         MouseGetPos(&cx, &cy)
@@ -3076,6 +3174,8 @@
         ms := Tune("animFadeMs")
         msg := 0x99 | (note << 8) | (vel << 16)
         MultiMonitorDimmerEnabled := C["multidimmer"].Value
+        MultiMonitorDimmerEnabled := false
+        MultiMonitorDimmerEnabled := GameModeSuspendedFeatures["MultiMonitorDimmerEnabled"]
         muted := 0
         mx := mL + (mR - mL)/2
         my := mT + (mB - mT)/2
@@ -3189,9 +3289,10 @@
         ObjRelease(pDevice)
         ObjRelease(pSE)
         ok := DllCall("SendMessageTimeout", "ptr", hwnd, "uint", 0x7F
-        OldClipboard := A_Clipboard
         oldText := ControlGetText("Edit1", hwnd)
         OpenAnim       := C["openanim"].Text
+        OpenAnim := "None"
+        OpenAnim := GameModeSuspendedFeatures["OpenAnim"]
         origH := RolledUpWindows[hwnd]
         OriginalTaskbarState := GetTaskbarState()
         osc := Sin(t * 15)
@@ -3242,11 +3343,17 @@
         PremiumVolumeOSDEnabled := C["osd"].Value
         prevHwnd := layer.gui.Hwnd
         PrivacyBlurEnabled := C["privacyblur"].Value
+        PrivacyBlurEnabled := false
+        PrivacyBlurEnabled := GameModeSuspendedFeatures["PrivacyBlurEnabled"]
         PrivacyBlurWindows.Delete(hwnd)
         PrivacyBlurWindows.Delete(hwnd)
         ProximityGhostEnabled := C["ghost"].Value
+        ProximityGhostEnabled := false
+        ProximityGhostEnabled := GameModeSuspendedFeatures["ProximityGhostEnabled"]
         pt := Buffer(8)
         PulseEnabled   := C["pulse"].Value
+        PulseEnabled := false
+        PulseEnabled := GameModeSuspendedFeatures["PulseEnabled"]
         PulsingWindows.Delete(hwnd)
         PulsingWindows.Delete(hwnd)
         PushBackWindow(LastActiveHwnd)
@@ -3262,6 +3369,8 @@
         q := StrReplace(text, " ", "+")
         QuickFolderJumpEnabled := C["quickfolder"].Value
         QuickLookEnabled := C["quicklook"].Value
+        QuickLookEnabled := false
+        QuickLookEnabled := GameModeSuspendedFeatures["QuickLookEnabled"]
         QuickLookGui := ""
         r := {Gui: g, Active: false, Start: 0, x: 0, y: 0, vx: 0, vy: 0}
         r := {Gui: g, Active: false, Start: 0, x: 0, y: 0}
@@ -3594,6 +3703,8 @@
         return
         return
         return
+        return
+        return
         return                         ; already clear: safe to call every frame
         return                        ; one in flight is enough
         return ""
@@ -3616,11 +3727,11 @@
         return 35
         return 35
         return cache[guid]
-        return Chr(0x2600)                      ; clear
-        return Chr(0x2614)                      ; drizzle / rain / showers
-        return Chr(0x26C5)                      ; mainly clear / partly cloudy
-        return Chr(0x26C8)                      ; thunderstorm
-        return Chr(0x2744)                      ; snow
+        return Chr(0x2600) Chr(0xFE0F)          ; clear
+        return Chr(0x2614) Chr(0xFE0F)          ; drizzle / rain / showers
+        return Chr(0x26C5) Chr(0xFE0F)          ; mainly clear / partly cloudy
+        return Chr(0x26C8) Chr(0xFE0F)          ; thunderstorm
+        return Chr(0x2744) Chr(0xFE0F)          ; snow
         return defaultVal
         return defaultVal              ; absent: leave it uncached so it gets written
         return DllCall("GetClassLongW", "ptr", hwnd, "int", GCLP_HICON, "uint")
@@ -3750,12 +3861,16 @@
         RevealWindow(hwnd)
         RevealWindow(hwnd)
         RippleClickEnabled := C["ripple"].Value
+        RippleClickEnabled := false
+        RippleClickEnabled := GameModeSuspendedFeatures["RippleClickEnabled"]
         Ripples.Push(r)
         RollDownStep(dt, now) {
         RolledUpWindows.Delete(hwnd)
         RolledUpWindows.Delete(hwnd)
         RolledUpWindows[hwnd] := h
         RollUpEnabled  := C["rollup"].Value
+        RollUpEnabled := false
+        RollUpEnabled := GameModeSuspendedFeatures["RollUpEnabled"]
         RollUpStep(dt, now) {
         RotateLog()
         RS_Alpha := Map()
@@ -3834,6 +3949,7 @@
         Run 'notepad.exe "' p '"'
         Run(text)
         s := SF_CircleSize
+        s := SubStr(s, 1, MORPH_PREVIEW_CHARS - 3) . "..."
         sampled := SampleTaskbarColor(tx, ty, th, x)
         scale := 0.5 + (Sin(angle) + 1) * 0.25
         scale := 0.8 + 0.2 * ease
@@ -3855,7 +3971,6 @@
         Send("#{Tab}")
         Send("#a")
         Send("#d")
-        Send("^{v}")
         Send("^{v}")
         Send("{Blind}{MButton Down}")
         Send("{Blind}{MButton Up}")
@@ -3923,7 +4038,7 @@
         shell := ComObject("Shell.Application")
         shouldHide := false
         ShowMicOSD(state)
-        ShowMorphPreview(MorphFormats[MorphIndex] "`n" MorphString(MorphOriginalText, MorphFormats[MorphIndex]))
+        ShowMorphPreview(MorphFormats[MorphIndex], MorphString(MorphOriginalText, MorphFormats[MorphIndex]))
         ShowSeamFlash(s[1], s[2], s[3], s[4])
         ShowVolumeOSD(SoundGetVolume(), SoundGetMute())
         ShowVolumeOSD(SoundGetVolume(), SoundGetMute())
@@ -3940,13 +4055,13 @@
         Sleep(150)
         Sleep(30)
         Sleep(50)
-        Sleep(50)
-        Sleep(50)
         Sleep(60)
         slot := hwnd "|" channel
         sm := ScreenMetrics()
         SmartCapsAction := C["smartcaps_act"].Text
         SmartCapsEnabled := C["smartcaps"].Value
+        SmartCapsEnabled := false
+        SmartCapsEnabled := GameModeSuspendedFeatures["SmartCapsEnabled"]
         SmartGridEnabled := C["smartgrid"].Value
         SmartGridZones.Push({L: wl + cw*2, T: wt, R: wr, B: wb})
         SmartGridZones.Push({L: wl + cw, T: wt + ch, R: wr, B: wb})
@@ -3959,6 +4074,8 @@
         SmoothCaretGui := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
         SmoothCaretGui.BackColor := "0078D7"
         SnapEnabled    := C["snap"].Value
+        SnapEnabled := false
+        SnapEnabled := GameModeSuspendedFeatures["SnapEnabled"]
         SoundSetMute(-1)
         SoundSetVolume((dir > 0 ? "+" : "-") stepPct)
         SourceRect := Buffer(16, 0)
@@ -3973,6 +4090,8 @@
         spot.x := t.x
         spot.y := t.y
         SpotlightEnabled := C["spotlight"].Value
+        SpotlightEnabled := false
+        SpotlightEnabled := GameModeSuspendedFeatures["SpotlightEnabled"]
         SpotlightGui := "", SpotlightInput := "", SpotlightResult := ""
         SpotlightResult.Text := "Open path: " text
         SpotlightResult.Text := "Type to search, calculate, or run..."
@@ -4048,6 +4167,8 @@
         t := now - start
         t.OnEvent("Click", NavClick.Bind(name))
         TaskbarScrollEnabled := C["taskbarscroll"].Value
+        TaskbarScrollEnabled := false
+        TaskbarScrollEnabled := GameModeSuspendedFeatures["TaskbarScrollEnabled"]
         TaskbarWaveEnabled := C["twave"].Value
         TaskbarWaveGui := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
         TaskbarWaveGui.BackColor := "000000"
@@ -4059,6 +4180,8 @@
         text := SubStr(text, 1, StrLen(text) - 1)
         TextExpanderEnabled := C["expander"].Value
         TextMagnifierEnabled := C["textmag"].Value
+        TextMagnifierEnabled := false
+        TextMagnifierEnabled := GameModeSuspendedFeatures["TextMagnifierEnabled"]
         textY := 0
         th := dh
         thresh := Tune("cornerSize")
@@ -4077,10 +4200,7 @@
         Transform := Buffer(36, 0)
         TrayIcons.Delete(hwnd)
         TrayMinimizeEnabled := C["traymin"].Value
-        TriggerCopyFeedback(isDouble)
-        TriggerCutFeedback()
         TriggerMotionBlur(hwnd, dir)
-        TriggerPasteFeedback()
         TriggerPasteFeedback()
         TriggerShatterClose(hwnd)
         try {
@@ -4179,6 +4299,7 @@
         try SetTaskbarAutoHide(OriginalTaskbarState & 1)
         try SetTaskbarAutoHide(OriginalTaskbarState & 1)
         try SetTimer(%"GhostMonitorStep"%, 0)
+        try SetTimer(GhostMonitorStep, 0)
         try SoundSetMute(BossKeyMuteState)
         try SoundSetMute(BossKeyMuteState)
         try SoundSetMute(StealthOriginalMic, , "Microphone")
@@ -4304,10 +4425,12 @@
         WriteLog("magnifier unavailable - " e.Message)
         WriteLog("restored " key " -> " rx "," ry " " rw "x" rh)
         WriteLog("skip: window ended maximized")
+        x := anchorLeft - CLOCK_GAP - boxW
         x := centerX + Cos(angle) * radiusX
         x := restoredRect.x, y := restoredRect.y, w := restoredRect.w, h := restoredRect.h
         x := restoredRect.x, y := restoredRect.y, w := restoredRect.w, h := restoredRect.h
         x := restoredRect.x, y := restoredRect.y, w := restoredRect.w, h := restoredRect.h
+        x := tx + CLOCK_GAP
         y := centerY + Sin(angle) * radiusY
         yOff := yDir * ease
         z := SmartGridZones[A_Index]
@@ -4320,6 +4443,67 @@
     , step: step, dec: dec, page: page, label: label, hint: hint}
     {
     {key: key, sec: sec, ini: ini, def: def, lo: lo, hi: hi
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
     }
     }
     }
@@ -4840,6 +5024,8 @@
     } else if (type == "stamp") {
     } else if (type == "structural") {
     } else if (type == "vacuum" || type == "snip") {
+    } finally {
+    } finally {
     A_Clipboard := A_Clipboard
     A_Clipboard := ClipSaved
     A_IconTip := "Window Tweaks " VERSION
@@ -4860,7 +5046,6 @@
     alpha := Round(80 * (1 - ease))
     AltDragEnabled := IniStr("memory", "altdrag", "1") = "1"
     AlwaysOnBottomEnabled := IniStr("memory", "bottom", "1") = "1"
-    anchorLeft := ResolveClockAnchor(tbHwnd)
     angleStep := (2 * PI) / num
     Anim_Claim(hwnd, "alpha", animKey, FadeBackStep)
     Anim_Claim(hwnd, "geom", animKey, BounceStep)
@@ -4974,6 +5159,8 @@
     busy := false
     busy := false
     busy := false
+    busy := true
+    busy := true
     busy := true
     busy := true
     busy := true
@@ -5157,6 +5344,7 @@
     cls := "", style := 0
     cmdLine := ""
     color := 0
+    cols := Max(StrLen(fmt), StrLen(line))
     contactSide := 0
     ContextMenuAnimEnabled := IniStr("mouse", "contextanim", "0") = "1"
     cooldownUntil := now + Tune("wrapCool")
@@ -5428,6 +5616,7 @@
     for v in lines {
     for w in hwnds {
     for which in [ICON_SMALL2, ICON_BIG] {
+    for word in raw {
     for year in years {
     fpt := Integer(Tune("clockFont"))
     frac := SIZE_CYCLE[idx]
@@ -5467,6 +5656,12 @@
     g.SidebarBg := g.AddText("x0 y0 w" SW " h" H " Background" NAV)
     g1 := MagGroups.Has(h1) ? MagGroups[h1] : [h1]
     g2 := MagGroups.Has(h2) ? MagGroups[h2] : [h2]
+    GameModeActive := false
+    GameModeActive := true
+    GameModeSuspendedFeatures.Clear()
+    GameModeSuspendedFeatures.Clear()
+    GameModeSyncFeatures()
+    GameModeSyncFeatures()
     gap := Tune("gridGap")
     gap := Tune("gridGap")
     GetMicOSDPos(&x, &visibleY, &hiddenY)
@@ -5494,6 +5689,8 @@
     global ActiveBorderEnabled, LastBorderHwnd, LastBorderX, LastBorderY, LastBorderW, LastBorderH
     global ActiveBorderEnabled, ProximityGhostEnabled, LivePipEnabled, PrivacyBlurEnabled
     global ActiveBorderEnabled, ProximityGhostEnabled, LivePipEnabled, PrivacyBlurEnabled
+    global ActiveBorderEnabled, SnapEnabled, ElasticScrollEnabled, MotionBlurScrollEnabled
+    global ActiveBorderEnabled, SnapEnabled, ElasticScrollEnabled, MotionBlurScrollEnabled
     global ActiveBorderGui, ActiveBorderShown
     global ActiveBorderGui, ActiveBorderShown, LastBorderHwnd
     global ActiveBorderGui, ActiveBorderShown, LastBorderHwnd
@@ -5529,6 +5726,8 @@
     global CarouselIndex, CarouselWindows, CarouselAngleOffset
     global ClipAnimGui
     global ClipAnimGui
+    global ClipboardAppendEnabled, CopyFeedbackEnabled, SmartCapsEnabled, AltDragEnabled
+    global ClipboardAppendEnabled, CopyFeedbackEnabled, SmartCapsEnabled, AltDragEnabled
     global ClockAnchor
     global ClockWeatherEnabled, ClockWarnedNoCity
     global ContextMenuAnimEnabled
@@ -5559,6 +5758,8 @@
     global DragHwnd, VelX, VelY, PrevX, PrevY, ParallaxEnabled, CurrentDragAlpha, FRAME_MS, DEBUG
     global DragTrailGui, DragTrailActive, DragTrailX, DragTrailY, DragTrailVX, DragTrailVY
     global DragTrailStartX, DragTrailStartY, DragTrailActive, DragTrailX, DragTrailY, DragTrailGui
+    global ElasticDragEnabled, TextMagnifierEnabled, TaskbarScrollEnabled, MorphingPasteEnabled
+    global ElasticDragEnabled, TextMagnifierEnabled, TaskbarScrollEnabled, MorphingPasteEnabled
     global ElasticEdgeStates, ElasticAwayCounts
     global ElasticHwnd, ElasticBaseX, ElasticBaseY
     global ElasticHwnd, ElasticOffsetY, ElasticTargetY, ElasticVel, ElasticBaseX, ElasticBaseY
@@ -5571,6 +5772,9 @@
     global FocusModeEnabled, FocusGuis, SpotlightTarget, SpotlightCurrent, FocusBounds, FRAME_MS
     global FocusModeEnabled, FocusTargetHwnd, SpotlightTarget
     global FrameProduceMs, FrameRenderMs, FrameOverbudget
+    global GameModeActive
+    global GameModeActive, GameModeSuspendedFeatures
+    global GameModeActive, GameModeSuspendedFeatures
     global GeoFor, GeoLat, GeoLon, CustomClockWind
     global GeoLat, GeoLon, ClockUnits
     global GhostWindows
@@ -5591,6 +5795,8 @@
     global HotCornersEnabled
     global HotCornersEnabled
     global HotCornersEnabled, HotCornerTL, HotCornerTR, HotCornerBL, HotCornerBR
+    global HotCornersEnabled, InfiniteWrapEnabled, MultiMonitorDimmerEnabled, GrabPanEnabled
+    global HotCornersEnabled, InfiniteWrapEnabled, MultiMonitorDimmerEnabled, GrabPanEnabled
     global InfiniteWrapEnabled
     global InfiniteWrapEnabled
     global InfiniteWrapEnabled, DragHwnd
@@ -5604,6 +5810,8 @@
     global LayoutUndo
     global LayoutUndo, SizeCycleIdx
     global LightsaberSeamEnabled, PrivacyBlurEnabled, PrivacyBlurWindows
+    global LivePipEnabled, ProximityGhostEnabled, PrivacyBlurEnabled, BreathingEnabled, PulseEnabled
+    global LivePipEnabled, ProximityGhostEnabled, PrivacyBlurEnabled, BreathingEnabled, PulseEnabled
     global LOG_FILE
     global LOG_FILE, MAX_LOG_BYTES
     global LogBuf, LOG_FILE
@@ -5653,21 +5861,27 @@
     global MicOsdGui, MicOsdHiding
     global MicOsdGui, MicOsdHiding
     global MicOsdGui, MicOsdHiding
+    global MiddleClickCloseEnabled, RollUpEnabled, ContextMenuAnimEnabled
+    global MiddleClickCloseEnabled, RollUpEnabled, ContextMenuAnimEnabled
     global MIN_DRAG, ParallaxEnabled
     global MomentumTiltEnabled
     global MonitorThrowEnabled
+    global MORPH_PREVIEW_CHARS
     global MorphGui
-    global MorphGui, MorphText
+    global MorphGui, MorphText, MORPH_PREVIEW_CHARS
     global MorphIndex, MorphFormats, MorphOriginalText
     global MorphIndex, MorphFormats, MorphOriginalText
-    global MorphMode, MorphIndex, MorphOriginalText
+    global MorphMode, MorphIndex, MorphOriginalText, MorphFormats, MORPH_MAX_LEN
     global MotionBlurScrollSpeed, MotionBlurGui
     global MotionBlurScrollSpeed, MotionBlurLastTime, MotionBlurActiveHwnd, MotionBlurGui
     global MultiMonitorDimmerEnabled
     global MultiMonitorDimmerEnabled, DimmerGuis
     global MultiMonitorDimmerEnabled, DimmerGuis
     global NAV, SEL, SELF, FG
-    global OldClipboard, LastCtrlC_Time
+    global OldClipboard
+    global OldClipboard, LastCtrlC_Time, CLIP_DOUBLE_MS, CLIP_BACKUP_MS
+    global OpenAnim
+    global OpenAnim
     global OpenAnim, ContextMenuAnimEnabled, RippleClickEnabled
     global OpenAnim, ContextMenuAnimEnabled, RippleClickEnabled
     global OpenAnim, GhostHiddenWindows
@@ -5692,6 +5906,7 @@
     global PrivacyBlurWindows
     global PrivacyBlurWindows
     global PrivacyBlurWindows, PrivacyBlurEnabled, BossKeyActive
+    global ProximityGhostEnabled, LivePipEnabled, GhostWindows, PipGuis
     global ProximityGhostEnabled, LivePipEnabled, GhostWindows, PipGuis
     global PulseEnabled, PulsingWindows
     global PushedBackWindows
@@ -5766,6 +5981,8 @@
     global SparkTypingEnabled
     global SpotlightEnabled, BreathingEnabled, PulseEnabled, CursorYawnEnabled
     global SpotlightEnabled, BreathingEnabled, PulseEnabled, CursorYawnEnabled
+    global SpotlightEnabled, QuickLookEnabled, CursorYawnEnabled, RippleClickEnabled
+    global SpotlightEnabled, QuickLookEnabled, CursorYawnEnabled, RippleClickEnabled
     global SpotlightGui
     global SpotlightGui, SpotlightInput, SpotlightResult
     global SpotlightGui, SpotlightInput, SpotlightResult
@@ -6067,7 +6284,6 @@
     if (!(style & 0x10000000) || (style & 0x01000000) || (style & 0x20000000)) { ; Not visible OR Maximized OR Minimized
     if (!ActiveBorderEnabled)
     if (!ActiveBorderGui) {
-    if (!anchorLeft) {
     if (!approachOk)
     if (!BossKeyEnabled && !BossKeyActive)
     if (!BreatheCursorActive) {
@@ -6093,6 +6309,7 @@
     if (!ElasticScrollEnabled)
     if (!FocusModeEnabled && FocusGuis.Length)
     if (!force && ActiveAnimations.Count)
+    if (!GameModeActive)
     if (!GetKeyState("LButton", "P")) {
     if (!GetKeyState("LButton", "P")) {
     if (!GetKeyState("LButton", "P")) {
@@ -6208,7 +6425,7 @@
     if (CarouselIndex >= 1 && CarouselIndex <= CarouselWindows.Length)
     if (channel != "") {
     if (clientOnly != "") {
-    if (ClipboardAppendEnabled && A_TickCount - LastCtrlC_Time < 400) {
+    if (ClockAnchor == "TaskbarLeft") {
     if (ClockLocation == "") {
     if (ClockUnits == "Fahrenheit")
     if (cls != "#32768")
@@ -6269,6 +6486,37 @@
     if (fresh != "")
     if (g.mons.Length < 2) {
     if (g1 = g2)
+    if (GameModeActive)
+    if (GameModeActive) {
+    if (GameModeSuspendedFeatures.Has("ActiveBorderEnabled") && IsSet(ActiveBorderEnabled)) {
+    if (GameModeSuspendedFeatures.Has("AltDragEnabled") && IsSet(AltDragEnabled)) {
+    if (GameModeSuspendedFeatures.Has("BreathingEnabled") && IsSet(BreathingEnabled)) {
+    if (GameModeSuspendedFeatures.Has("ClipboardAppendEnabled") && IsSet(ClipboardAppendEnabled)) {
+    if (GameModeSuspendedFeatures.Has("ContextMenuAnimEnabled") && IsSet(ContextMenuAnimEnabled)) {
+    if (GameModeSuspendedFeatures.Has("CopyFeedbackEnabled") && IsSet(CopyFeedbackEnabled)) {
+    if (GameModeSuspendedFeatures.Has("CursorYawnEnabled") && IsSet(CursorYawnEnabled)) {
+    if (GameModeSuspendedFeatures.Has("ElasticDragEnabled") && IsSet(ElasticDragEnabled)) {
+    if (GameModeSuspendedFeatures.Has("ElasticScrollEnabled") && IsSet(ElasticScrollEnabled)) {
+    if (GameModeSuspendedFeatures.Has("GrabPanEnabled") && IsSet(GrabPanEnabled)) {
+    if (GameModeSuspendedFeatures.Has("HotCornersEnabled") && IsSet(HotCornersEnabled)) {
+    if (GameModeSuspendedFeatures.Has("InfiniteWrapEnabled") && IsSet(InfiniteWrapEnabled)) {
+    if (GameModeSuspendedFeatures.Has("LivePipEnabled") && IsSet(LivePipEnabled)) {
+    if (GameModeSuspendedFeatures.Has("MiddleClickCloseEnabled") && IsSet(MiddleClickCloseEnabled)) {
+    if (GameModeSuspendedFeatures.Has("MorphingPasteEnabled") && IsSet(MorphingPasteEnabled)) {
+    if (GameModeSuspendedFeatures.Has("MotionBlurScrollEnabled") && IsSet(MotionBlurScrollEnabled)) {
+    if (GameModeSuspendedFeatures.Has("MultiMonitorDimmerEnabled") && IsSet(MultiMonitorDimmerEnabled)) {
+    if (GameModeSuspendedFeatures.Has("OpenAnim") && IsSet(OpenAnim)) {
+    if (GameModeSuspendedFeatures.Has("PrivacyBlurEnabled") && IsSet(PrivacyBlurEnabled)) {
+    if (GameModeSuspendedFeatures.Has("ProximityGhostEnabled") && IsSet(ProximityGhostEnabled)) {
+    if (GameModeSuspendedFeatures.Has("PulseEnabled") && IsSet(PulseEnabled)) {
+    if (GameModeSuspendedFeatures.Has("QuickLookEnabled") && IsSet(QuickLookEnabled)) {
+    if (GameModeSuspendedFeatures.Has("RippleClickEnabled") && IsSet(RippleClickEnabled)) {
+    if (GameModeSuspendedFeatures.Has("RollUpEnabled") && IsSet(RollUpEnabled)) {
+    if (GameModeSuspendedFeatures.Has("SmartCapsEnabled") && IsSet(SmartCapsEnabled)) {
+    if (GameModeSuspendedFeatures.Has("SnapEnabled") && IsSet(SnapEnabled)) {
+    if (GameModeSuspendedFeatures.Has("SpotlightEnabled") && IsSet(SpotlightEnabled)) {
+    if (GameModeSuspendedFeatures.Has("TaskbarScrollEnabled") && IsSet(TaskbarScrollEnabled)) {
+    if (GameModeSuspendedFeatures.Has("TextMagnifierEnabled") && IsSet(TextMagnifierEnabled)) {
     if (GeoFor != ClockLocation)
     if (GhostWindows.Count == 0)
     if (GhostWindows.Count == 1)
@@ -6296,9 +6544,40 @@
     if (IsObject(restoredRect) && restoredRect.HasOwnProp("w")) {
     if (IsObject(restoredRect) && restoredRect.HasOwnProp("w")) {
     if (IsObject(restoredRect) && restoredRect.HasOwnProp("w")) {
+    if (IsSet(ActiveBorderEnabled)) {
+    if (IsSet(AltDragEnabled)) {
+    if (IsSet(BreathingEnabled)) {
+    if (IsSet(ClipboardAppendEnabled)) {
+    if (IsSet(ContextMenuAnimEnabled)) {
+    if (IsSet(CopyFeedbackEnabled)) {
+    if (IsSet(CursorYawnEnabled)) {
+    if (IsSet(ElasticDragEnabled)) {
+    if (IsSet(ElasticScrollEnabled)) {
+    if (IsSet(GrabPanEnabled)) {
+    if (IsSet(HotCornersEnabled)) {
+    if (IsSet(InfiniteWrapEnabled)) {
     if (IsSet(LivePipEnabled) && !LivePipEnabled && IsSet(PipGuis)) {
+    if (IsSet(LivePipEnabled) && !LivePipEnabled && IsSet(PipGuis)) {
+    if (IsSet(LivePipEnabled)) {
+    if (IsSet(MiddleClickCloseEnabled)) {
     if (IsSet(MorphGui) && MorphGui) {
+    if (IsSet(MorphingPasteEnabled)) {
+    if (IsSet(MotionBlurScrollEnabled)) {
+    if (IsSet(MultiMonitorDimmerEnabled)) {
+    if (IsSet(OpenAnim)) {
+    if (IsSet(PrivacyBlurEnabled)) {
     if (IsSet(ProximityGhostEnabled) && !ProximityGhostEnabled && IsSet(GhostWindows)) {
+    if (IsSet(ProximityGhostEnabled) && !ProximityGhostEnabled && IsSet(GhostWindows)) {
+    if (IsSet(ProximityGhostEnabled)) {
+    if (IsSet(PulseEnabled)) {
+    if (IsSet(QuickLookEnabled)) {
+    if (IsSet(RippleClickEnabled)) {
+    if (IsSet(RollUpEnabled)) {
+    if (IsSet(SmartCapsEnabled)) {
+    if (IsSet(SnapEnabled)) {
+    if (IsSet(SpotlightEnabled)) {
+    if (IsSet(TaskbarScrollEnabled)) {
+    if (IsSet(TextMagnifierEnabled)) {
     if (IsShellSurface(hwnd, cls) || cls = "AutoHotkeyGUI") {
     if (isVisible && !StartMenuBlurGui) {
     if (key = "")
@@ -6420,6 +6699,7 @@
     if (StealthSuspendOverlays) {
     if (str == lastSnippets) {
     if (StrLen(LogBuf) >= LOG_FLUSH_BYTES) {
+    if (StrLen(s) > MORPH_PREVIEW_CHARS)
     if (style & 0x08000000)          ; WS_DISABLED
     if (SubStr(resText, 1, 2) == "= ") {
     if (SubStr(text, -1) == "`n")
@@ -6485,7 +6765,6 @@
     if (winX = "" || ww = "")
     if (x != "")
     if (X != "") {
-    if (x < tx) {
     if (zoneIndex < 1 || zoneIndex > SmartGridZones.Length)
     if ActiveAnimations.Has(key)
     if ahwnd
@@ -6499,11 +6778,11 @@
     if busy
     if busy
     if busy
+    if busy
+    if busy
     if busy {
     if cache.Has(guid)
     if CarouselWindows.Length == 0 {
-    if CopyFeedbackEnabled
-    if CopyFeedbackEnabled
     if corrected
     if CurPage && Pages.Has(CurPage) {
     if CurtainWindows.Count {
@@ -6534,7 +6813,6 @@
     if IsDoublePress() {
     if isHidden
     if IsObject(dead) {
-    if KeyWait("v", "T0.15") {
     if MagFailed
     if MC_HwndInfo.Has(hwnd)
     if MC_HwndInfo.Has(hwnd)
@@ -6653,6 +6931,7 @@
     Lbl(pg, FG, "Window animations", "xm y+16")
     leftDist := mX - wX
     LightsaberSeamEnabled := IniStr("mouse", "lightsaber", "1") = "1"
+    line := MorphPreviewLine(result)
     lineH := Ceil(fpt * 4 / 3 * 1.35)
     list := ""
     list := StealthPanicConfig_NormalizeList(listStr)
@@ -6755,11 +7034,12 @@
     MonitorGet(activeMon, &L, &T, &R, &B)
     MonitorGet(prim, &mL, &mT, &mR, &mB)
     MonitorThrowEnabled := IniStr("mouse", "monthrow", "1") = "1"
-    MorphGui.Show("NoActivate AutoSize")
+    MorphGui.Show("NoActivate x" (cx + 10) " y" (cy - winH - 10) " w" winW " h" winH)
     MorphIndex--
     MorphIndex++
     MorphingPasteEnabled := IniStr("memory", "morphingpaste", "1") = "1"
     MorphStep(dt, now) {
+    MorphText.Move(, , tw, th)
     MorphText.Text := text
     MotionBlurActiveHwnd := hwnd
     MotionBlurLastTime := now
@@ -6833,6 +7113,8 @@
     NotchStep(dt, now) {
     note := 0
     Notify("Breathing windows " (BreathingEnabled ? "ON" : "OFF"))
+    Notify("Game Mode OFF")
+    Notify("Game Mode ON")
     Notify("Layout undone")
     Notify("Transparency: OFF")
     Notify("Window size: " Round(frac * 100) "%")
@@ -6866,6 +7148,7 @@
     ok := false
     ok := false
     ok := RegisterShellHook()
+    OldClipboard := A_Clipboard
     on := 1
     OnExit(Bye)
     OnMessage(0x007E, InvalidateScreenMetrics)     ; WM_DISPLAYCHANGE
@@ -7086,6 +7369,7 @@
     r.y += r.vy
     radiusX := A_ScreenWidth * 0.3
     radiusY := A_ScreenHeight * 0.1
+    raw := StrSplit(RegExReplace(Trim(text), "[_\-\s]+", " "), " ")
     rc := Buffer(16, 0)
     ready := false
     rec := RS_AlphaState[hwnd]
@@ -7149,8 +7433,8 @@
     return (v = 0)
     return (v >= 256) ? 255 : v
     return {alpha: Round(255 - f * (255 - TuneAlpha("parallaxMin"))), fade: f}
-    Return 0
     return 0
+    Return 0
     return 0
     return 0
     return 1
@@ -7162,7 +7446,7 @@
     return activeFades
     return AnimOwner.Has(slot) ? AnimOwner[slot] : ""
     return buf
-    return Chr(0x2601)                          ; overcast, fog, anything else
+    return Chr(0x2601) Chr(0xFE0F)              ; overcast, fog, anything else
     return ClassifyWindowImpl(hwnd) == "Main"
     return cloaked != 0
     return cmdLine
@@ -7200,6 +7484,7 @@
     return out
     return pg.AddText(pos " w" w " c" col, txt)
     return RS_AlphaState.Has(hwnd) ? RS_AlphaState[hwnd].baseAlpha : 255
+    return s
     return s ? TuneFormat(s, Tune(key)) : ""
     return ScreenGeom
     return SpotlightGui && WinActive("ahk_id " SpotlightGui.Hwnd)
@@ -7268,6 +7553,7 @@
     RS_Commit()
     RS_Commit()
     RS_Commit()
+    RS_Commit()
     RS_Commit()                     ; one-shot producer: nothing else will flush
     RS_Commit()                    ; one-shot producer: nothing else will flush
     RS_Commit()                    ; one-shot producer: nothing else will flush
@@ -7303,12 +7589,11 @@
     RS_SetPos(hwnd, r.x, r.y, r.w, r.h, RS_PRI_USER)
     RS_SetPos(hwnd, Round(cX - (w * 0.8) / 2), Round(cY - (h * 0.8) / 2), Round(w * 0.8), Round(h * 0.8), RS_PRI_ANIM)
     RS_SetPos(hwnd, x, y, -1, -1, RS_PRI_ANIM)
-    RS_SetPos(MorphGui.Hwnd, cx + 10, cy - h - 10, -1, -1, RS_PRI_ANIM)
     RS_SetPos(MotionBlurGui.Hwnd, x, y, w, h, RS_PRI_ANIM)
     RS_SetPos(r.Gui.Hwnd, r.x - size//2, r.y - size//2, -1, -1, RS_PRI_ANIM)
     RS_SetPos(r.Gui.Hwnd, r.x, r.y, -1, -1, RS_PRI_ANIM)
     RS_SetRegion(BreatheGui.Hwnd, "0-0 w" size " h" size " E", RS_PRI_ANIM)
-    RS_SetRegion(MorphGui.Hwnd, "0-0 w" (StrLen(text)*9 + 20) " h" h " r8-8", RS_PRI_ANIM)
+    RS_SetRegion(MorphGui.Hwnd, "0-0 w" winW " h" winH " r8-8", RS_PRI_ANIM)
     RS_SetRegion(r.Gui.Hwnd, "0-0 w" size " h" size " E", RS_PRI_ANIM)
     RS_SetRegion(SpotlightGui.Hwnd, "0-0 w640 h140 r20-20", RS_PRI_ANIM)
     RS_SetZOrder(CustomClockGui.Hwnd, -1, 0x0013, RS_PRI_AMBIENT)
@@ -7327,6 +7612,9 @@
     s := RegExReplace(Trim(s), "[^A-Za-z0-9 ,.+-]", "")
     s := Round(SF_Size)
     s := StrReplace(s, ",", "%2C")
+    s := StrReplace(s, "`n", " ")
+    s := StrReplace(s, "`r", " ")
+    s := StrReplace(s, "`t", " ")
     s := StrReplace(s, "+", "%2B")
     s := Trim(RegExReplace(s, " {2,}", " "))
     s := TuneSpec(key)
@@ -7378,8 +7666,8 @@
     ShakePrevY := my
     shards := []
     ShatterEnabled := IniStr("mouse", "shatter", "0") = "1"
-    ShowMorphPreview(MorphFormats[MorphIndex] "`n" MorphString(MorphOriginalText, MorphFormats[MorphIndex]))
-    ShowMorphPreview(MorphFormats[MorphIndex] "`n" MorphString(MorphOriginalText, MorphFormats[MorphIndex]))
+    ShowMorphPreview(MorphFormats[MorphIndex], MorphString(MorphOriginalText, MorphFormats[MorphIndex]))
+    ShowMorphPreview(MorphFormats[MorphIndex], MorphString(MorphOriginalText, MorphFormats[MorphIndex]))
     side := 0
     size := 100
     size := 140
@@ -7409,6 +7697,7 @@
     SnapEnabled := !SnapEnabled
     SnapWindow(hwnd, eL, eT, eR, eB, ex, ey)
     sourceHwnd := 0
+    SparkHook.KeyOpt("{All}", "+N")
     SparkHook.OnKeyDown := OnObservedKeyDown
     SparkTypingEnabled := IniStr("mouse", "spark", "0") = "1"
     SpawnSpark(cx, cy)
@@ -7487,6 +7776,8 @@
     state := ToggleDefaultMic()
     static again := false
     static approachOk := false                     ; speed gate passed on contact
+    static busy := false
+    static busy := false
     static busy := false
     static busy := false
     static busy := false
@@ -7604,6 +7895,7 @@
     Sub(pg, CW, cSub, "Smoothly drops windows down off-screen instead of instantly vanishing.", "xm y+8")
     Sub(pg, CW, cSub, "Spawns neon sparks behind the text caret while typing.", "xm y+8")
     Sub(pg, CW, cSub, "Subtle visual vacuum collection and paste glow indicators.", "xm y+8")
+    Sub(pg, CW, cSub, "TaskbarLeft places it at the far left of the taskbar.", "xm y+2")
     Sub(pg, CW, cSub, "that space. TrayEdge sits left of every tray icon and hides nothing at all.", "xm y+2")
     Sub(pg, CW, cSub, "Throw a window forcefully towards another monitor to make it fly and land in the center.", "xm y+8")
     Sub(pg, CW, cSub, "Throw your mouse into the corners of the screen to trigger actions.", "xm y+10")
@@ -7665,8 +7957,10 @@
     tbHwnd := WinExist("ahk_class Shell_TrayWnd")
     temp := (n > 0 ? "+" : "") n Chr(176) unit
     tempW := ClockWeatherEnabled ? Ceil(glyph * 9) + CLOCK_GAP : 0
+    text := fmt . "`n" . line
     text := LogBuf
     text := RegExReplace(text, "([a-z])([A-Z])", "$1 $2")
+    text := RegExReplace(text, "([A-Z]+)([A-Z][a-z])", "$1 $2")
     text := StrReplace(listStr, "`r`n", "`n")
     text := StrReplace(text, "`r", "`n")
     text := Trim(ctrl.Value)
@@ -7674,6 +7968,7 @@
     TextExpanderEnabled := IniStr("memory", "expander", "1") = "1"
     TextMagnifierEnabled := IniStr("mouse", "textmag", "1") = "1"
     textY := (th - 2 * lineH) // 2
+    th := 44
     threshold := 3
     threshold := 5
     thumb := 0
@@ -7696,7 +7991,11 @@
     TrayIcons[hwnd] := true
     TrayMinimizeEnabled := IniStr("memory", "traymin", "1") = "1"
     TriggerBlackHoleDelete(hwnd)
+    TriggerCopyFeedback(isDouble)
+    TriggerCutFeedback()
     try
+    try {
+    try {
     try {
     try {
     try {
@@ -7875,15 +8174,22 @@
     try StopScheduler(true)
     try str := IniRead(INI, "snippets",, "")
     try SyncActiveBorderTimer()
+    try SyncActiveBorderTimer()
+    try SyncBreathingTimers()
     try SyncBreathingTimers()        ; start/stop the polling to match the checkbox
     try SyncCursorFxTimer()
+    try SyncCursorFxTimer()
+    try SyncCursorWrapTimer()
     try SyncCursorWrapTimer()
     try SyncCustomClockTimer()
     try SyncDimmerTimer()
+    try SyncDimmerTimer()
+    try SyncHotCornersTimer()
     try SyncHotCornersTimer()
     try SyncMediaCore()
     try SyncShakeDetector()
     try SyncSmartTaskbar()
+    try SyncTaskbarUiTimer()
     try SyncTaskbarUiTimer()
     try SyncTextExpander()
     try SyncTray()
@@ -7909,8 +8215,8 @@
     try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
     try WinGetPos(&x, &cy, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&X, &Y, &W, &H, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&X, &Y, &W, &H, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
@@ -7978,6 +8284,7 @@
     TuneRow(pg, "wrapTol",   FG, cSub)
     TuneRow(pg, "yawnIdle", FG, cSub)
     TuneSave()                       ; every tunable number, in one pass
+    tw := cols * 9
     tw := Round((wr - wl) * frac), th := Round((wb - wt) * frac)
     tw := Round(fw * dw / sw), th := Round(fh * dh / sh)
     tx := (side < 0) ? (g.right - 1 - inset) : (g.left + inset)
@@ -8055,14 +8362,15 @@
     WinEventHook := DllCall("SetWinEventHook", "uint", 0x000A, "uint", 0x000B, "ptr", 0,
     WinGetClientPos(,, &pw, &ph, hwnd)
     WinGetPos(&tx, &ty, &tw, &th, "ahk_id " tbHwnd)
-    WinGetPos(,,, &h, MorphGui.Hwnd)
+    winH := th + 10
     WinSetRegion("0-0 w10 h20 r4-4", g.Hwnd)
     WinSetRegion("0-0 w2 h20 E", SmoothCaretGui.Hwnd)
     WinSetTransColor("EEFFFF", guiObj.Hwnd)
     WinSetTransparent(0, guiObj.Hwnd)
     WinSetTransparent(220, guiObj.Hwnd)
     WinTargetAlpha.Clear(), WinCurrentAlpha.Clear(), WinLastActive.Clear()
-    words := StrSplit(RegExReplace(Trim(text), "[_\- ]+", " "), " ")
+    winW := tw + 20
+    words := []
     WriteLog("=== Window Tweaks " VERSION " started ===")
     WriteLog("DragFullWindows is off and could not be enabled - drag transparency and ice glide cannot work")
     WriteLog("explorer restarted - shell hook re-registered (" (ok ? "ok" : "FAILED") ")")
@@ -8071,7 +8379,6 @@
     WriteLog(Format("  settled at L={1} T={2}  (throw {3},{4})", newL, newT, tx, ty))
     WriteLog(Format("drag end hwnd={1} frame L={2} T={3} R={4} B={5}", hwnd, eL, eT, eR, eB))
     X := "", Y := "", W := "", H := ""
-    x := anchorLeft - CLOCK_GAP - boxW
     x := info.x, y := info.y, w := info.w, h := info.h
     x := IniRead(POS_FILE, key, "x", "")
     x := L + (R - L - w) // 2
@@ -8160,6 +8467,28 @@
 #SingleInstance Force
 $!F4::GravityClose()
 $^v:: {
+)
+)
+)
+)
+)
+)
+)
+)
+)
+)
+)
+)
+)
+)
+)
+)
+)
+)
+)
+)
+)
+)
 *!+Tab:: {
 *!Tab:: {
 *!Tab:: {
@@ -8631,6 +8960,12 @@ $^v:: {
 }
 }
 }
+}
+}
+}
+}
+}
+}
 ~^c:: {
 ~^x:: {
 ~Delete:: {
@@ -8652,6 +8987,7 @@ $^v:: {
 +!e::ToggleBreathing()
 +!Esc::ToggleBossKey()
 +!f::ToggleFocusMode()
++!F12::ToggleGameMode()
 +!F4:: {
 +!F5::Reload()
 +!F6::ExitApp()
@@ -8760,10 +9096,12 @@ ElasticScroll(hwnd, dir, startX, startY) {
 ElasticScrollCallback(dt, now) {
 ElasticTimeout() {
 Enter::SpotlightExecute()
+EnterGameMode() {
 EnterStealthPanic() {
 Escape::CloseQuickLook()
 Escape::ToggleSpotlight()
 ExecuteHotCornerAction(action) {
+ExitGameMode() {
 ExitStealthPanic(ExitReason, ExitCode) {
 FadeGui(guiObj, toAlpha, ms := 0, destroy := false, onDone := "") {
 FadeSeam(flashGui, x, y, w, h) {
@@ -8778,6 +9116,7 @@ FocusDepthAtPushedRect(hwnd, orig) {
 FocusMonitorStep() {
 ForecastUrl() {
 ForgetPositions() {
+GameModeSyncFeatures() {
 GetAccentColor() {
 GetActiveExplorerPath() {
 GetDesktopHwnd() {
@@ -8827,9 +9166,11 @@ global CarouselAngleOffset := 0
 global CarouselGui := ""
 global CarouselIndex := 1
 global CarouselWindows := []
+global CLIP_BACKUP_MS := 450
+global CLIP_DOUBLE_MS := 400
 global ClipAnimGui := ""
 global ClipboardAppendEnabled := true
-global CLOCK_ANCHORS  := ["TrayEdge", "Clock"]
+global CLOCK_ANCHORS  := ["TrayEdge", "Clock", "TaskbarLeft"]
 global CLOCK_GAP := 6
 global CLOCK_UNITS    := ["Celsius", "Fahrenheit"]
 global ClockAnchor := "TrayEdge"           ; which element the block sits beside
@@ -8888,6 +9229,8 @@ global FRAME_MS := 15
 global FrameOverbudget := 0   ; count of frames where produce > 12 ms
 global FrameProduceMs := 0
 global FrameRenderMs  := 0
+global GameModeActive := false
+global GameModeSuspendedFeatures := Map()
 global GhostHiddenWindows := Map()
 global GhostWindows := Map()
 global GLIDE_MAX     := 500
@@ -8972,6 +9315,8 @@ global MiddleClickCloseEnabled := false
 global MIN_DRAG       := 4
 global MomentumTiltEnabled := true
 global MonitorThrowEnabled := true
+global MORPH_MAX_LEN := 512
+global MORPH_PREVIEW_CHARS := 60
 global MorphFormats := ["camelCase", "PascalCase", "snake_case", "kebab-case", "UPPERCASE"]
 global MorphIndex := 1
 global MorphingPasteEnabled := true
@@ -9197,6 +9542,7 @@ MenuEvent(hook, event, hwnd, idObject, idChild, thread, time) {
 MonitorDimmerTickStep(dt:=0, now:=0) {
 MonitorIndexAt(px, py) {
 MorphMaximize(hwnd, fromX, fromY, fromW, fromH) {
+MorphPreviewLine(s) {
 MorphString(text, format) {
 MotionBlurCallback(dt, now) {
 MoveFast(hwnd, x, y) {
@@ -9279,6 +9625,7 @@ RS_UpdateDwmThumbnail(thumbId, destRect := "", srcRect := "", alpha := "", visib
 RunClipAnim(yDir, duration, expand := false) {
 SampleTaskbarColor(tx, ty, th, blockX) {
 SampleVelocityStep(dt, now) {
+SaveOldClipboard() {
 SaveSettings() {
 ScreenMetrics() {
 SelectPage(name) {
@@ -9290,7 +9637,7 @@ ShellEvent(wParam, lParam, *) {
 ShowHotkeys() {
 ShowMag(mx, my) {
 ShowMicOSD(isMuted) {
-ShowMorphPreview(text) {
+ShowMorphPreview(fmt, result) {
 ShowSeamFlash(x, y, w, h) {
 ShowSmartGrid() {
 ShowVolumeOSD(vol, isMuted) {
@@ -9355,6 +9702,7 @@ ToggleDefaultMic() {
 ToggleDimmer() {
 ToggleFeatureFlag(label, isOn, ctrlKey) {
 ToggleFocusMode() {
+ToggleGameMode() {
 ToggleGhostMode() {
 ToggleGrabPan() {
 ToggleHotCorners() {
