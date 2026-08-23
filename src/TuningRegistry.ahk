@@ -89,8 +89,6 @@ global TUNE_SPEC := [
 , TS("wrapSpeed"    , "wrap"     , "speed"       ,    250,     0,   3000,    50, 0, "multi"  , "Approach speed"         , "px/s minimum, 0 = any speed")
 , TS("wrapCool"     , "wrap"     , "cooldown"    ,    700,   100,   5000,    50, 0, "multi"  , "Cooldown"               , "ms before it can wrap again")
 , TS("dimmerAlpha"  , "dimmer"   , "alpha"       ,     47,    10,     90,     5, 0, "multi"  , "Dim strength"           , "% on inactive monitors")
-, TS("borderThick"  , "border"   , "thickness"   ,      2,     1,      8,     1, 0, "multi"  , "Border thickness"       , "px")
-, TS("borderAlpha"  , "border"   , "alpha"       ,    100,    20,    100,     5, 0, "multi"  , "Border opacity"         , "%")
 , TS("breatheIdle"  , "breathing", "idle"        ,   6000,  1000,  60000,   500, 0, "multi"  , "Breathe after"          , "ms of inactivity")
 , TS("breatheAlpha" , "breathing", "alpha"       ,     70,    20,     95,     5, 0, "multi"  , "Breathe opacity"        , "% once dimmed")
 , TS("yawnIdle"     , "mouse"    , "cursoryawntime", 900000, 60000, 7200000, 60000, 0, "multi", "Cursor yawn after"    , "ms idle (900000 = 15 min)")
@@ -248,12 +246,15 @@ SyncTuningGlobals() {
 ; Called inline from BuildWin at the point the value belongs, so a number sits
 ; under the checkbox it belongs to rather than in a distant list of numbers.
 TuneRow(pg, key, col, subCol, pos := "xm y+12") {
-    global C
+    global C, EDITBG, EDITFG
     s := TuneSpec(key)
     if !s
         return
     Lbl(pg, col, s.label, pos, 190)
-    C[key] := pg.AddEdit("x196 yp-3 w70" (s.dec > 0 ? "" : " Number"), TuneText(key))
+    ; Background AND text colour, both. A Gui BackColor tints the field but
+    ; leaves the text system-default black, which is unreadable on a dark one.
+    C[key] := pg.AddEdit("x196 yp-3 w70 Background" EDITBG " c" EDITFG
+        . (s.dec > 0 ? "" : " Number"), TuneText(key))
     Sub(pg, 250, subCol, s.hint " (" TuneFormat(s, s.lo) "-" TuneFormat(s, s.hi)
         . (s.step != 1 ? ", step " s.step : "") ")", "x+12 yp+3")
 }

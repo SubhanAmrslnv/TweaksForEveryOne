@@ -123,7 +123,6 @@ Context Menu Unfold. Turn on whichever you want in the settings window.
 - **Global Mic Kill-Switch**: Double-tap `Alt` to instantly mute/unmute your microphone system-wide.
 - **Infinite Cursor Wrap**: Push the cursor into the left or right edge of the desktop and hold to teleport to the other side. Needs a deliberate push - approach speed, hold time, cooldown and edge tolerance are all configurable - so reaching for something at the screen edge never triggers it, and it never fires mid-drag.
 - **Quick Spotlight Launcher**: Double-tap `Ctrl` for a minimalist, lightning-fast search and launch bar.
-- **Smart Active Border**: Draws a sleek, accent-colored border around the currently active window.
 - **Always on Bottom**: `Shift+Alt+B` pins any window permanently to your desktop background as a widget.
 - **Global Text Expander**: Type `@@mail`, `@@date`, etc., to instantly expand snippets anywhere.
 - **Middle-Click to Close**: Middle-click any window's title bar to instantly close it.
@@ -178,7 +177,7 @@ Context Menu Unfold. Turn on whichever you want in the settings window.
 - **Reset Transparency**: `Shift + Alt + X` returns the active window to fully opaque.
 
 **Feature Toggles (`Shift + Alt + key`):**
-- Hot corners (`C`), smart active border (`V`), infinite cursor wrap (`I`), multi-monitor dimmer (`D`), smart auto-hide taskbar (`T`), magnetic window groups (`J`), grab & pan (`Space`) — each toggles instantly, shows a tray notification, and saves the new state.
+- Hot corners (`C`), infinite cursor wrap (`I`), multi-monitor dimmer (`D`), smart auto-hide taskbar (`T`), magnetic window groups (`J`), grab & pan (`Space`) — each toggles instantly, shows a tray notification, and saves the new state.
 
 **Productivity & Window Management:**
 - **Transparency Control**: `Shift + Alt + Wheel` to adjust the opacity of any active window.

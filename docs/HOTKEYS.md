@@ -75,7 +75,6 @@ a tray notification.
 | Hotkey | Feature |
 |---|---|
 | **Shift + Alt + C** | Hot corners |
-| **Shift + Alt + V** | Smart active border |
 | **Shift + Alt + I** | Infinite cursor wrap |
 | **Shift + Alt + D** | Multi-monitor dimmer |
 | **Shift + Alt + T** | Smart auto-hide taskbar |

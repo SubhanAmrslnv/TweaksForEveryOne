@@ -97,13 +97,6 @@ ToggleHotCorners() {
     SyncHotCornersTimer()
 }
 
-ToggleActiveBorder() {
-    global ActiveBorderEnabled
-    ActiveBorderEnabled := !ActiveBorderEnabled
-    ToggleFeatureFlag("Active window border", ActiveBorderEnabled, "border")
-    SyncActiveBorderTimer()
-}
-
 ToggleCursorWrap() {
     global InfiniteWrapEnabled
     InfiniteWrapEnabled := !InfiniteWrapEnabled

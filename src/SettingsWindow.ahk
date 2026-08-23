@@ -58,7 +58,7 @@ BuildWin() {
     global CurtainDropEnabled
     global TaskbarWaveEnabled, CustomClockEnabled, ClockLocation, ClockUnits, ClockAnchor, ClockWeatherEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled, CursorYawnEnabled, ShatterEnabled
     global RestoreEnabled, BreathingEnabled, OpenAnim, FlyMinimizeEnabled, RollUpEnabled, TrayMinimizeEnabled, BossKeyEnabled, AltDragEnabled, TaskbarScrollEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, MorphingPasteEnabled, ClipboardAppendEnabled, SmoothCaretEnabled, TypingSoundsEnabled, HotkeySoundsEnabled, CopyFeedbackEnabled, SmartCapsEnabled, SmartCapsAction, ParallaxEnabled, EP_Style, EP_IconSize
-    global NAV, SEL, SELF, FG
+    global NAV, SEL, SELF, FG, EDITBG, EDITFG
 
     dark := IsDark()
     BG   := dark ? "1F1F1F" : "F5F5F5"      ; content background
@@ -67,6 +67,13 @@ BuildWin() {
     cSub  := dark ? "9A9A9A" : "5A5A5A"      ; secondary text
     SEL  := dark ? "0F5FA6" : "CCE4F7"      ; selected nav
     SELF := dark ? "FFFFFF" : "0A0A0A"      ; selected nav text
+    ; EVERY Edit AND DropDownList NEEDS BOTH A BACKGROUND AND A TEXT COLOUR.
+    ; The Gui BackColor reaches an input control's background but never its
+    ; text, which stays the system default black - so in dark mode every input
+    ; was black on near-black and could only be read while it was selected and
+    ; the highlight inverted it. TuneRow builds most of them, hence the global.
+    EDITBG := dark ? "2B2B2B" : "FFFFFF"    ; input background
+    EDITFG := dark ? "F0F0F0" : "141414"    ; input text
 
     W := 780, H := 700, SW := 196
 
@@ -222,7 +229,7 @@ BuildWin() {
     Sub(pg, CW, cSub, "Type @@mail, @@tel, @@date to auto-expand. Edit snippets in WindowTweaks.ini", "xm y+8")
     
     C["smartcaps"] := Box(pg, CW, FG, "Smart Caps Lock (Hold for Caps, Tap for action)", SmartCapsEnabled, "xm y+16")
-    C["smartcaps_act"] := pg.AddDropDownList("x320 yp-3 w90 Choose" IndexOf(CAPS_ACTIONS, SmartCapsAction), CAPS_ACTIONS)
+    C["smartcaps_act"] := pg.AddDropDownList("x320 yp-3 w90 Background" EDITBG " c" EDITFG " Choose" IndexOf(CAPS_ACTIONS, SmartCapsAction), CAPS_ACTIONS)
     Sub(pg, CW, cSub, "Holding CapsLock for 0.4s toggles CapsLock. Tapping it sends Esc or Backspace.", "xm y+8")
     
     C["plainpaste"] := Box(pg, CW, FG, "Plain-Text Paste (Ctrl+Alt+V)", PlainPasteEnabled, "xm y+16")
@@ -237,7 +244,7 @@ BuildWin() {
     ; which programs are never dimmed by breathing or the monitor dimmer, and
     ; until now it could only be changed by hand-editing settings.ini.
     Lbl(pg, FG, "Never dim these apps", "xm y+20", 190)
-    C["mediafallback"] := pg.AddEdit("xm y+6 w" CW, MediaFallbackList)
+    C["mediafallback"] := pg.AddEdit("xm y+6 w" CW " Background" EDITBG " c" EDITFG, MediaFallbackList)
     ; No " ;" in this string: a space followed by a semicolon starts a comment
     ; even INSIDE a quoted string, so the literal would truncate mid-argument and
     ; the file would fail to load with "Missing """. Same reason the shipped
@@ -300,21 +307,13 @@ BuildWin() {
     Sub(pg, CW, cSub, "Automatically dims every monitor except the one your mouse is currently on.", "xm y+8")
     TuneRow(pg, "dimmerAlpha", FG, cSub)
 
-    C["border"] := Box(pg, CW, FG, "Smart Active Border (Shift+Alt+V)", ActiveBorderEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Draws a sleek, accent-colored border around the currently active window.", "xm y+8")
-    TuneRow(pg, "borderThick", FG, cSub)
-    TuneRow(pg, "borderAlpha", FG, cSub)
-    Lbl(pg, FG, "Border colour", "xm y+12", 190)
-    C["bordercolor"] := pg.AddEdit("x196 yp-3 w70", BorderColor)
-    Sub(pg, 250, cSub, "auto = Windows accent, or a hex RRGGBB", "x+12 yp+3")
-
     C["breath"] := Box(pg, CW, FG, "Breathing (dim inactive windows)", BreathingEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Windows fade out once you have not touched them for a while.", "xm y+8")
     TuneRow(pg, "breatheIdle",  FG, cSub)
     TuneRow(pg, "breatheAlpha", FG, cSub)
 
     Lbl(pg, FG, "New window animation", "xm y+16")
-    C["openanim"] := pg.AddDropDownList("x160 yp-3 w160 Choose" IndexOf(OPEN_ANIMS, OpenAnim), OPEN_ANIMS)
+    C["openanim"] := pg.AddDropDownList("x160 yp-3 w160 Background" EDITBG " c" EDITFG " Choose" IndexOf(OPEN_ANIMS, OpenAnim), OPEN_ANIMS)
 
     ; ---- Animation & Timing
     ; The cross-cutting motion values. Everything on this page affects more than
@@ -353,7 +352,7 @@ BuildWin() {
     Sub(pg, CW, cSub, "clock, date and tray icons - this never replaces them, it sits next to them.", "xm y+2")
 
     Lbl(pg, FG, "Sit beside", "xm y+16", 190)
-    C["clockanchor"] := pg.AddDropDownList("x196 yp-3 w120 Choose" IndexOf(CLOCK_ANCHORS, ClockAnchor), CLOCK_ANCHORS)
+    C["clockanchor"] := pg.AddDropDownList("x196 yp-3 w120 Background" EDITBG " c" EDITFG " Choose" IndexOf(CLOCK_ANCHORS, ClockAnchor), CLOCK_ANCHORS)
     Sub(pg, 250, cSub, "TrayEdge covers nothing", "x+12 yp+3")
     Sub(pg, CW, cSub, "Clock puts it right beside the clock, but then it covers the tray buttons in", "xm y+8")
     Sub(pg, CW, cSub, "that space. TrayEdge sits left of every tray icon and hides nothing at all.", "xm y+2")
@@ -366,11 +365,11 @@ BuildWin() {
     Sub(pg, CW, cSub, "outbound request this program makes: open-meteo.com, once every 15 minutes.", "xm y+2")
 
     Lbl(pg, FG, "Location", "xm y+16", 190)
-    C["clockloc"] := pg.AddEdit("x196 yp-3 w120", ClockLocation)
+    C["clockloc"] := pg.AddEdit("x196 yp-3 w120 Background" EDITBG " c" EDITFG, ClockLocation)
     Sub(pg, 250, cSub, "a city, e.g. Baku", "x+12 yp+3")
 
     Lbl(pg, FG, "Units", "xm y+16", 190)
-    C["clockunits"] := pg.AddDropDownList("x196 yp-3 w120 Choose" IndexOf(CLOCK_UNITS, ClockUnits), CLOCK_UNITS)
+    C["clockunits"] := pg.AddDropDownList("x196 yp-3 w120 Background" EDITBG " c" EDITFG " Choose" IndexOf(CLOCK_UNITS, ClockUnits), CLOCK_UNITS)
 
 
     ; ---- Hot Corners
@@ -386,17 +385,22 @@ BuildWin() {
     ; and it would throw here - inside BuildWin, with no catch - which used to
     ; leave Shift+Alt+W permanently broken after a hand-edited settings.ini.
     ; LoadSettings validates these now; IndexOf is the second line of defence.
-    Lbl(pg, FG, "Top Left:", "xm y+20")
-    C["corner_tl"] := pg.AddDropDownList("x140 yp-3 w130 Choose" IndexOf(CORNER_ACTIONS, HotCornerTL), CORNER_ACTIONS)
+    ; ONE PER ROW. The right-hand pair used to sit in a second column built out
+    ; of "x+30" and "x+10" relative offsets, which put them at x=700 on a page
+    ; whose content is ~528 wide - both dropdowns ran off the edge and were
+    ; clipped to a sliver, unreadable and barely clickable. Every other page in
+    ; this window is a single column of label-then-control; so is this one now.
+    Lbl(pg, FG, "Top Left:", "xm y+20", 130)
+    C["corner_tl"] := pg.AddDropDownList("x140 yp-3 w180 Background" EDITBG " c" EDITFG " Choose" IndexOf(CORNER_ACTIONS, HotCornerTL), CORNER_ACTIONS)
 
-    Lbl(pg, FG, "Top Right:", "x+30 yp+3")
-    C["corner_tr"] := pg.AddDropDownList("x+10 yp-3 w130 Choose" IndexOf(CORNER_ACTIONS, HotCornerTR), CORNER_ACTIONS)
+    Lbl(pg, FG, "Top Right:", "xm y+14", 130)
+    C["corner_tr"] := pg.AddDropDownList("x140 yp-3 w180 Background" EDITBG " c" EDITFG " Choose" IndexOf(CORNER_ACTIONS, HotCornerTR), CORNER_ACTIONS)
 
-    Lbl(pg, FG, "Bottom Left:", "xm y+20")
-    C["corner_bl"] := pg.AddDropDownList("x140 yp-3 w130 Choose" IndexOf(CORNER_ACTIONS, HotCornerBL), CORNER_ACTIONS)
+    Lbl(pg, FG, "Bottom Left:", "xm y+14", 130)
+    C["corner_bl"] := pg.AddDropDownList("x140 yp-3 w180 Background" EDITBG " c" EDITFG " Choose" IndexOf(CORNER_ACTIONS, HotCornerBL), CORNER_ACTIONS)
 
-    Lbl(pg, FG, "Bottom Right:", "x+30 yp+3")
-    C["corner_br"] := pg.AddDropDownList("x+10 yp-3 w130 Choose" IndexOf(CORNER_ACTIONS, HotCornerBR), CORNER_ACTIONS)
+    Lbl(pg, FG, "Bottom Right:", "xm y+14", 130)
+    C["corner_br"] := pg.AddDropDownList("x140 yp-3 w180 Background" EDITBG " c" EDITFG " Choose" IndexOf(CORNER_ACTIONS, HotCornerBR), CORNER_ACTIONS)
     ; ---- General
     pg := CreatePage("⚙️ General")
     Head(pg, CW, FG, "General Settings")
@@ -424,11 +428,11 @@ BuildWin() {
     Sub(pg, CW, cSub, "Notifications slide in elastically with an overshoot bounce.", "xm y+8")
 
     Lbl(pg, FG, "Taskbar Style", "xm y+16")
-    C["epStyle"] := pg.AddDropDownList("x170 yp-3 w100 Choose" IndexOf(EP_STYLES, EP_Style), EP_STYLES)
+    C["epStyle"] := pg.AddDropDownList("x170 yp-3 w100 Background" EDITBG " c" EDITFG " Choose" IndexOf(EP_STYLES, EP_Style), EP_STYLES)
     Sub(pg, 220, cSub, "Win10 supports small icons", "x+16 yp+3")
 
     Lbl(pg, FG, "Icon Size", "xm y+16")
-    C["epIconSize"] := pg.AddDropDownList("x170 yp-3 w100 Choose" IndexOf(EP_ICON_SIZES, EP_IconSize), EP_ICON_SIZES)
+    C["epIconSize"] := pg.AddDropDownList("x170 yp-3 w100 Background" EDITBG " c" EDITFG " Choose" IndexOf(EP_ICON_SIZES, EP_IconSize), EP_ICON_SIZES)
     
     b2 := pg.AddButton("xm y+24 w150 h30", "Restart Explorer")
     b2.OnEvent("Click", (*) => RestartExplorer())
@@ -697,8 +701,8 @@ ApplyUi(writeBack := false) {
         ClockUnits := C["clockunits"].Text
         ClockAnchor := C["clockanchor"].Text
         ClockWeatherEnabled := C["clockweather"].Value
-        ; Shape validation, like BorderColor above - it is not a number, so it is
-        ; not a TUNE_SPEC row. Whatever survives goes straight into a URL.
+        ; Shape validation - it is not a number, so it is not a TUNE_SPEC row.
+        ; Whatever survives goes straight into a URL.
         ClockLocation := CleanClockLocation(C["clockloc"].Value)
         ToastBounceEnabled := C["toast"].Value
         MonitorThrowEnabled := C["monthrow"].Value
@@ -717,7 +721,6 @@ ApplyUi(writeBack := false) {
         HotCornerBL := C["corner_bl"].Text
         HotCornerBR := C["corner_br"].Text
 
-        ActiveBorderEnabled := C["border"].Value
         AlwaysOnBottomEnabled := C["bottom"].Value
         TextExpanderEnabled := C["expander"].Value
         PlainPasteEnabled := C["plainpaste"].Value
@@ -730,10 +733,6 @@ ApplyUi(writeBack := false) {
 
         EP_Style       := C["epStyle"].Text
         EP_IconSize    := C["epIconSize"].Text
-
-        BorderColor := Trim(C["bordercolor"].Value)
-        if !(BorderColor = "auto" || BorderColor ~= "^[0-9A-Fa-f]{6}$")
-            BorderColor := "auto"
 
         ; No validation beyond trimming: MC_ParseExeList already rejects paths
         ; and normalises separators, and an empty list is a legitimate value
@@ -790,7 +789,6 @@ ApplyUi(writeBack := false) {
     try SyncDimmerTimer()
     try SyncHotCornersTimer()
     try SyncCursorWrapTimer()
-    try SyncActiveBorderTimer()
     try SyncCustomClockTimer()
     try SyncTextExpander()
     try SyncShakeDetector()

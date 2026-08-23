@@ -65,7 +65,7 @@ IniStr(section, key, defaultVal) {
 ; Shift+Alt+W permanently dead, and a value the dropdown cannot show leaves the
 ; GUI displaying one thing while the engine uses another.
 ; The weather location is validated by SHAPE, not by range or membership, for the
-; same reason BorderColor is: it is not a number and there is no list to check it
+; same reason the clock location is: it is not a number and there is no list
 ; against. What survives is pasted into a URL, so anything that is not plausibly
 ; part of a place name is dropped rather than escaped, and the length is capped.
 CleanClockLocation(s) {
@@ -109,7 +109,7 @@ LoadSettings() {
     CurtainDropEnabled := IniStr("memory", "curtain", "1") = "1"
     TaskbarWaveEnabled := IniStr("taskbar", "wave", "0") = "1"
     CustomClockEnabled := IniStr("taskbar", "customclock", "1") = "1"
-    ClockLocation := CleanClockLocation(IniStr("taskbar", "clocklocation", ""))
+    ClockLocation := CleanClockLocation(IniStr("taskbar", "clocklocation", "Baku"))
     ; Membership, not range - see the note on IniPick. A hand-edited value the
     ; dropdown cannot display would throw inside BuildWin and kill Shift+Alt+W.
     ClockUnits := IniPick("taskbar", "clockunits", CLOCK_UNITS, "Celsius")
@@ -117,7 +117,7 @@ LoadSettings() {
     ClockWeatherEnabled := IniStr("taskbar", "clockweather", "1") = "1"
     ToastBounceEnabled := IniStr("taskbar", "toastbounce", "1") = "1"
     MonitorThrowEnabled := IniStr("mouse", "monthrow", "1") = "1"
-    BlackHoleDeleteEnabled := IniStr("mouse", "blackhole", "0") = "1"
+    BlackHoleDeleteEnabled := IniStr("mouse", "blackhole", "1") = "1"
     CursorYawnEnabled := IniStr("mouse", "cursoryawn", "1") = "1"
     ShatterEnabled := IniStr("mouse", "shatter", "0") = "1"
     ; SNAP_DISTANCE, CORNER_BOOST, NEIGHBOUR_PROX, GLIDE_THROW, GLIDE_MS,
@@ -131,7 +131,7 @@ LoadSettings() {
     BreathingEnabled := IniStr("memory", "breathing", "1") = "1"
     OpenAnim := IniPick("memory", "openanim", OPEN_ANIMS, "Ghost Slide-In")
     FlyMinimizeEnabled := IniStr("memory", "fly", "1") = "1"
-    RollUpEnabled := IniStr("memory", "rollup", "0") = "1"
+    RollUpEnabled := IniStr("memory", "rollup", "1") = "1"
     TrayMinimizeEnabled := IniStr("memory", "traymin", "1") = "1"
     BossKeyEnabled := IniStr("memory", "bosskey", "1") = "1"
     AltDragEnabled := IniStr("memory", "altdrag", "1") = "1"
@@ -156,14 +156,13 @@ LoadSettings() {
     HotCornerBR := IniPick("corners", "br", CORNER_ACTIONS, "Show Desktop")
     PremiumVolumeOSDEnabled := IniStr("memory", "osd", "1") = "1"
     LivePipEnabled := IniStr("memory", "pip", "1") = "1"
-    GrabPanEnabled := IniStr("memory", "grabpan", "0") = "1"
+    GrabPanEnabled := IniStr("memory", "grabpan", "1") = "1"
     MicKillSwitchEnabled := IniStr("memory", "mickill", "1") = "1"
     InfiniteWrapEnabled := IniStr("memory", "wrap", "0") = "1"
     SpotlightEnabled := IniStr("memory", "spotlight", "1") = "1"
-    ActiveBorderEnabled := IniStr("memory", "border", "0") = "1"
     AlwaysOnBottomEnabled := IniStr("memory", "bottom", "1") = "1"
     TextExpanderEnabled := IniStr("memory", "expander", "1") = "1"
-    MiddleClickCloseEnabled := IniStr("memory", "midclose", "0") = "1"
+    MiddleClickCloseEnabled := IniStr("memory", "midclose", "1") = "1"
     ProximityGhostEnabled := IniStr("memory", "ghost", "1") = "1"
     ShakeFindEnabled := IniStr("mouse", "shakefind", "1") = "1"
     SmartTaskbarEnabled := IniStr("taskbar", "smart", "0") = "1"
@@ -183,9 +182,6 @@ LoadSettings() {
     ; "auto" follows the Windows accent colour. Validated by shape, like the
     ; enumerated settings are validated by membership: a value the GUI cannot
     ; round-trip must never reach Gui.BackColor.
-    BorderColor := IniStr("border", "color", "auto")
-    if !(BorderColor = "auto" || BorderColor ~= "^[0-9A-Fa-f]{6}$")
-        BorderColor := "auto"
 
     ; Every tunable number, clamped against the one table that owns its range.
     ; A corrupt INI must not stop the program from starting, so TuneClean falls
@@ -251,7 +247,6 @@ WriteSettings() {
         PutIni(RestoreEnabled ? 1 : 0,   "memory", "enabled")
         PutIni(GravityCloseEnabled ? 1 : 0, "memory", "gravityclose")
         PutIni(DEBUG ? 1 : 0,            "memory", "debuglog")
-        PutIni(BorderColor,              "border", "color")
         TuneSave()                       ; every tunable number, in one pass
         PutIni(BreathingEnabled ? 1 : 0, "memory", "breathing")
         PutIni(OpenAnim, "memory", "openanim")
@@ -285,7 +280,6 @@ WriteSettings() {
         PutIni(MicKillSwitchEnabled ? 1 : 0, "memory", "mickill")
         PutIni(InfiniteWrapEnabled ? 1 : 0, "memory", "wrap")
         PutIni(SpotlightEnabled ? 1 : 0, "memory", "spotlight")
-        PutIni(ActiveBorderEnabled ? 1 : 0, "memory", "border")
         PutIni(AlwaysOnBottomEnabled ? 1 : 0, "memory", "bottom")
         PutIni(TextExpanderEnabled ? 1 : 0, "memory", "expander")
         PutIni(MiddleClickCloseEnabled ? 1 : 0, "memory", "midclose")

@@ -36,7 +36,6 @@ To remove it: run **`Uninstall.ps1`**.
 - **Global Mic Kill-Switch**: Double-tap `Alt` to instantly mute/unmute your microphone system-wide.
 - **Infinite Cursor Wrap**: Teleport your cursor across screen edges for seamless multi-monitor navigation.
 - **Quick Spotlight Launcher**: Double-tap `Ctrl` for a minimalist, lightning-fast search and launch bar.
-- **Smart Active Border**: Draws a sleek, accent-colored border around the currently active window.
 - **Always on Bottom**: `Shift+Alt+B` pins any window permanently to your desktop background as a widget.
 - **Global Text Expander**: Type `@@mail`, `@@date`, etc., to instantly expand snippets anywhere.
 - **Middle-Click to Close**: Middle-click any window's title bar to instantly close it.
@@ -199,7 +198,7 @@ bar, gone see-through, or disappeared into the tray, this brings it back.
 
 ### Switching a feature on or off
 
-`Shift + Alt +` … `C` hot corners, `V` active border, `I` cursor wrap,
+`Shift + Alt +` … `C` hot corners, `I` cursor wrap,
 `D` multi-monitor dimmer, `T` smart auto-hide taskbar, `J` magnetic groups,
 `Space` grab & pan. Each shows a tray notification and remembers the new state.
 
@@ -218,7 +217,7 @@ Seven pages down the left:
 | **Window Management** | Snapping (distance, speed response, edge stickiness, corner boost, neighbour reach), ice glide (throw, slide time, throw distance, settle overshoot), drag opacity floor, tiling grid gap, rubber-band travel, alt-drag, fly-to-mouse minimize, grab & pan, roll-up, position memory |
 | **Power Features** | Spotlight, live PiP, ghost window (opacity, fade range, click range), always on bottom, middle-click close, minimize to tray, quick folder jump, Quick Look |
 | **System & Media** | Taskbar volume scroll, volume OSD (step, hold time, opacity), mic kill-switch, boss key, text expander, smart CapsLock, plain-text paste, "never dim these apps" |
-| **Multi-Monitor** | Cursor wrap (tolerance, hold time, approach speed, cooldown), focus dimmer strength, active border (thickness, opacity, colour), breathing (delay, opacity), shake to find, cursor yawn, keystroke and hotkey sounds (volume each, shared pitch), new-window animation |
+| **Multi-Monitor** | Cursor wrap (tolerance, hold time, approach speed, cooldown), focus dimmer strength, breathing (delay, opacity), shake to find, cursor yawn, keystroke and hotkey sounds (volume each, shared pitch), new-window animation |
 | **Animation** | Durations and intensities shared across features — open animation, snap bounce, roll-up, gravity close, overlay fade, OSD slide, focus-mode dim / softness / corners, transparency wheel step and floor |
 | **Hot Corners** | Enable, corner size, hold time, plus an action per corner |
 | **General** | Start with Windows, gravity drop on close, debug log, smart auto-hide taskbar, taskbar style / icon size, restart Explorer, open log, open folder, hotkeys, this guide |

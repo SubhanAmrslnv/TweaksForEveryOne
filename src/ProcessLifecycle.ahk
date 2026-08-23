@@ -90,7 +90,6 @@ Boot() {
     SyncSmartTaskbar()
     SyncHotCornersTimer()
     SyncCursorWrapTimer()
-    SyncActiveBorderTimer()
     SyncTextExpander()
     SyncCustomClockTimer()
     ; Not a Sync: a one-off probe of a Windows setting that the drag effects
@@ -121,7 +120,6 @@ Bye(*) {
     try StopScheduler(true)
     try SetTimer(BreathingMonitorStep, 0)
     try SetTimer(GhostMonitorStep, 0)
-    try SetTimer(ActiveBorderMonitorStep, 0)
     try SetTimer(MonitorDimmerTickStep, 0)
     try SetTimer(SmartTaskbarMonitorStep, 0)
     try SetTimer(HotCornersMonitorStep, 0)
@@ -141,6 +139,10 @@ Bye(*) {
     try SetTimer(CheckMouseIdle, 0)
     try SetTimer(CheckElasticDrag, 0)
     try SetTimer(CheckMagDrag, 0)
+    ; The smooth caret overlay is an always-on-top blue bar owned by this
+    ; process. Nothing else takes it down, so exiting used to leave it painted
+    ; over whatever had focus.
+    try HideSmoothCaret()
     ; The custom clock repeats every second and was the only timer still
     ; running through teardown. Bye() is also the tray -> Restart path, so it
     ; survived past RS_Shutdown() with a live Gui behind it.
@@ -162,7 +164,6 @@ Bye(*) {
 
     try MC_Shutdown()
 
-    try DestroyActiveBorder()
 
     for layer in FocusGuis
         try GuiDestroy(layer.gui)

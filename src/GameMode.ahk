@@ -26,7 +26,7 @@
 ; not declared elsewhere is skipped by the IsSet() guard rather than throwing.
 global GAME_MODE_FEATURES := [
     "HotCornersEnabled", "InfiniteWrapEnabled", "MultiMonitorDimmerEnabled", "GrabPanEnabled",
-    "ActiveBorderEnabled", "SnapEnabled", "ElasticScrollEnabled",
+    "SnapEnabled", "ElasticScrollEnabled",
     "SpotlightEnabled", "QuickLookEnabled", "CursorYawnEnabled", "RippleClickEnabled",
     "LivePipEnabled", "ProximityGhostEnabled", "BreathingEnabled",
     "ElasticDragEnabled", "TextMagnifierEnabled", "TaskbarScrollEnabled",
@@ -160,7 +160,6 @@ GameModeSyncFeatures() {
     try SyncHotCornersTimer()
     try SyncCursorWrapTimer()
     try SyncDimmerTimer()
-    try SyncActiveBorderTimer()
     try SyncBreathingTimers()
     try SyncCursorFxTimer()
     try SyncTaskbarUiTimer()

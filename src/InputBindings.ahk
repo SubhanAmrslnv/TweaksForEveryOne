@@ -119,7 +119,6 @@
 ; These seven flags already persist to settings.ini; before this the only way to
 ; change one was to open the settings window.
 +!c::ToggleHotCorners()
-+!v::ToggleActiveBorder()
 +!i::ToggleCursorWrap()
 +!d::ToggleDimmer()
 +!t::ToggleSmartTaskbar()

@@ -641,9 +641,26 @@ RunClipAnim(yDir, duration, expand := false) {
 }
 
 ; ====== Smooth Gliding Caret & Word Pop ======
+;
+; THE OVERLAY IS A MOTION CUE AND MUST NEVER OUTLIVE THE MOTION. The glide
+; animation unregisters itself the moment the caret settles - while still shown
+; at alpha 200 - and nothing else was watching it, so the blue bar simply stayed
+; on screen at the last place a caret had been. It survived the window losing
+; focus, the caret disappearing and the feature being switched off, because the
+; only code that could hide it was a branch of an animation that was no longer
+; running. Bye() did not clear it either.
+;
+; SmoothCaretWatchdog is the Sync*-style monitor that fixes that: it is armed
+; whenever the overlay is shown, and it takes the overlay down as soon as the
+; caret is gone, the foreground window changes, the feature is switched off, or
+; the caret has simply sat still for SMOOTH_CARET_HOLD_MS - after which the real
+; caret is blinking there anyway and ours is adding nothing but risk.
 global SmoothCaretGui := ""
 global LastCaretX := 0, LastCaretY := 0
 global CaretVelX := 0, CaretVelY := 0
+global SmoothCaretLastMove := 0    ; tick of the last caret movement we drew
+global SmoothCaretWin := 0         ; the window it was drawn over
+global SMOOTH_CARET_HOLD_MS := 1200
 
 UpdateSmoothCaret() {
     global SmoothCaretEnabled, SmoothCaretGui, LastCaretX, LastCaretY, CaretVelX, CaretVelY
@@ -673,6 +690,12 @@ UpdateSmoothCaret() {
     
     SmoothCaretGui.Show("NA x-1000 y-1000 w2 h20")
     WinSetRegion("0-0 w2 h20 E", SmoothCaretGui.Hwnd)
+    ; Who it belongs to and when it last moved, so the watchdog can tell a live
+    ; caret from an abandoned overlay. Armed here rather than at startup: a
+    ; feature nobody is using costs nothing.
+    SmoothCaretLastMove := A_TickCount
+    try SmoothCaretWin := WinExist("A")
+    SetTimer(SmoothCaretWatchdog, 250)
     
     animKey := "SmoothCaret_" . SmoothCaretGui.Hwnd
     
@@ -694,8 +717,13 @@ UpdateSmoothCaret() {
         
         LastCaretX += CaretVelX * steps
         LastCaretY += CaretVelY * steps
+        if (Abs(dx) >= 1 || Abs(dy) >= 1)
+            SmoothCaretLastMove := A_TickCount
         
         if (Abs(dx) < 1 && Abs(dy) < 1 && Abs(CaretVelX) < 1 && Abs(CaretVelY) < 1) {
+            ; Settled. This returns false, so NOTHING here runs again - which is
+            ; exactly how the bar used to be abandoned on screen. The watchdog is
+            ; what takes it from here.
             LastCaretX := tx
             LastCaretY := ty
             RS_SetPos(SmoothCaretGui.Hwnd, Round(LastCaretX), Round(LastCaretY), 2, 20, RS_PRI_ANIM)
@@ -711,6 +739,51 @@ UpdateSmoothCaret() {
         return true
     }
     RegisterAnimation(animKey, Step)
+}
+
+; The one place that takes the caret overlay down, so every caller - the
+; watchdog, ApplyUi and Bye - goes through the same teardown. Cancels the glide
+; first: a live animation would re-show the window on its next frame.
+HideSmoothCaret() {
+    global SmoothCaretGui
+    SetTimer(SmoothCaretWatchdog, 0)
+    if (!SmoothCaretGui)
+        return
+    try CancelAnimation("SmoothCaret_" SmoothCaretGui.Hwnd)
+    try RS_SetAlpha(SmoothCaretGui.Hwnd, "Off", RS_PRI_ANIM)
+    try RS_Commit()          ; one-shot: no animation is left to flush this
+    try SmoothCaretGui.Hide()
+}
+
+; A monitor, so a SetTimer - not a RegisterAnimation, which would pin the 15 ms
+; frame loop open for as long as a caret existed anywhere.
+SmoothCaretWatchdog() {
+    global SmoothCaretEnabled, SmoothCaretGui, SmoothCaretLastMove, SmoothCaretWin
+    global SMOOTH_CARET_HOLD_MS
+    if (!SmoothCaretGui) {
+        SetTimer(SmoothCaretWatchdog, 0)
+        return
+    }
+    if (!SmoothCaretEnabled) {
+        HideSmoothCaret()
+        return
+    }
+    ; No caret at all, or focus has moved to another window: the overlay is
+    ; pointing at something that is not there any more.
+    if (!CaretGetPos(&cx, &cy)) {
+        HideSmoothCaret()
+        return
+    }
+    cur := 0
+    try cur := WinExist("A")
+    if (cur != SmoothCaretWin) {
+        HideSmoothCaret()
+        return
+    }
+    ; Still a caret, in the same window, but it has stopped moving. The real one
+    ; is blinking there; ours has nothing left to add.
+    if (A_TickCount - SmoothCaretLastMove > SMOOTH_CARET_HOLD_MS)
+        HideSmoothCaret()
 }
 
 WordPop() {
@@ -733,7 +806,9 @@ WordPop() {
         t := now - start
         if (t > 150) {
             RS_SetAlpha(g.Hwnd, "Off", RS_PRI_ANIM)
+            popHwnd := g.Hwnd
             g.Destroy()
+            RS_RemoveHwnd(popHwnd)   ; a ToolWindow raises no shell destroy event
             return false
         }
         

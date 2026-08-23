@@ -39,7 +39,6 @@ A Windows 11 tray utility written in **AutoHotkey v2** (magnetic window snapping
 | `Shift+Alt+Y` | Restore all rolled-up / ghosted / tray-hidden windows | `RestoreAllWindows()` |
 | `Shift+Alt+F5` / `F6` | Restart / Exit | `Reload()` / `ExitApp()` |
 | `Shift+Alt+C` | Hot corners on / off | `ToggleHotCorners()` |
-| `Shift+Alt+V` | Smart active border on / off | `ToggleActiveBorder()` |
 | `Shift+Alt+I` | Infinite cursor wrap on / off | `ToggleCursorWrap()` |
 | `Shift+Alt+D` | Multi-monitor dimmer on / off | `ToggleDimmer()` |
 | `Shift+Alt+T` | Smart auto-hide taskbar on / off | `ToggleSmartTaskbar()` |
@@ -123,7 +122,6 @@ default. When something needs visual feedback, reach for a fade first.
 - **Global Mic Kill-Switch**: Double-tap `Alt` to instantly mute/unmute your microphone system-wide.
 - **Infinite Cursor Wrap**: Teleport your cursor across screen edges for seamless multi-monitor navigation.
 - **Quick Spotlight Launcher**: Double-tap `Ctrl` for a minimalist, lightning-fast search and launch bar.
-- **Smart Active Border**: Draws a sleek, accent-colored border around the currently active window.
 - **Always on Bottom**: `Shift+Alt+B` pins any window permanently to your desktop background as a widget.
 - **Global Text Expander**: Type `@@mail`, `@@date`, etc., to instantly expand snippets anywhere.
 - **Middle-Click to Close**: Middle-click any window's title bar to instantly close it.
@@ -170,7 +168,7 @@ default. When something needs visual feedback, reach for a fade first.
 - **Restore Everything**: `Shift+Alt+Y` unrolls, un-ghosts and un-hides every window the program is holding — the recovery path for state a user cannot see.
 - **Reset Transparency**: `Shift+Alt+X`.
 
-**Feature Toggles (`Shift+Alt+<key>`):** hot corners `C`, active border `V`, cursor wrap `I`, multi-monitor dimmer `D`, smart auto-hide taskbar `T`, magnetic groups `J`, grab & pan `Space`. Each flips the flag, persists it, updates the settings checkbox if the window is open, notifies, and calls the feature's `Sync*` — that last step is what actually starts or stops the timer.
+**Feature Toggles (`Shift+Alt+<key>`):** hot corners `C`, cursor wrap `I`, multi-monitor dimmer `D`, smart auto-hide taskbar `T`, magnetic groups `J`, grab & pan `Space`. Each flips the flag, persists it, updates the settings checkbox if the window is open, notifies, and calls the feature's `Sync*` — that last step is what actually starts or stops the timer.
 
 **Productivity & Window Management:**
 - **Transparency Control**: `Shift + Alt + Wheel` to adjust the opacity of any active window.
@@ -245,7 +243,7 @@ Deliberately **not** touched: `Win+Ctrl+←/→` (virtual desktops), `Win+Ctrl+D
 
 **The `Win+Ctrl` tier is gone.** That list of Windows-reserved chords is exactly *why*: the program originally lived on `Win+Ctrl+<key>` and kept colliding with it, so commit `3dadac4` moved everything onto the single `Shift+Alt` chord. Nothing here binds a `Win` chord any more. The historical consequences of the old scheme are still visible — "centre the window" is on `K` rather than the obvious `C`, because `C` was once needed to dodge `Win+Ctrl+C` and is now taken by hot corners; and left/right halves still have no arrow alias because `Win+←/→` already does that job.
 
-Before adding a hotkey: everything global is `Shift+Alt+<key>`, so the free letters are the constraint. Check the table at the top of this file (and `docs\HOTKEYS.md`) for what is taken — the chord space is nearly full, which is why `Space`, the arrows and `F5`/`F6` are already in use. Note that AutoHotkey wins against Windows for `Shift+Alt+S`, so Speech Recognition does not open while this runs.
+Before adding a hotkey: everything global is `Shift+Alt+<key>`, so the free letters are the constraint. Check the table at the top of this file (and `docs\HOTKEYS.md`) for what is taken - `V` is free again since Smart Active Border was removed — the chord space is nearly full, which is why `Space`, the arrows and `F5`/`F6` are already in use. Note that AutoHotkey wins against Windows for `Shift+Alt+S`, so Speech Recognition does not open while this runs.
 
 ## Commands
 
@@ -349,7 +347,7 @@ notes still reference no longer exist: `WindowCommands.ahk` became the six
 | `src\ScreenEdgeGestures.ahk` | Hot corners and infinite cursor wrap |
 | `src\AudioOsd.ahk` | Volume and microphone OSDs and their input |
 | `src\OnDemandOverlays.ahk` | Summoned and dismissed: Quick Look, Spotlight, text magnifier |
-| `src\FocusEmphasis.ahk` | Cinema dim and the smart active border |
+| `src\FocusEmphasis.ahk` | Cinema / focus mode dimming |
 | `src\PinnedWindowModes.ahk` | Modes a window is opted into and must be released on exit: PiP, always-on-bottom, ghost |
 | `src\MouseGestureFx.ahk` | Pointer-motion / idle / wheel driven: shake-find, yawn, ripples, drag trail, clipboard feedback |
 | `src\ShellSurfaceWatcher.ahk` | The one poll over shell surfaces: auto-hide, taskbar wave, toasts |
@@ -453,9 +451,9 @@ The scheduler stops its timer the moment nothing is animating, so a queued chang
 
 Deliberately **not** cached: window positions. A cache is only valid when the cache owns the state, and the user dragging a title bar changes a window's position behind this pipeline's back. Caching last-requested positions made a second snap to the same edge a no-op. Alpha and region *are* cached (`RS_LastAlpha` / `RS_LastRegion`) because re-applying them is individually expensive — `WinSetTransparent` adds/removes `WS_EX_LAYERED` and `WinSetRegion` rebuilds a GDI region — and both caches are pruned by `RS_RemoveHwnd()` and the periodic `RS_SweepDead()`.
 
-**Call `RS_RemoveHwnd(hwnd)` whenever a window we touched is destroyed.** For foreign windows the shell hook does it. For our own overlay GUIs (dimmers, OSDs, focus layers, active border, gravity animation) nothing does, because `WS_EX_TOOLWINDOW` / `NoActivate` windows raise no shell destroy notification — so every destroy site does it explicitly, and `RS_SweepDead()` is the backstop.
+**Call `RS_RemoveHwnd(hwnd)` whenever a window we touched is destroyed.** For foreign windows the shell hook does it. For our own overlay GUIs (dimmers, OSDs, focus layers, the smooth caret, gravity animation) nothing does, because `WS_EX_TOOLWINDOW` / `NoActivate` windows raise no shell destroy notification — so every destroy site does it explicitly, and `RS_SweepDead()` is the backstop.
 
-**Never read the pending Maps as if they were state.** `RS_Pos[hwnd]` is a *request* that has not been applied and can still be outranked in the same flush — and every move-only producer (`Glide`, `MoveFast`, curtain, toast) queues `w = h = -1` to mean `SWP_NOSIZE`. The active border used `RS_Pos` as a position source, so `W`/`H` came back as `-1`, failed its own `W < 50` sanity check and hid the border for the whole of every glide, snap and layout key. Measure the window (DWM frame bounds, `WinGetPos` fallback).
+**Never read the pending Maps as if they were state.** `RS_Pos[hwnd]` is a *request* that has not been applied and can still be outranked in the same flush — and every move-only producer (`Glide`, `MoveFast`, curtain, toast) queues `w = h = -1` to mean `SWP_NOSIZE`. A since-removed overlay used `RS_Pos` as a position source, so `W`/`H` came back as `-1`, failed its own sanity check and hid itself for the whole of every glide, snap and layout key. Measure the window (DWM frame bounds, `WinGetPos` fallback).
 
 **`AnimationScheduler.ahk`** runs `RenderFrame` every 16 ms: call every registered callback (produce), then `RS_Flush()` exactly once (render). A callback returns `true` to stay registered, `false` to be removed. The produce loop iterates a **snapshot of the keys**, not the Map — 11 other timers, every hotkey and the `SetWinEventHook` callback can interrupt it between lines and several of them call `RegisterAnimation`/`CancelAnimation`; mutating a Map under a live `for` enumerator shifts items and silently skips or repeats animations. `RS_Flush()` is likewise re-entrancy-guarded, because timers call it directly while the frame loop may be inside it.
 
@@ -609,11 +607,11 @@ taskbar's own animations are a Windows setting (`TaskbarAnimations`), handled by
 
 ### Timers
 
-There is no single "the only timer" any more. `RenderFrame` at 16 ms while animating; then per-feature monitors, each started/stopped by its own `Sync*` function so a feature nobody enabled costs nothing: cursor wrap 20 ms, ghost proximity 25 ms, taskbar/UI 32 ms, shake+yawn detector 40 ms, hot corners / active border / focus 50 ms, PiP / Quick Look 100 ms, breathing / dimmer / smart taskbar 200 ms, MediaCore 250 ms, breathe-cursor idle 1 s. Plus one-shot `SetTimer(..., -ms)` calls for deferred work.
+There is no single "the only timer" any more. `RenderFrame` at 16 ms while animating; then per-feature monitors, each started/stopped by its own `Sync*` function so a feature nobody enabled costs nothing: cursor wrap 20 ms, ghost proximity 25 ms, taskbar/UI 32 ms, shake+yawn detector 40 ms, hot corners / focus 50 ms, PiP / Quick Look 100 ms, breathing / dimmer / smart taskbar 200 ms, MediaCore 250 ms, breathe-cursor idle 1 s. Plus one-shot `SetTimer(..., -ms)` calls for deferred work.
 
 **Every polling timer must have a `Sync*`, and `Bye()` must stop it.** Three did not: `CheckTaskbarAndUI` (32 ms), `ShakeDetector` (40 ms) and `CheckMouseIdle` (1 s) were armed unconditionally at load and ran forever regardless of their flags — `CheckToasts` alone enumerates every top-level window with a title filter on each tick. They are now `SyncTaskbarUiTimer()`, `SyncShakeDetector()` and `SyncCursorFxTimer()`, called from the deferred-init block and from `ApplyUi`. `Bye()` stops all of them plus the nine private 16 ms FX loops; several of those can otherwise re-create an overlay *after* `RS_Shutdown()`, and `Bye()` is also the tray → Restart path.
 
-**A monitor is a `SetTimer`, never a `RegisterAnimation`.** The active border was registered as an animation whose callback always returned `true`, so `ActiveAnimations` was never empty, the scheduler never reached its idle shutdown, and enabling the border pinned the 15 ms frame loop *and* `timeBeginPeriod(1)` for the whole session. Same mistake as the OSD auto-hides. If it polls rather than interpolates, it is a timer — and it must call `RS_Commit()` itself.
+**A monitor is a `SetTimer`, never a `RegisterAnimation`.** A poller was once registered as an animation whose callback always returned `true`, so `ActiveAnimations` was never empty, the scheduler never reached its idle shutdown, and enabling that feature pinned the 15 ms frame loop *and* `timeBeginPeriod(1)` for the whole session. Same mistake as the OSD auto-hides. If it polls rather than interpolates, it is a timer — and it must call `RS_Commit()` itself.
 
 **A feature that owns an overlay must tear it down when its flag goes false, and the flag test belongs *inside* that function.** Gating the call site instead means switching the feature off stops the only code that could ever clean up. Three separate overlays were stranded that way — a full-screen dimming sheet left over the desktop, a bar welded to a window edge, opaque sheets over marked windows — each visible with the feature that owned it disabled and no way left to reach it. `RenderTaskbarWave` has the right shape: `CheckTaskbarAndUI` calls its sub-checks unconditionally so they *can* clean up, and each tests its own flag as its first act.
 
@@ -844,6 +842,29 @@ Four things that are easy to reintroduce:
   for as long as the setting holds, so the steady state is one request per 15
   minutes. `WeatherFailed()` triples the retry interval up to 15 minutes rather than
   retrying into a rate limit.
+
+### Two rules the settings window and its overlays learned the hard way
+
+**AN INPUT NEEDS BOTH A BACKGROUND AND A TEXT COLOUR.** A Gui's `BackColor`
+reaches an `Edit`'s background but never its text, which stays the system default
+black - so on the dark theme every numeric field was black on near-black and
+could only be read while it was selected and the highlight inverted it. `BuildWin`
+defines `EDITBG`/`EDITFG` next to the rest of the palette and every `AddEdit` and
+`AddDropDownList` takes both; `TuneRow` reads them as globals because it builds
+most of the fields. Measured: with no options at all a DropDownList renders white
+with black text (readable but jarringly light against a dark page), an Edit does
+not.
+
+**AN OVERLAY THAT AN ANIMATION SHOWS MUST NOT BE HIDDEN ONLY BY THAT ANIMATION.**
+The smooth caret registered a glide, and the glide's settle branch returned
+`false` - unregistering itself while the blue bar was still on screen at alpha
+200. Nothing else was watching, so the bar stayed where the caret had last been,
+through focus changes, through the caret disappearing, through the feature being
+switched off, and through `Bye()`. `SmoothCaretWatchdog` is the fix and the
+pattern: a 250 ms `SetTimer` armed when the overlay is shown, taking it down when
+the caret is gone, the foreground window changed, the flag went false, or the
+caret has simply held still - and one `HideSmoothCaret()` that every caller goes
+through.
 
 ### The settings window scrolls, and that used to be invisible
 

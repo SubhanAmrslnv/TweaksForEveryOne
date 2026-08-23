@@ -150,7 +150,6 @@ StealthSyncFeatures() {
             StealthCall("ClosePiP", src)
     }
 
-    StealthCall("SyncActiveBorderTimer")
     StealthCall("SyncBreathingTimers")
     StealthCall("SyncCursorFxTimer")
     ; Stops the 32 ms poll, but only after one final pass that tears down the
@@ -267,7 +266,7 @@ SuspendStealthFeatures() {
     ; In standalone mode, WindowTweaks variables might not exist
     ; So we check using IsSet
     global OpenAnim, ContextMenuAnimEnabled, RippleClickEnabled
-    global ActiveBorderEnabled, ProximityGhostEnabled, LivePipEnabled
+    global ProximityGhostEnabled, LivePipEnabled
     global SpotlightEnabled, BreathingEnabled, CursorYawnEnabled
     
     if (StealthSuspendAnimations) {
@@ -285,10 +284,6 @@ SuspendStealthFeatures() {
         }
     }
     if (StealthSuspendOverlays) {
-        if IsSet(ActiveBorderEnabled) {
-            StealthSuspendedFeatures["ActiveBorderEnabled"] := ActiveBorderEnabled
-            ActiveBorderEnabled := false
-        }
         if IsSet(ProximityGhostEnabled) {
             StealthSuspendedFeatures["ProximityGhostEnabled"] := ProximityGhostEnabled
             ProximityGhostEnabled := false
@@ -322,7 +317,7 @@ RestoreStealthFeatures() {
     global StealthSuspendedFeatures
     
     global OpenAnim, ContextMenuAnimEnabled, RippleClickEnabled
-    global ActiveBorderEnabled, ProximityGhostEnabled, LivePipEnabled
+    global ProximityGhostEnabled, LivePipEnabled
     global SpotlightEnabled, BreathingEnabled, CursorYawnEnabled
     
     for key, val in StealthSuspendedFeatures {
@@ -334,9 +329,6 @@ RestoreStealthFeatures() {
         }
         if (key == "RippleClickEnabled" && IsSet(RippleClickEnabled)) {
             RippleClickEnabled := val
-        }
-        if (key == "ActiveBorderEnabled" && IsSet(ActiveBorderEnabled)) {
-            ActiveBorderEnabled := val
         }
         if (key == "ProximityGhostEnabled" && IsSet(ProximityGhostEnabled)) {
             ProximityGhostEnabled := val

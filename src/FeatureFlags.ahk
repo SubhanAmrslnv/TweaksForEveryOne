@@ -90,7 +90,7 @@ global CustomClockWind := ""               ; second line of the info column, e.g
 global LastWeatherFetch := 0
 global WeatherNextMs := 900000             ; ms until the next attempt; set by the outcome
 global WeatherFailMs := 0                  ; current backoff, tripled per consecutive failure
-global ClockLocation := ""                 ; required: open-meteo takes coordinates, not an IP
+global ClockLocation := "Baku"             ; open-meteo takes coordinates, not an IP; this is geocoded once
 global ClockUnits := "Celsius"
 global ClockAnchor := "TrayEdge"           ; which element the block sits beside
 global ClockWeatherEnabled := true         ; the temperature column; a location gives it a value
@@ -98,7 +98,7 @@ global ClockWarnedNoCity := false          ; the "set a city" tip is said once p
 global WeatherWarnedFor := "-"             ; last location we complained about, so it is said once
 global ToastBounceEnabled := true
 global MonitorThrowEnabled := true
-global BlackHoleDeleteEnabled := false    ; OFF-BY-DEFAULT: never rendered until now
+global BlackHoleDeleteEnabled := true
 global CursorYawnEnabled := true
 global CursorYawnActive := false
 global CursorYawnIdleTime := 900000
@@ -108,11 +108,13 @@ global BreathingEnabled := true
 global OpenAnim := "Ghost Slide-In"
 global ParallaxEnabled := true
 global FlyMinimizeEnabled := true
-; OFF-BY-DEFAULT, both of these: they are what puts the *MButton handler in
-; front of EVERY middle click in the system - swallowed, probed with a 50 ms
-; SendMessageTimeout to a foreign window, then re-synthesised. Shift+Alt+R still
-; rolls a window up regardless; this flag only gates the middle-click gesture.
-global RollUpEnabled := false
+; ON BY DEFAULT, both of these, and they are not free: they put the *MButton
+; handler in front of EVERY middle click in the system - swallowed, probed with
+; a 50 ms SendMessageTimeout to a foreign window, then re-synthesised. That is
+; the price of the gesture and it is paid on every middle click anywhere.
+; Shift+Alt+R still rolls a window up regardless; this flag only gates the
+; middle-click gesture.
+global RollUpEnabled := true
 global TrayMinimizeEnabled := true
 global BossKeyEnabled := true
 global AltDragEnabled := true
@@ -140,20 +142,16 @@ global PremiumVolumeOSDEnabled := true
 global OsdGui := "", OsdHiding := false
 global LivePipEnabled := true
 global PipGuis := Map()
-global GrabPanEnabled := false
+global GrabPanEnabled := true
 global MicKillSwitchEnabled := true
 global MicOsdGui := "", MicOsdHiding := false
 global InfiniteWrapEnabled := false
 global SpotlightEnabled := true
 global SpotlightGui := "", SpotlightInput := "", SpotlightResult := ""
-global ActiveBorderEnabled := false
-global ActiveBorderGui := ""
-global ActiveBorderShown := false
-global LastBorderHwnd := 0, LastBorderX := "", LastBorderY := "", LastBorderW := "", LastBorderH := ""
 global AlwaysOnBottomEnabled := true
 global BottomWindows := Map()
 global TextExpanderEnabled := true
-global MiddleClickCloseEnabled := false
+global MiddleClickCloseEnabled := true
 global ProximityGhostEnabled := true
 global ShakeFindEnabled := true
 global GhostWindows := Map()
@@ -183,7 +181,6 @@ global CLOCK_ANCHORS  := ["TrayEdge", "Clock", "TaskbarLeft"]
 
 ; Accent colour for the active-window border. Not in TUNE_SPEC because it is not
 ; a number; "auto" follows the Windows accent colour.
-global BorderColor := "auto"
 
 ; A tray label string IS its own lookup key - SyncTray() passes the whole
 ; "Magnetic snap`tShift+Alt+S" to Check/Uncheck, and m.Default matches on it too.
