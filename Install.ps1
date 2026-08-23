@@ -312,9 +312,9 @@ Write-Host "   Done" -ForegroundColor Green
 Write-Host "  ===========================================" -ForegroundColor Green
 Write-Host @"
 
-   Win + Ctrl + W    settings
-   Win + Ctrl + T    always on top
-   Win + Ctrl + S    magnetic snapping on/off
+   Shift + Alt + W    settings
+   Shift + Alt + O    always on top
+   Shift + Alt + S    magnetic snapping on/off
 
    Installed to  $dest
    Guide         $dest\GUIDE.md

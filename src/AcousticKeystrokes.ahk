@@ -45,8 +45,11 @@ global AK_SR := 22050          ; sample rate. A click is broadband but short - 2
                                ; indistinguishable from 44 here and halves the render cost
 global AK_VARIANTS := 3        ; alternates per voice, so held-down typing does not machine-gun
 global AK_BANK := Map()        ; "voice|n" -> Buffer holding a complete RIFF/WAVE image
-global AK_BankVol := -1        ; the volume and pitch the bank was rendered at. A settings
-global AK_BankTone := -1       ; change that differs from these is what forces a re-render
+global AK_BankVol := -1        ; the levels and pitch the bank was rendered at. A settings
+global AK_BankHotVol := -1     ; change that differs from these is what forces a re-render.
+global AK_BankTone := -1       ; All three are declared HERE: SyncKeySounds() compares against
+                               ; them, and a name that exists only after the first render is a
+                               ; read of an unassigned variable waiting to happen
 global AK_LastVariant := Map() ; voice -> the variant used last, so it is not used twice running
 global AK_KeysDown := Map()    ; vk -> tick of its last key-down, for the auto-repeat gate
 
@@ -254,10 +257,38 @@ AK_BuildBank() {
             bank[voice "|" A_Index] := AK_Render(v, tone * (1 + j), vol * (1 - Abs(j)))
         }
     }
+    ; PUBLISH, PURGE, THEN RELEASE - in that order, and none of the three is
+    ; optional. SND_ASYNC means winmm is still reading one of the OLD buffers,
+    ; and dropping the last reference to them frees that memory out from under
+    ; the mixer. AK_Shutdown() has the same rule; this path is the one the user
+    ; actually exercises, because every change to a level or the pitch rebuilds
+    ; the bank - usually while they are still typing in the field.
+    ;
+    ; Publishing first means a keystroke that interrupts between these lines
+    ; plays a NEW clip; oldBank keeps the previous buffers alive until after the
+    ; purge has stopped anything still sounding from them.
+    oldBank := AK_BANK
     AK_BANK := bank
+    try DllCall("winmm\PlaySoundW", "ptr", 0, "ptr", 0, "uint", 0x0040)   ; SND_PURGE
+    oldBank := ""
+
+    prevVol := AK_BankVol, prevHot := AK_BankHotVol, prevTone := AK_BankTone
     AK_BankVol := Tune("keyVol")
     AK_BankHotVol := Tune("hotkeyVol")
     AK_BankTone := Tune("keyTone")
+
+    ; A LEVEL THE USER JUST CHANGED IS ONLY BELIEVABLE IF IT CAN BE HEARD. The
+    ; settings window has no other feedback - the field holds a number, the
+    ; sound it governs only happens on the next keystroke somewhere else - so a
+    ; change that took effect and a change that silently did nothing look
+    ; identical. One click at the new level is the difference. prev < 0 is the
+    ; boot render, where a click out of nowhere would just be noise.
+    if (prevVol >= 0) {
+        if (AK_BankVol != prevVol || AK_BankTone != prevTone)
+            PlayAcousticSound("normal")
+        else if (AK_BankHotVol != prevHot)
+            PlayHotkeySound("command")
+    }
     try WriteLog("keysounds: rendered " bank.Count " clips, keys " AK_BankVol "% actions "
         AK_BankHotVol "% tone " AK_BankTone "%")
 }
@@ -354,10 +385,11 @@ AK_Tag(buf, off, tag) {
 ; asynchronously, and freeing memory out from under winmm is a crash rather than
 ; a wrong note. Called by Bye() and whenever the feature is switched off.
 AK_Shutdown() {
-    global AK_BANK, AK_BankVol, AK_BankTone, AK_KeysDown
+    global AK_BANK, AK_BankVol, AK_BankHotVol, AK_BankTone, AK_KeysDown
     try DllCall("winmm\PlaySoundW", "ptr", 0, "ptr", 0, "uint", 0x0040)   ; SND_PURGE
     AK_BANK := Map()
     AK_KeysDown := Map()
     AK_BankVol := -1
+    AK_BankHotVol := -1
     AK_BankTone := -1
 }

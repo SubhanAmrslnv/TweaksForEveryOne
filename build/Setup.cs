@@ -149,7 +149,7 @@ namespace WindowTweaksSetup
             if (ok)
             {
                 Say("");
-                Say("Done. Press Win+Ctrl+W for settings.");
+                Say("Done. Press Shift+Alt+W for settings.");
                 btnClose.Text = "Finish";
             }
             else

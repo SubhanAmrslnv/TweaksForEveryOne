@@ -1083,6 +1083,8 @@
             pic.Move(0, 0, curW, curH)
             pid := 0
             pid := 0                 ; clear first: the tail below keys off pid
+            PlayAcousticSound("normal")
+            PlayHotkeySound("command")
             popHwnd := g.Hwnd
             PortalScaleIn(hwnd, restoredRect)
             pos += StrLen(match[0])
@@ -1490,8 +1492,8 @@
             winCy := wy + wh/2
             WinGetPos(&ex, &ey, &ew, &eh, "ahk_id " h)
             WinGetPos(&gx, &gy, &gw, &gh, hwnd)
-            WinGetPos(&wx, &wy, &ww, &wh, hwnd)
             WinGetPos(&wX, &wY, &wW, &wH, hwnd)
+            WinGetPos(&wx, &wy, &ww, &wh, hwnd)
             WinGetPos(&X, &Y, &W, &H, hwnd)
             WinLastActive.Delete(hwnd)
             WinLastActive[hwnd] := QPC()
@@ -2093,6 +2095,7 @@
         else
         else
         else {
+        else if (AK_BankHotVol != prevHot)
         else if (currentCorner == "BL")
         else if (currentCorner == "BR")
         else if (currentCorner == "TR")
@@ -2376,6 +2379,7 @@
         if (Abs(st.l - fL) <= 2 && Abs(st.t - fT) <= 2
         if (Abs(vX) / dt * 1000 > 1650 || Abs(vY) / dt * 1000 > 1650) {
         if (action != "None")
+        if (AK_BankVol != prevVol || AK_BankTone != prevTone)
         if (anyMedia && MC_IsMediaHwnd(hwnd)) {
         if (appInput == "")
         if (bestY == "") {
@@ -4426,6 +4430,7 @@
     }
     }
     }
+    }
     } catch
     } catch
     } catch
@@ -4496,6 +4501,7 @@
     ahwnd := WinExist("A")
     AK_BANK := bank
     AK_BANK := Map()
+    AK_BankHotVol := -1
     AK_BankHotVol := Tune("hotkeyVol")
     AK_BankTone := -1
     AK_BankTone := Tune("keyTone")
@@ -4697,7 +4703,7 @@
     C["toast"] := Box(pg, CW, FG, "Elastic Toast Notifications", ToastBounceEnabled, "xm y+16")
     C["traymin"] := Box(pg, CW, FG, "Minimize to Tray (Shift+Alt+H)", TrayMinimizeEnabled, "xm y+16")
     C["twave"] := Box(pg, CW, FG, "Taskbar Icon Wave", TaskbarWaveEnabled, "xm y+16")
-    C["typingsounds"] := Box(pg, CW, FG, "Mechanical Keystroke Sounds", TypingSoundsEnabled, "xm y+12")
+    C["typingsounds"] := Box(pg, CW, FG, "Mechanical Keystroke Sounds", TypingSoundsEnabled, "xm y+16")
     C["wrap"] := Box(pg, CW, FG, "Infinite Cursor Wrap (Shift+Alt+I)", InfiniteWrapEnabled, "xm y+16")
     C[key] := pg.AddEdit("x196 yp-3 w70 Background" EDITBG " c" EDITFG
     cache[guid] := buf
@@ -5106,7 +5112,7 @@
     global ActiveShatters
     global ActiveShatters
     global ActiveShatters
-    global AK_BANK, AK_BankVol, AK_BankTone, AK_KeysDown
+    global AK_BANK, AK_BankVol, AK_BankHotVol, AK_BankTone, AK_KeysDown
     global AK_BANK, AK_VARIANTS, AK_LastVariant
     global AK_BANK, AK_VOICES, AK_ACTION_VOICES, AK_VARIANTS
     global AK_BankVol, AK_BankHotVol, AK_BankTone, TypingSoundsEnabled, HotkeySoundsEnabled
@@ -5930,6 +5936,7 @@
     if (path == "") {
     if (PendingTransMsg != "") {
     if (PipGuis.Count == 0) {
+    if (prevVol >= 0) {
     if (pw > 0 && ph > 0) {
     if (px < tx + 2)
     if (QuickLookGui) {
@@ -6196,7 +6203,6 @@
     Lbl(pg, FG, "New window animation", "xm y+16")
     Lbl(pg, FG, "Overlays", "xm y+20")
     Lbl(pg, FG, "Sit beside", "xm y+16", 190)
-    Lbl(pg, FG, "Sound", "xm y+20")
     Lbl(pg, FG, "Taskbar Style", "xm y+16")
     Lbl(pg, FG, "Top Left:", "xm y+20", 130)
     Lbl(pg, FG, "Top Right:", "xm y+14", 130)
@@ -6412,6 +6418,8 @@
     ok := false
     ok := false
     ok := RegisterShellHook()
+    oldBank := ""
+    oldBank := AK_BANK
     OldClipboard := A_Clipboard
     on := 1
     OnExit(Bye)
@@ -6509,6 +6517,7 @@
     postponed := 0
     PremiumVolumeOSDEnabled := IniStr("memory", "osd", "1") = "1"
     prevHwnd := FocusTargetHwnd
+    prevVol := AK_BankVol, prevHot := AK_BankHotVol, prevTone := AK_BankTone
     PrevX := L, PrevY := T
     prevX := lastX, prevY := lastY, prevAt := lastAt
     prim := MonitorGetPrimary()
@@ -7219,6 +7228,7 @@
     try DllCall("dwmapi\DwmUnregisterThumbnail", "ptr", pip.ThumbId)
     try DllCall("SystemParametersInfoW", "uint", 0x25, "uint", 1, "ptr", 0, "uint", 3)
     try DllCall("winmm\PlaySoundW", "ptr", 0, "ptr", 0, "uint", 0x0040)   ; SND_PURGE
+    try DllCall("winmm\PlaySoundW", "ptr", 0, "ptr", 0, "uint", 0x0040)   ; SND_PURGE
     try DllCall("winmm\PlaySoundW", "ptr", AK_BANK[key].Ptr, "ptr", 0, "uint", 0x0001 | 0x0002 | 0x0004)
     try EP_IconSize := RegRead(ADVANCED_KEY, "TaskbarSmallIcons", 0) != 0 ? "Small" : "Large"
     try EP_Style := RegRead(EP_KEY, "OldTaskbar", 0) != 0 ? "Win10" : "Win11"
@@ -7388,8 +7398,8 @@
     TuneRow(pg, "glideThrow",  FG, cSub)
     TuneRow(pg, "gridGap", FG, cSub)
     TuneRow(pg, "hotkeyVol", FG, cSub)
-    TuneRow(pg, "keyTone",   FG, cSub)
-    TuneRow(pg, "keyVol",    FG, cSub)
+    TuneRow(pg, "keyTone", FG, cSub)
+    TuneRow(pg, "keyVol", FG, cSub)
     TuneRow(pg, "osdAlpha", FG, cSub)
     TuneRow(pg, "osdHide",  FG, cSub)
     TuneRow(pg, "osdStep",  FG, cSub)
@@ -7655,9 +7665,9 @@ $^v:: {
 , TS("glideSettle"  , "glide"    , "settle"      ,      6,     0,     30,     1, 0, "win"    , "Settle overshoot"       , "px past the target on a hard landing, 0 = none")
 , TS("glideThrow"   , "glide"    , "throw"       ,    0.9,     0,      3,   0.1, 1, "win"    , "Throw strength"         , "0 = stop where you let go")
 , TS("gridGap"      , "snap"     , "smartgap"    ,      8,     0,     40,     2, 0, "win"    , "Tiling grid gap"        , "px between tiled windows")
-, TS("hotkeyVol"    , "mouse"    , "hotkeysoundvol",   90,     5,    100,     5, 0, "multi"  , "Hotkey sound volume"    , "% of full scale")
-, TS("keyTone"      , "mouse"    , "keysoundtone",    100,    60,    180,     5, 0, "multi"  , "Keystroke pitch"        , "% - lower is a deeper thock, higher is a sharper clack")
-, TS("keyVol"       , "mouse"    , "keysoundvol" ,     80,     5,    100,     5, 0, "multi"  , "Keystroke volume"       , "% of full scale")
+, TS("hotkeyVol"    , "mouse"    , "hotkeysoundvol",   90,     5,    100,     5, 0, "media"  , "Hotkey sound volume"    , "% of full scale")
+, TS("keyTone"      , "mouse"    , "keysoundtone",    100,    60,    180,     5, 0, "media"  , "Keystroke pitch"        , "% - lower is a deeper thock, higher is a sharper clack")
+, TS("keyVol"       , "mouse"    , "keysoundvol" ,     80,     5,    100,     5, 0, "media"  , "Keystroke volume"       , "% of full scale")
 , TS("osdAlpha"     , "osd"      , "alpha"       ,     86,    40,    100,     5, 0, "media"  , "OSD opacity"            , "%")
 , TS("osdHide"      , "osd"      , "hidems"      ,   1500,   500,  10000,   250, 0, "media"  , "OSD hold time"          , "ms on screen after the last change")
 , TS("osdStep"      , "osd"      , "volumestep"  ,      2,     1,     20,     1, 0, "media"  , "Volume step"            , "% per wheel notch")
@@ -8244,8 +8254,9 @@ global ActiveShatters := Map()
 global ADVANCED_KEY := "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
 global AK_ACTION_VOICES := Map("toggleon", 1, "toggleoff", 1, "command", 1, "alert", 1)
 global AK_BANK := Map()        ; "voice|n" -> Buffer holding a complete RIFF/WAVE image
-global AK_BankTone := -1       ; change that differs from these is what forces a re-render
-global AK_BankVol := -1        ; the volume and pitch the bank was rendered at. A settings
+global AK_BankHotVol := -1     ; change that differs from these is what forces a re-render.
+global AK_BankTone := -1       ; All three are declared HERE: SyncKeySounds() compares against
+global AK_BankVol := -1        ; the levels and pitch the bank was rendered at. A settings
 global AK_KeysDown := Map()    ; vk -> tick of its last key-down, for the auto-repeat gate
 global AK_LastVariant := Map() ; voice -> the variant used last, so it is not used twice running
 global AK_SR := 22050          ; sample rate. A click is broadband but short - 22 kHz is

@@ -209,6 +209,20 @@ BuildWin() {
     pg := CreatePage("🔊 System & Media")
     Head(pg, CW, FG, "System & Media")
     Sub(pg, CW, cSub, "Audio, typing, and system-wide controls.", "xm y+10")
+
+    ; THE SOUND SETTINGS LIVE AT THE TOP OF THIS PAGE, and both halves of that
+    ; matter. They used to sit ~980 px down the Multi-Monitor page: this window
+    ; is 700 px tall and scrolls without a scrollbar, so the levels were below
+    ; the fold, on a page whose name promises monitors rather than audio. A
+    ; setting nobody can reach is indistinguishable from one that does not work.
+    C["typingsounds"] := Box(pg, CW, FG, "Mechanical Keystroke Sounds", TypingSoundsEnabled, "xm y+16")
+    Sub(pg, CW, cSub, "A synthesised switch click on every key, with its own voice for space, enter, backspace and copy/cut/paste.", "xm y+8")
+    TuneRow(pg, "keyVol", FG, cSub)
+    TuneRow(pg, "keyTone", FG, cSub)
+
+    C["hotkeysounds"] := Box(pg, CW, FG, "Hotkey Sounds", HotkeySoundsEnabled, "xm y+16")
+    Sub(pg, CW, cSub, "A distinct sound when a command runs - rising for a feature switched on, falling for off, a deeper tone for restore-all and the boss key.", "xm y+8")
+    TuneRow(pg, "hotkeyVol", FG, cSub)
     
     C["taskbarscroll"] := Box(pg, CW, FG, "Taskbar Volume Scroll", TaskbarScrollEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Scroll over the taskbar to adjust volume. Middle-click to mute.", "xm y+8")
@@ -278,15 +292,6 @@ BuildWin() {
     C["momentum"] := Box(pg, CW, FG, "Momentum Tilt (Jello bounce on drag stop)", MomentumTiltEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Window jiggles elastically when you suddenly stop moving it.", "xm y+8")
     
-    Lbl(pg, FG, "Sound", "xm y+20")
-    C["typingsounds"] := Box(pg, CW, FG, "Mechanical Keystroke Sounds", TypingSoundsEnabled, "xm y+12")
-    Sub(pg, CW, cSub, "A synthesised switch click on every key, with its own voice for space, enter, backspace and copy/cut/paste.", "xm y+8")
-    C["hotkeysounds"] := Box(pg, CW, FG, "Hotkey Sounds", HotkeySoundsEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "A distinct sound when a command runs - rising for a feature switched on, falling for off, a deeper tone for restore-all and the boss key.", "xm y+8")
-    TuneRow(pg, "keyVol",    FG, cSub)
-    TuneRow(pg, "hotkeyVol", FG, cSub)
-    TuneRow(pg, "keyTone",   FG, cSub)
-
     C["smoothcaret"] := Box(pg, CW, FG, "Smooth Gliding Caret & Word Pop", SmoothCaretEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Premium macOS-style gliding caret interpolation and word completion feedback.", "xm y+8")
 

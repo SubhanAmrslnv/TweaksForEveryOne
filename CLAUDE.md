@@ -685,6 +685,35 @@ our `Buffer` after the call returns, so `AK_Shutdown()` calls `PlaySound` with
 `SND_PURGE` first and drops `AK_BANK` second. `Bye()` does the same, and it is
 also the tray -> Restart path.
 
+**The same rule governs a RE-RENDER, and that is the path users actually take.**
+Every change to a level or the pitch rebuilds the bank, usually while the user is
+still typing in the settings field - so `AK_BuildBank()` would drop the last
+reference to buffers the mixer is mid-way through. It publishes, purges, then
+releases, in that order: `oldBank := AK_BANK` holds the previous clips alive,
+`AK_BANK := bank` means a keystroke interrupting between the lines plays a NEW
+clip, `SND_PURGE` stops anything still sounding from the old ones, and only then
+is `oldBank` cleared.
+
+**A level the user changed has to be AUDIBLE, or it is indistinguishable from a
+setting that does nothing.** The field holds a number and the sound it governs
+only happens on the next keystroke somewhere else, so `AK_BuildBank()` plays one
+click at the new level whenever it re-renders because a setting moved - keystroke
+voice for `keyVol`/`keyTone`, action voice for `hotkeyVol`. The boot render is
+gated out (`prevVol < 0`), where a click out of nowhere would just be noise.
+
+**All three stamps are declared beside the bank.** `AK_BankVol`, `AK_BankHotVol`
+and `AK_BankTone` are what `SyncKeySounds()` compares against to decide whether a
+re-render is needed, and `AK_Shutdown()` resets all three. `AK_BankHotVol` was
+originally declared nowhere and reset nowhere - a name that exists only after the
+first render, compared against on every settings change.
+
+**The sound settings live at the TOP of the `System & Media` page**, not on
+`Multi-Monitor` where they started. That page is over 1000 px of content in a
+700 px window that scrolls without a scrollbar, so the levels sat below the fold
+under a nav entry promising monitors. A setting nobody can reach is
+indistinguishable from one that does not work - which is the same lesson the
+clock settings taught, recorded under **The settings window scrolls**.
+
 ### Win32 gotchas the code depends on
 
 - **Two coordinate spaces.** Snapping measures with `DWMWA_EXTENDED_FRAME_BOUNDS` (attr 9); `WinGetPos` differs by the invisible DWM border. `GetRects()` in `SnapCore.ahk` returns *both*, and `SnapWindow` converts back (`destX := winX + (newL - L)`). Ignore this and every snap lands ~7px off.
