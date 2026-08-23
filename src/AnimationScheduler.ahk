@@ -36,11 +36,11 @@ global SchedulerRunning := false
 ; A key is just a string, so nothing stopped two animations from driving the
 ; same property of the same window. RS_* arbitration is per-flush and ties at
 ; equal priority are broken by Map order - and AHK enumerates a Map sorted by
-; key - so "Jello_" and "Pulse_" silently won over "Glide_" every frame.
+; key - so "Jello_" silently won over "Glide_" every frame.
 ;
 ; The old defence was a hand-written CancelAnimation list at each site that
 ; started a motion. There were five of them, they had drifted apart, and not one
-; named Jello_, Pulse_, FocusDepth_ or Curtain_ - so grabbing a window during a
+; named Jello_ or Curtain_ - so grabbing a window during a
 ; 400 ms jello left the jello resizing it underneath the drag.
 ;
 ; A channel is a property class: at most one animation may own (window, channel)
@@ -232,7 +232,7 @@ CancelAnimation(key) {
 
 ; Register `callback` under `key` and make it the sole owner of this window's
 ; channel, cancelling whoever held it. hwnd 0 falls back to a plain register, so
-; screen-wide effects ("Carousel", "MotionBlur") can use one call shape.
+; screen-wide effects can use one call shape.
 Anim_Claim(hwnd, channel, key, callback) {
     global AnimOwner, AnimOwnerKey
     if !hwnd {

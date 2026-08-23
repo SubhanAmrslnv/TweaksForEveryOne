@@ -1,8 +1,8 @@
 ; Focus emphasis - the three ways this program says "look at THIS window".
 ;
 ; Function definitions and global initialisers only, no top-level statements.
-; Cinema/focus mode blacks out everything else, the smart active border draws an
-; accent outline, and focus depth pushes the others back for depth of field.
+; Cinema/focus mode blacks out everything else and the smart active border draws
+; an accent outline.
 ;
 ; A MONITOR IS A SetTimer, NEVER A RegisterAnimation. The active border was once
 ; registered as an animation whose callback always returned true, so
@@ -11,11 +11,6 @@
 ; timeBeginPeriod(1) for the whole session. If it polls rather than interpolates
 ; it is a timer - and then it must call RS_Commit() itself, because nothing else
 ; flushes for it.
-;
-; FOCUS DEPTH IS AN AMBIENT CUE, SO IT WRITES AT RS_PRI_ANIM. It used to write at
-; RS_PRI_USER, out-ranking every glide, bounce and pulse on any window the user
-; switched away from. Only RestoreFocusDepth stays USER, because that one IS an
-; explicit command.
 ;
 ; Rates are scaled by dt, not applied per frame. The focus spotlight is a rate,
 ; so it is written as perFrameValue / FRAME_MS and still looks identical at the
@@ -412,168 +407,4 @@ DestroyActiveBorder() {
         if hwnd
             RS_RemoveHwnd(hwnd)
     }
-}
-
-; ApplyUi (when the checkbox is cleared) and Bye() both call this. PushBackWindow
-; pins a window at 98% size and alpha 210, and BringForwardWindow was the only
-; reversal - reachable only from ApplyFocusDepth, which only runs while the
-; feature is on. So turning Focus Depth off, or exiting, left every window the
-; user had ever switched away from permanently shrunk and translucent.
-RestoreFocusDepth() {
-    global PushedBackWindows
-    for hwnd, orig in PushedBackWindows.Clone() {
-        try CancelAnimation("FocusDepth_" hwnd)
-        if (DllCall("IsWindow", "ptr", hwnd)) {
-            ; Same staleness rule as BringForwardWindow: only hand the geometry
-            ; back if the window is still where we parked it. Anything else has
-            ; moved it since, and its position is now more correct than ours.
-            if FocusDepthAtPushedRect(hwnd, orig)
-                try RS_SetPos(hwnd, orig.x, orig.y, orig.w, orig.h, RS_PRI_USER)
-            try RS_ClearAlphaLayer(hwnd, "depth", RS_PRI_USER)
-        }
-    }
-    PushedBackWindows := Map()
-}
-
-; Is this window still sitting at the rect we pushed it back to?
-;
-; PushBackWindow captures the pre-shrink rect and BringForwardWindow restores to
-; it. If a snap, a glide, a layout key or the app itself moved or resized the
-; window while it was pushed back, restoring that captured rect teleports it to
-; a position the user has not seen for minutes. Comparing against the rect we
-; actually left it at is what tells the two cases apart.
-FocusDepthAtPushedRect(hwnd, orig) {
-    try WinGetPos(&cx, &cy, &cw, &ch, hwnd)
-    catch
-        return false
-    if (cx = "" || cw = "")
-        return false
-    return (Abs(cx - orig.px) <= 2 && Abs(cy - orig.py) <= 2
-         && Abs(cw - orig.pw) <= 2 && Abs(ch - orig.ph) <= 2)
-}
-
-ApplyFocusDepth(newActive) {
-    global LastActiveHwnd, PushedBackWindows
-    if (LastActiveHwnd && LastActiveHwnd != newActive && DllCall("IsWindow", "ptr", LastActiveHwnd)) {
-        PushBackWindow(LastActiveHwnd)
-    }
-    if (newActive && DllCall("IsWindow", "ptr", newActive)) {
-        BringForwardWindow(newActive)
-    }
-    LastActiveHwnd := newActive
-}
-
-; RS_PRI_ANIM, not RS_PRI_USER, throughout this pair.
-;
-; Focus Depth fires on every activation, so at USER priority it out-ranked the
-; glide, the bounce and the pulse on whatever window you had just switched away
-; from - the depth animation won every arbitration and the other effect silently
-; produced nothing. It is an ambient depth cue, not a user command; ANIM is the
-; band it belongs in, and RestoreFocusDepth keeps USER because that IS explicit.
-PushBackWindow(hwnd) {
-    global PushedBackWindows
-    ; Never fight a motion that is already running. A glide, bounce or layout
-    ; move owns this window's geometry, and activating another window mid-slide
-    ; used to resize it out from under the animation.
-    if Anim_Owner(hwnd, "geom")
-        return
-    ; A maximized window cannot be scaled down and put back sensibly - the OS
-    ; owns its rect - so it gets the alpha cue only.
-    try {
-        if (WinGetMinMax(hwnd) != 0)
-            return
-    } catch
-        return
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    catch
-        return
-    if (w = 0 || h = 0)
-        return
-
-    ; The rect we will leave it at, computed once so the settle frame, the
-    ; staleness test and the restore all agree on it.
-    pw := Round(w * 0.98)
-    ph := Round(h * 0.98)
-    px := x + Round((w - pw) / 2)
-    py := y + Round((h - ph) / 2)
-    PushedBackWindows[hwnd] := {x: x, y: y, w: w, h: h, px: px, py: py, pw: pw, ph: ph}
-
-    animKey := "FocusDepth_" hwnd
-    start := QPC()
-    ms := 150
-
-    PushBackStep(dt, now) {
-        if (!DllCall("IsWindow", "ptr", hwnd))
-            return false
-        t := (now - start) / ms
-        if (t >= 1) {
-            RS_SetPos(hwnd, px, py, pw, ph, RS_PRI_ANIM)
-            try RS_SetAlphaLayer(hwnd, "depth", 210 / 255.0, RS_PRI_ANIM)
-            return false
-        }
-
-        ease := 1 - (1 - t) ** 2
-        scale := 1.0 - (0.02 * ease)
-        nw := Round(w * scale)
-        nh := Round(h * scale)
-        nx := x + Round((w - nw) / 2)
-        ny := y + Round((h - nh) / 2)
-
-        RS_SetPos(hwnd, nx, ny, nw, nh, RS_PRI_ANIM)
-        try RS_SetAlphaLayer(hwnd, "depth", (255 - (45 * ease)) / 255.0, RS_PRI_ANIM)
-        return true
-    }
-    Anim_Claim(hwnd, "geom", animKey, PushBackStep)
-}
-
-BringForwardWindow(hwnd) {
-    global PushedBackWindows
-    if (!PushedBackWindows.Has(hwnd))
-        return
-
-    orig := PushedBackWindows[hwnd]
-    PushedBackWindows.Delete(hwnd)
-
-    animKey := "FocusDepth_" hwnd
-
-    ; The window has been moved or resized since we pushed it back, so the rect
-    ; we captured is stale and restoring it would teleport the window. Give the
-    ; opacity back and leave the geometry to whoever owns it now.
-    if !FocusDepthAtPushedRect(hwnd, orig) {
-        CancelAnimation(animKey)
-        try RS_ClearAlphaLayer(hwnd, "depth", RS_PRI_ANIM)
-        RS_Commit()                    ; one-shot: no animation will flush this
-        return
-    }
-
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    catch
-        return
-    if (w = 0 || h = 0)
-        return
-
-    start := QPC()
-    ms := 150
-
-    BringForwardStep(dt, now) {
-        if (!DllCall("IsWindow", "ptr", hwnd))
-            return false
-        t := (now - start) / ms
-        if (t >= 1) {
-            RS_SetPos(hwnd, orig.x, orig.y, orig.w, orig.h, RS_PRI_ANIM)
-            try RS_ClearAlphaLayer(hwnd, "depth", RS_PRI_ANIM)
-            return false
-        }
-
-        ease := 1 - (1 - t) ** 2
-        curW := w + Round((orig.w - w) * ease)
-        curH := h + Round((orig.h - h) * ease)
-        curX := orig.x + Round((orig.w - curW) / 2)
-        curY := orig.y + Round((orig.h - curH) / 2)
-
-        RS_SetPos(hwnd, curX, curY, curW, curH, RS_PRI_ANIM)
-        try RS_SetAlphaLayer(hwnd, "depth", (210 + 45 * ease) / 255.0, RS_PRI_ANIM)
-        return true
-    }
-    Anim_Claim(hwnd, "geom", animKey, BringForwardStep)
 }

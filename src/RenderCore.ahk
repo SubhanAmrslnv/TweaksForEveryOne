@@ -225,8 +225,6 @@ RS_CurrentAlpha(hwnd, defaultVal := 255) {
 ;                                        UnGhostWindow
 ;   "breathe"  idle background fade      BreathingAnimatorStep /
 ;                                        SyncBreathingTimers
-;   "depth"    focus depth cue           PushBackWindow / BringForwardWindow /
-;                                        RestoreFocusDepth
 ;   "open"     pre-hide of a new window  ShellEvent / RevealWindow /
 ;                                        UnrollWindow / GhostSlideIn /
 ;                                        PortalScaleIn

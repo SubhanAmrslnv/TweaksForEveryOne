@@ -6,8 +6,8 @@
 ;
 ; A Gui object must outlive its animation. Pass the Gui OBJECT into the closure,
 ; not just its Hwnd, and finish with Destroy() - never WinClose, which only posts
-; WM_CLOSE and leaves the object alive. ShowSeamFlash creates one of these on
-; every single snap, so a leak here grows all session.
+; WM_CLOSE and leaves the object alive. Some of these are created many times a
+; session, so a leak here grows all session.
 ;
 ; Call RS_RemoveHwnd(hwnd) when the overlay dies. Our own WS_EX_TOOLWINDOW /
 ; NoActivate windows raise no shell destroy notification, so nothing else will

@@ -104,14 +104,6 @@ ToggleBossKey() {
     busy := true
     try {
 
-    ; The privacy-blur overlays are owned by THIS process, so the ownPid filter
-    ; below deliberately skips them - and WinHide on an owner does not hide owned
-    ; windows either. They have to be hidden explicitly, or CheckPrivacyBlur sees
-    ; "nothing is active", takes the inactive branch for every private window and
-    ; paints an opaque rectangle onto the bare desktop at exactly the position and
-    ; size of the window the user just hid.
-    global PrivacyBlurWindows
-
     if (BossKeyActive) {
         for hwnd in BossKeyWindows {
             if DllCall("IsWindow", "ptr", hwnd)
@@ -121,10 +113,6 @@ ToggleBossKey() {
         try SoundSetMute(BossKeyMuteState)
         BossKeyActive := false
     } else {
-        for hwnd, obj in PrivacyBlurWindows {
-            try DllCall("ShowWindow", "ptr", obj.gui.Hwnd, "int", 0)   ; SW_HIDE
-            obj.active := false
-        }
         try BossKeyMuteState := SoundGetMute()
         catch
             BossKeyMuteState := false

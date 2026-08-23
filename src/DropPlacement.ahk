@@ -29,11 +29,11 @@
 ; 416 ms once frames got heavy.
 ;
 ; Frames that would not change a pixel are skipped. SetWindowPos on a real window
-; costs ~260 us and forces the target app to re-layout, so Glide, BounceStep and
-; PulseStep all compare against the last applied integer rect first.
+; costs ~260 us and forces the target app to re-layout, so Glide and BounceStep
+; both compare against the last applied integer rect first.
 ;
-; A Gui object must outlive its animation: ShowSeamFlash creates one on every
-; single snap, so pass the OBJECT into the closure and finish with Destroy().
+; A Gui object must outlive its animation: pass the OBJECT into the closure, not
+; just its Hwnd, and finish with Destroy().
 
 SnapWindow(hwnd, L, T, R, B, winX, winY) {
     global SnapEnabled, SNAP_DISTANCE, CORNER_BOOST, NEIGHBOUR_PROX
@@ -105,47 +105,18 @@ SnapWindow(hwnd, L, T, R, B, winX, winY) {
     ; and - worse - still fired if a new drag had cancelled the glide in the
     ; meantime, bouncing a window the user had already grabbed again.
     ;
-    ; Both effects were originally applied immediately, which is why neither
-    ; worked: the bounce was overwritten by every glide frame (Map keys enumerate
-    ; sorted, so "Bounce_" produced before "Glide_"), and the seam flash hung in
-    ; empty space at the destination for up to 650 ms before the window arrived.
-    ; W/H are hoisted out of the seam-flash guard on purpose: the magnetic-groups
-    ; block further down reads them unconditionally, so with seam flash off and
-    ; magnetic groups on they were UNSET. SnapWindow runs from FinishDrag's -50 ms
-    ; one-shot, so that throw killed the tail of the drag pipeline - no glide, no
-    ; VerifySnap, window left wherever the OS dropped it.
+    ; The bounce was originally applied immediately, which is why it never
+    ; worked: every glide frame overwrote it (Map keys enumerate sorted, so
+    ; "Bounce_" is produced before "Glide_").
+    ;
+    ; W/H are computed UNCONDITIONALLY, never inside a feature's guard: the
+    ; magnetic-groups block below reads them whatever else is switched off, and
+    ; they were once left UNSET that way. SnapWindow runs from FinishDrag's
+    ; -50 ms one-shot, so that throw killed the tail of the drag pipeline - no
+    ; glide, no VerifySnap, window left wherever the OS dropped it.
     W := R - L
     H := B - T
 
-    global SeamFlashEnabled
-    seams := []
-    if (SeamFlashEnabled) {
-        if (newL != pL) {
-            for v in vLines {
-                if (Abs(newL - v) < 2) {
-                    seams.Push([newL - 1, newT, 3, H])
-                    break
-                }
-                if (Abs(newL + W - v) < 2) {
-                    seams.Push([newL + W - 1, newT, 3, H])
-                    break
-                }
-            }
-        }
-        if (newT != pT) {
-            for hLine in hLines {
-                if (Abs(newT - hLine) < 2) {
-                    seams.Push([newL, newT - 1, W, 3])
-                    break
-                }
-                if (Abs(newT + H - hLine) < 2) {
-                    seams.Push([newL, newT + H - 1, W, 3])
-                    break
-                }
-            }
-        }
-    }
-    
     global MagneticGroupsEnabled
     if (MagneticGroupsEnabled && (newL != pL || newT != pT)) {
         if (GetKeyState("LWin", "P") || GetKeyState("RWin", "P")) {
@@ -182,7 +153,7 @@ SnapWindow(hwnd, L, T, R, B, winX, winY) {
     if (Abs(VelY) > 100 && ty != 0 && Abs(newT - T) < Abs(ty))
         crashY := ty - (newT - T)
 
-    landed := OnSnapLanded.Bind(hwnd, destX, destY, crashX, crashY, seams)
+    landed := OnSnapLanded.Bind(hwnd, destX, destY, crashX, crashY)
 
     glideMs := 0
     if GlideEnabled {
@@ -210,16 +181,13 @@ SnapWindow(hwnd, L, T, R, B, winX, winY) {
     SetTimer(VerifySnap.Bind(hwnd, newL, newT), -(Round(glideMs) + 60))
 }
 
-; The moment the window comes to rest: spark the seams it touched, then let it
-; squish if it hit something hard. Called from Glide's final frame, or directly
-; when there is no glide - never from a timer racing the animation.
+; The moment the window comes to rest: let it squish if it hit something hard.
+; Called from Glide's final frame, or directly when there is no glide - never
+; from a timer racing the animation.
 ;
 ; The size is read HERE rather than at drag end, because the window's own app may
 ; have resized it during the slide.
-OnSnapLanded(hwnd, destX, destY, crashX, crashY, seams) {
-    for s in seams
-        ShowSeamFlash(s[1], s[2], s[3], s[4])
-
+OnSnapLanded(hwnd, destX, destY, crashX, crashY) {
     if !DllCall("IsWindow", "ptr", hwnd)
         return
     try {
@@ -514,66 +482,6 @@ ThrowWindowToNextMonitor(hwnd, L, T, W, H, vx, vy) {
 
     Glide(hwnd, curWinX, curWinY, winDestX, winDestY, () => BounceSqueeze(hwnd, winDestX, winDestY, bounceW, bounceH, vx > 0 ? 10 : (vx < 0 ? -10 : 0), 0))
     return true
-}
-
-ShowSeamFlash(x, y, w, h) {
-    if (w < 1)
-        w := 1
-    if (h < 1)
-        h := 1
-
-    flash := Gui("-Caption +ToolWindow +AlwaysOnTop -DPIScale +E0x20", "SeamFlash")
-    flash.BackColor := "00E5FF"
-    flash.MarginX := 0, flash.MarginY := 0
-    flash.Show("x" x " y" y " w" w " h" h " NoActivate")
-
-    ; Pass the Gui object, not just its handle. The animation outlives this
-    ; function, and handing over only the HWND left nothing holding a reference
-    ; to the object for those 192 ms.
-    FadeSeam(flash, x, y, w, h)
-}
-
-FadeSeam(flashGui, x, y, w, h) {
-    hwnd := flashGui.Hwnd
-    animKey := "FadeSeam_" hwnd
-    CancelAnimation(animKey)
-    start := QPC()
-    ms := Tune("animSeamMs")   ; duration in ms; never derive this from a frame count
-
-    SeamStep(dt, now) {
-        if !DllCall("IsWindow", "ptr", hwnd) {
-            RS_RemoveHwnd(hwnd)
-            return false
-        }
-
-        t := (now - start) / ms
-        if (t >= 1) {
-            ; Destroy, not WinClose: WinClose only posts WM_CLOSE and leaves the
-            ; Gui alive. One of these is created on every single snap, so a
-            ; leaked window here is a leak that grows all session.
-            try flashGui.Destroy()
-            RS_RemoveHwnd(hwnd)
-            return false
-        }
-
-        ; (1-t)^2, not 1-t^2. The old curve was still at 75% brightness a third
-        ; of the way through, which reads as a bar being drawn on the seam; this
-        ; one is bright immediately and mostly gone by the midpoint, which reads
-        ; as a spark where the two edges met.
-        alpha := Round(255 * (1 - t) ** 2)
-
-        if (w < h) {
-            shrink := Round(h * t * 0.3)
-            RS_SetPos(hwnd, x, y + shrink, w, h - shrink*2, RS_PRI_ANIM)
-        } else {
-            shrink := Round(w * t * 0.3)
-            RS_SetPos(hwnd, x + shrink, y, w - shrink*2, h, RS_PRI_ANIM)
-        }
-
-        RS_SetAlpha(hwnd, alpha, RS_PRI_ANIM)
-        return true
-    }
-    RegisterAnimation(animKey, SeamStep)
 }
 
 ; Cheaper than WinMove per frame, and leaves z-order and focus alone mid-slide.

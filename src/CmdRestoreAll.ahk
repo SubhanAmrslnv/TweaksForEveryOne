@@ -33,7 +33,7 @@ RestoreAllWindows() {
     ; its feature flag, so switching the feature off strands the state with no way
     ; back - which is exactly what a panic key is for. Bye() already reverses all
     ; of them on exit; there was no reason for Shift+Alt+Y not to.
-    global BottomWindows, CustomTrans, PushedBackWindows, CurtainWindows, PrivacyBlurWindows
+    global BottomWindows, CustomTrans, CurtainWindows
     for hwnd, info in BottomWindows.Clone() {
         try RestoreFromBottom(hwnd)
         n += 1
@@ -45,20 +45,12 @@ RestoreAllWindows() {
     }
     ; Every window ANY layer is still dimming, not just the ones the user set by
     ; hand. Enumerating CustomTrans alone missed a window left dim by a stranded
-    ; breathe, ghost, drag or depth layer - which is precisely the state a panic
-    ; key exists to clear, and the one the user cannot see the cause of.
+    ; breathe, ghost or drag layer - which is precisely the state a panic key
+    ; exists to clear, and the one the user cannot see the cause of.
     RS_ResetAllAlphaState(RS_PRI_USER)
-    if PushedBackWindows.Count {
-        n += PushedBackWindows.Count
-        try RestoreFocusDepth()
-    }
     if CurtainWindows.Count {
         n += CurtainWindows.Count
         try RestoreCurtain()
-    }
-    for hwnd, obj in PrivacyBlurWindows.Clone() {
-        try RemovePrivacyBlur(hwnd)
-        n += 1
     }
     try RestoreShatters()
     RS_Commit()                     ; one-shot producer: nothing else will flush

@@ -21,8 +21,8 @@
 ;
 ; Not every binding is here. A hotkey whose body IS its feature stays with that
 ; feature so the two cannot be moved apart: gravity close and shatter close,
-; curtain drop, carousel Alt-Tab, black-hole delete and privacy blur. Each of
-; those modules brackets its own context.
+; curtain drop and black-hole delete. Each of those modules brackets its own
+; context.
 ;
 ; The keypad tiles are bound ONLY under their digit names (Numpad7..Numpad0).
 ; With NumLock OFF the keypad sends the navigation names instead and the whole
@@ -245,8 +245,7 @@ MButton:: {
 }
 #HotIf !GameModeActive
 
-#HotIf !GameModeActive && ((ElasticScrollEnabled || MotionBlurScrollEnabled) && !IsMouseOverTaskbar()
-)
+#HotIf !GameModeActive && ElasticScrollEnabled && !IsMouseOverTaskbar()
 ~WheelUp::
 ~WheelDown:: {
     MouseGetPos(,, &hwnd)
@@ -259,8 +258,7 @@ MButton:: {
     ; Order matters: this runs on EVERY wheel notch anywhere in the system.
     ; IsRestorable is ~6 cross-process queries plus a DWM call; WinGetMinMax is
     ; 0.28 us. Ask the cheap question first and most notches never reach the
-    ; expensive one. Both features want the same two facts, so they are gathered
-    ; once instead of IsRestorable being paid twice.
+    ; expensive one.
     if (!DllCall("IsWindow", "ptr", hwnd))
         return
     try {
@@ -271,9 +269,6 @@ MButton:: {
         return
     if (!IsRestorable(hwnd))
         return
-
-    if (MotionBlurScrollEnabled)
-        TriggerMotionBlur(hwnd, dir)
 
     if (!ElasticScrollEnabled)
         return
@@ -837,14 +832,23 @@ global SparkHook := InputHook("V L0")
 global LastNonModifierKeyTime := 0
 
 UpdateKeyboardHook() {
-    global SparkHook, SparkTypingEnabled, MicKillSwitchEnabled, SpotlightEnabled, SmoothCaretEnabled, TypingSoundsEnabled
+    global SparkHook, MicKillSwitchEnabled, SpotlightEnabled, SmoothCaretEnabled, TypingSoundsEnabled
     SparkHook.OnKeyDown := OnObservedKeyDown
-    SparkHook.KeyOpt("{All}", "+N")
-    if (SparkTypingEnabled || MicKillSwitchEnabled || SpotlightEnabled || SmoothCaretEnabled || TypingSoundsEnabled) {
+    SparkHook.OnKeyUp := OnObservedKeyUp
+    ; NOTIFY ON EVERY KEY, OR ORDINARY LETTERS ARE NEVER REPORTED. InputHook
+    ; calls OnKeyDown only for keys that are end keys or carry the Notify option;
+    ; without this line the callback fires for almost nothing a typist presses,
+    ; which is measured, not theoretical - it is why the keystroke sounds only
+    ; ever made a noise on a handful of keys, and why the spark trail and the
+    ; smooth caret looked dead while typing. "N" is also what makes OnKeyUp fire,
+    ; which the auto-repeat gate in AK_IsRepeat() needs.
+    try SparkHook.KeyOpt("{All}", "N")
+    if (MicKillSwitchEnabled || SpotlightEnabled || SmoothCaretEnabled || TypingSoundsEnabled) {
         try SparkHook.Start()
     } else {
         try SparkHook.Stop()
     }
+    SyncKeySounds()
 }
 
 OnObservedKeyDown(ih, vk, sc) {
@@ -856,30 +860,25 @@ OnObservedKeyDown(ih, vk, sc) {
         || vk = 0xA0 || vk = 0xA1 || vk = 0xA2 || vk = 0xA3 || vk = 0xA4 || vk = 0xA5)
         LastNonModifierKeyTime := A_TickCount
 
-    OnTypingSpark(ih, vk, sc)
-    
     if SmoothCaretEnabled
         UpdateSmoothCaret()
         
-    if TypingSoundsEnabled {
-        name := GetKeyName(Format("vk{:x}", vk))
-        if (name = "Space") {
-            PlayAcousticSound("space")
+    ; EVERY key makes a noise, modifiers included - they are keycaps that bottom
+    ; out too. Which voice each one gets is AcousticKeystrokes.ahk's decision, so
+    ; the classification lives next to the voices it names rather than here.
+    ; Auto-repeat is excluded: holding a key does not re-click a real switch.
+    if (TypingSoundsEnabled && !AK_IsRepeat(vk)) {
+        PlayAcousticSound(AK_VoiceForKey(vk))
+        if (vk = 0x20)
             WordPop()
-        } else if (name = "Enter" || name = "NumpadEnter") {
-            PlayAcousticSound("enter")
-        } else if (name = "Backspace") {
-            PlayAcousticSound("backspace")
-        } else if ((vk >= 0x41 && vk <= 0x5A) || (vk >= 0x30 && vk <= 0x39)) {
-            PlayAcousticSound("normal")
-        } else if (name = "[" || name = "]" || name = "(" || name = ")" || name = "{" || name = "}") {
-            PlayAcousticSound("structural")
-        } else if !(vk = 0x10 || vk = 0x11 || vk = 0x12 || vk = 0x5B || vk = 0x5C || vk = 0xA0 || vk = 0xA1 || vk = 0xA2 || vk = 0xA3 || vk = 0xA4 || vk = 0xA5) {
-            PlayAcousticSound("operator")
-        }
     }
 }
 
-
+; The key-up half of the shared observer. Only the auto-repeat gate needs it, but
+; it has to be wired for every key (UpdateKeyboardHook sets Notify on "{All}")
+; because a held key that is never seen going up would stay silent.
+OnObservedKeyUp(ih, vk, sc) {
+    AK_KeyReleased(vk)
+}
 
 #HotIf

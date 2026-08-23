@@ -127,11 +127,9 @@ mouse is over it.
 - **Bouncy Snapping**: Windows slightly squish and bounce back with realistic physics when hitting screen edges or other windows.
 - **Gravity Drop Close**: When closing a window, it collapses into a bitmap and falls with gravity (or gets sucked into a black hole).
 - **Breathing Backgrounds**: Inactive background windows slowly fade to 70% opacity after 6 seconds of inactivity, waking up instantly when hovered.
-- **Focus Pulse**: Switching to a window via Alt+Tab makes it pulse (expand by 2-3% and bounce back) to immediately draw your attention.
 - **Ghost Slide-In**: New apps slide up from 30px below while fading in, similar to modern smartphone app launches.
 - **Parallax Dragging**: Windows become transparent based on how fast you drag them, fading back to solid when you stop. The two speeds that define the ramp are settings: it starts fading at `[memory] parallaxfrom` px/s and reaches `parallaxmin` opacity at `parallaxfull` px/s.
 - **Custom Taskbar Clock**: time over date with the temperature beside it, drawn on the taskbar, with a settings page of its own. By default it sits left of every tray icon and covers nothing, painting no background at all so it reads as taskbar text; you can instead anchor it right beside the clock, which covers the tray buttons in that space. The info column shows a weather glyph with the temperature and the wind speed under it. It reads `--` until you set a city, and until then the program makes no network request at all.
-- **Magnetic Seam Flash**: A brief neon flash effect appears exactly on the seam when two windows magnetically snap together.
 - **Theater Spotlight**: A soft, circular vignette shadow follows your active window like a stage spotlight, dimming the rest of the screen.
 - **Fly-to-Mouse Minimize**: Minimized windows spin and vacuum directly into your mouse cursor instead of dropping to the taskbar.
 - **Window Unrolling**: New windows unroll from top to bottom like a window blind in 0.2 seconds.
@@ -217,11 +215,11 @@ Seven pages down the left:
 
 | Page | What's on it |
 |---|---|
-| **Window Management** | Snapping (distance, speed response, edge stickiness, corner boost, neighbour reach, seam flash), ice glide (throw, slide time, throw distance, settle overshoot), drag opacity floor, tiling grid gap, rubber-band travel, alt-drag, fly-to-mouse minimize, grab & pan, roll-up, position memory |
+| **Window Management** | Snapping (distance, speed response, edge stickiness, corner boost, neighbour reach), ice glide (throw, slide time, throw distance, settle overshoot), drag opacity floor, tiling grid gap, rubber-band travel, alt-drag, fly-to-mouse minimize, grab & pan, roll-up, position memory |
 | **Power Features** | Spotlight, live PiP, ghost window (opacity, fade range, click range), always on bottom, middle-click close, minimize to tray, quick folder jump, Quick Look |
 | **System & Media** | Taskbar volume scroll, volume OSD (step, hold time, opacity), mic kill-switch, boss key, text expander, smart CapsLock, plain-text paste, "never dim these apps" |
-| **Multi-Monitor** | Cursor wrap (tolerance, hold time, approach speed, cooldown), focus dimmer strength, active border (thickness, opacity, colour), breathing (delay, opacity), shake to find, cursor yawn, focus pulse, new-window animation |
-| **Animation** | Durations and intensities shared across features — open animation, focus pulse, snap bounce, roll-up, seam flash, gravity close, overlay fade, OSD slide, focus-mode dim / softness / corners, transparency wheel step and floor |
+| **Multi-Monitor** | Cursor wrap (tolerance, hold time, approach speed, cooldown), focus dimmer strength, active border (thickness, opacity, colour), breathing (delay, opacity), shake to find, cursor yawn, keystroke sound volume and pitch, new-window animation |
+| **Animation** | Durations and intensities shared across features — open animation, snap bounce, roll-up, gravity close, overlay fade, OSD slide, focus-mode dim / softness / corners, transparency wheel step and floor |
 | **Hot Corners** | Enable, corner size, hold time, plus an action per corner |
 | **General** | Start with Windows, gravity drop on close, debug log, smart auto-hide taskbar, taskbar style / icon size, restart Explorer, open log, open folder, hotkeys, this guide |
 

@@ -50,7 +50,7 @@ A Windows 11 tray utility written in **AutoHotkey v2** (magnetic window snapping
 
 Behind a `#HotIf` on their feature flag, so the key stays free until the feature is on: `Shift+Alt+B` (always-on-bottom), `Shift+Alt+G` (proximity ghost), `Shift+Alt+P` (live PiP), `Shift+Alt+L` (spotlight), `Shift+Alt+A` (mic kill-switch), `Shift+Alt+Q` (Quick Look, and only in Explorer), `Shift+Alt+F4` (shatter close, `:9131`), `Alt+F4` (gravity close, `$!F4` at `:3122`), `Ctrl+Alt+V` (plain paste).
 
-The triple-`Esc` binding is `~Esc`, so Escape still reaches the focused window — it does not go through `IsDoublePress` and it lives in `src\StealthPanic.ahk`, not the hotkey block. Note `Escape` is already claimed behind two other `#HotIf` contexts (Spotlight and Quick Look) and by `CloseCarousel`.
+The triple-`Esc` binding is `~Esc`, so Escape still reaches the focused window — it does not go through `IsDoublePress` and it lives in `src\StealthPanic.ahk`, not the hotkey block. Note `Escape` is already claimed behind two other `#HotIf` contexts (Spotlight and Quick Look).
 
 **Three hotkeys are declared inline, far from the hotkey block** — always-on-top (`+!o`, `:3632`), gravity close (`$!F4`, `:3122`) and shatter close (`+!F4`, `:9131`). A grep of the `=== Hotkeys ===` block alone will miss them.
 
@@ -89,6 +89,27 @@ The brief's "activation distance" collapses into `tolerance`: once the pointer r
 
 Hot Corners uses the same dwell model (`[corners] size`, `[corners] delay`) for the same reason, so the two features feel like one design.
 
+### Effects the owner does not want
+
+A taste constraint, stated directly, and it governs what gets built and what
+ships on by default:
+
+**Wanted: opacity.** Transparency, breathing/fading windows, ghosting, monitor
+dimming, drag parallax - anything whose whole expression is an alpha value.
+
+**Not wanted:** heartbeat / pulse effects, neon effects, the 3D Carousel
+Alt-Tab, Focus Depth of Field (3D background scaling), and blur effects
+generally.
+
+Nine features were DELETED for this, not just switched off - Focus Pulse,
+Magnetic Seam Flash, Lightsaber Seam Glow, Spark Typing, 3D Carousel Alt-Tab,
+Focus Depth of Field, Start Menu Blur, Privacy Blur on Unfocus and Motion Blur
+Scroll - along with their flags, settings, tuning rows and ini keys. Do not
+reintroduce them. Ripple Click was deliberately KEPT.
+
+Do not propose a new effect in the rejected classes, and do not enable one by
+default. When something needs visual feedback, reach for a fade first.
+
 ### The Full Feature Suite (40+ Tweaks & Animations)
 
 **15 Power-User Tweaks (Newly Added):**
@@ -119,10 +140,8 @@ Hot Corners uses the same dwell model (`[corners] size`, `[corners] delay`) for 
 - **Bouncy Snapping**: Windows slightly squish and bounce back with realistic physics when hitting screen edges or other windows.
 - **Gravity Drop Close**: When closing a window, it collapses into a bitmap and falls with gravity (or gets sucked into a black hole).
 - **Breathing Backgrounds**: Inactive background windows slowly fade to 70% opacity after 6 seconds of inactivity, waking up instantly when hovered.
-- **Focus Pulse**: Switching to a window via Alt+Tab makes it pulse (expand by 2-3% and bounce back) to immediately draw your attention.
 - **Ghost Slide-In**: New apps slide up from 30px below while fading in, similar to modern smartphone app launches.
 - **Parallax Dragging**: Windows become transparent based on how fast you drag them, fading back to solid when you stop. The two speeds that define the ramp are settings: it starts fading at `[memory] parallaxfrom` px/s and reaches `parallaxmin` opacity at `parallaxfull` px/s.
-- **Magnetic Seam Flash**: A brief neon flash effect appears exactly on the seam when two windows magnetically snap together.
 - **Theater Spotlight**: A soft, circular vignette shadow follows your active window like a stage spotlight, dimming the rest of the screen.
 - **Fly-to-Mouse Minimize**: Minimized windows spin and vacuum directly into your mouse cursor instead of dropping to the taskbar.
 - **Window Unrolling**: New windows unroll from top to bottom like a window blind in 0.2 seconds.
@@ -135,19 +154,14 @@ Hot Corners uses the same dwell model (`[corners] size`, `[corners] delay`) for 
 - **Momentum Tilt**: Dragging a window tilts it slightly in the direction of motion, swinging back with inertia when stopped.
 - **Black Hole Minimize & Delete**: Windows and deleted files get sucked into a tiny gravity well (funnel) with physics-based warping.
 - **Resistance Edge**: Snapping a window to a screen edge creates a satisfying rubber-band resistance effect.
-- **Focus Depth (Portal Scale-In)**: The active window subtly scales up and pushes background windows backward for depth of field.
-- **Spark Typing & Acoustic Keystrokes**: Type with zero-latency mechanical ASMR clicks (MIDI) while a neon equalizer bounces at the window bottom, and your caret leaves a glowing neon trail.
-- **Carousel Alt-Tab**: A 3D rotating carousel replacement for the standard flat Alt-Tab menu.
+- **Mechanical Keystroke Sounds**: Every key makes a synthesised mechanical switch sound - a bright click layered over the keycap bottoming out - with its own voice for space, enter, backspace and copy/cut/paste.
 - **Dynamic Notch (OSD)**: Volume and brightness adjustments drop down a sleek iOS-style Dynamic Island pill from the top of the screen.
 - **Curtain Drop (Win+D)**: Showing the desktop drops all windows simultaneously with a kinetic motion-blur effect.
-- **Motion Blur Scroll**: Fast mouse-wheel scrolling applies a vertical motion blur to make 60Hz screens feel fluid.
 - **Overscroll Bounce**: Scrolling past the end of a page elastically stretches and springs back.
 - **Taskbar Icon Wave & Elastic Toasts**: Hovering over the taskbar creates a macOS-like icon wave, and notifications bounce elastically into view.
 - **Start Menu Slide-Up Blur**: Opening the Start menu slides it up while deeply blurring the entire background.
 - **Window Throw & Catch**: Forcefully flick a window towards another monitor, and it will kinetically fly across screens.
 - **Shatter to Close**: Shift+Alt+F4 smashes the active window into dozens of 3D glass shards that fall with gravity.
-- **Lightsaber Seam Glow**: Hovering over the seam between two snapped windows ignites a neon cyan glow.
-- **Privacy Blur on Unfocus**: Mark a window as private (Win+Alt+B). When inactive, it gets a heavy frosted glass overlay.
 
 **Keyboard Window Layout:**
 - **Numpad Tiling**: `Shift+Alt+Numpad1..9` tiles to a 3x3 grid of the work area, laid out like the keypad. **Only the digit names are bound**, so this is dead with NumLock off; `Shift+Alt+Up/Down` are the NumLock-independent halves.
@@ -304,6 +318,7 @@ notes still reference no longer exist: `WindowCommands.ahk` became the six
 |---|---|
 | `src\MonitorGeometry.ahk` | Monitor index and work-area lookup; the cached screen metrics |
 | `src\OverlayGui.ahk` | One lifecycle for every transient overlay: `GuiDestroy`, `FadeGui`, `NotchAnim` |
+| `src\AcousticKeystrokes.ahk` | The mechanical keystroke sound bank: synthesis, the per-key voice map, and playback |
 
 *UI and input*
 
@@ -324,7 +339,7 @@ notes still reference no longer exist: `WindowCommands.ahk` became the six
 | `src\CmdTrayMinimize.ahk` | Minimize to tray, and the boss key |
 | `src\CmdRestoreAll.ahk` | `Shift+Alt+Y` — the recovery path for state the user cannot see |
 | `src\DragPipeline.ahk` | MOVESIZE/menu hooks, velocity sampling, drag end, magnetic groups |
-| `src\DropPlacement.ahk` | Where a released window lands: snap, verify, glide, bounce, throw, seam flash, tiling grid |
+| `src\DropPlacement.ahk` | Where a released window lands: snap, verify, glide, bounce, throw, tiling grid |
 | `src\WindowClassification.ahk` | Is this a main application window? The WMI-backed classifier |
 | `src\PositionMemory.ahk` | Remember and restore per-app size/position; the buffered `window-positions.ini` writer |
 | `src\WindowOpenAnim.ahk` | Animate a brand-new window in: unroll, ghost slide-in, portal scale-in |
@@ -333,15 +348,14 @@ notes still reference no longer exist: `WindowCommands.ahk` became the six
 | `src\ScreenEdgeGestures.ahk` | Hot corners and infinite cursor wrap |
 | `src\AudioOsd.ahk` | Volume and microphone OSDs and their input |
 | `src\OnDemandOverlays.ahk` | Summoned and dismissed: Quick Look, Spotlight, text magnifier |
-| `src\FocusEmphasis.ahk` | Cinema dim, smart active border, focus depth |
-| `src\PinnedWindowModes.ahk` | Modes a window is opted into and must be released on exit: PiP, always-on-bottom, ghost, privacy blur |
-| `src\MouseGestureFx.ahk` | Pointer-motion / idle / wheel driven: shake-find, yawn, ripples, drag trail, spark typing, motion blur |
-| `src\ShellSurfaceWatcher.ahk` | The one poll over shell surfaces: auto-hide, taskbar wave, lightsaber, Start blur, toasts |
+| `src\FocusEmphasis.ahk` | Cinema dim and the smart active border |
+| `src\PinnedWindowModes.ahk` | Modes a window is opted into and must be released on exit: PiP, always-on-bottom, ghost |
+| `src\MouseGestureFx.ahk` | Pointer-motion / idle / wheel driven: shake-find, yawn, ripples, drag trail, clipboard feedback |
+| `src\ShellSurfaceWatcher.ahk` | The one poll over shell surfaces: auto-hide, taskbar wave, toasts |
 | `src\TaskbarClock.ahk` | The custom taskbar clock, and the only network egress in the program |
 | `src\FxGravity.ahk` | Gravity-drop close (`Alt+F4`) |
 | `src\FxShatter.ahk` | Shatter to close (`Shift+Alt+F4`) |
 | `src\FxCurtain.ahk` | Curtain drop on `Win+D`, and `RestoreCurtain()` |
-| `src\FxCarousel.ahk` | 3D carousel Alt-Tab |
 | `src\FxBlackHole.ahk` | Black-hole minimize and delete |
 
 *Stealth Panic — a bolt-on that also runs standalone*
@@ -409,15 +423,15 @@ where one owner is guaranteed by construction and composition would be overhead 
 that could only ever have one contributor.
 
 **One owner per layer name**, and the language cannot enforce it, so the list lives in
-`RenderCore.ahk`'s header: `"drag"`, `"ghost"`, `"breathe"`, `"depth"`, `"open"`, `"gravity"`.
+`RenderCore.ahk`'s header: `"drag"`, `"ghost"`, `"breathe"`, `"open"`, `"gravity"`.
 Two owners of one name reproduce the oscillation bug this replaced, inside a single layer,
 where it is harder to see.
 
 Before this, every producer wrote an absolute including a hard `"Off"`, and three hand-rolled
 compositions had grown to work around it. The user-visible symptom: set a window to 50% with
-`Shift+Alt+Wheel`, click away and back - Focus Depth wrote 210 and then `"Off"`, so the 50% was
-gone while `CustomTrans` still claimed 128. Dragging, ghosting or idling the window did the
-same. `CustomTrans` survives as a *predicate and registry*, not as the source of truth, and
+`Shift+Alt+Wheel`, then let any ambient effect touch it - it wrote its own absolute and then
+`"Off"`, so the 50% was gone while `CustomTrans` still claimed 128. Dragging, ghosting or
+idling the window all did it. `CustomTrans` survives as a *predicate and registry*, not as the source of truth, and
 breathing's `WinTargetAlpha`/`WinCurrentAlpha` now hold that layer's numerator rather than an
 absolute opacity.
 
@@ -438,7 +452,7 @@ The scheduler stops its timer the moment nothing is animating, so a queued chang
 
 Deliberately **not** cached: window positions. A cache is only valid when the cache owns the state, and the user dragging a title bar changes a window's position behind this pipeline's back. Caching last-requested positions made a second snap to the same edge a no-op. Alpha and region *are* cached (`RS_LastAlpha` / `RS_LastRegion`) because re-applying them is individually expensive — `WinSetTransparent` adds/removes `WS_EX_LAYERED` and `WinSetRegion` rebuilds a GDI region — and both caches are pruned by `RS_RemoveHwnd()` and the periodic `RS_SweepDead()`.
 
-**Call `RS_RemoveHwnd(hwnd)` whenever a window we touched is destroyed.** For foreign windows the shell hook does it. For our own overlay GUIs (seam flash, dimmers, OSDs, focus layers, active border, gravity animation) nothing does, because `WS_EX_TOOLWINDOW` / `NoActivate` windows raise no shell destroy notification — so every destroy site does it explicitly, and `RS_SweepDead()` is the backstop.
+**Call `RS_RemoveHwnd(hwnd)` whenever a window we touched is destroyed.** For foreign windows the shell hook does it. For our own overlay GUIs (dimmers, OSDs, focus layers, active border, gravity animation) nothing does, because `WS_EX_TOOLWINDOW` / `NoActivate` windows raise no shell destroy notification — so every destroy site does it explicitly, and `RS_SweepDead()` is the backstop.
 
 **Never read the pending Maps as if they were state.** `RS_Pos[hwnd]` is a *request* that has not been applied and can still be outranked in the same flush — and every move-only producer (`Glide`, `MoveFast`, curtain, toast) queues `w = h = -1` to mean `SWP_NOSIZE`. The active border used `RS_Pos` as a position source, so `W`/`H` came back as `-1`, failed its own `W < 50` sanity check and hid the border for the whole of every glide, snap and layout key. Measure the window (DWM frame bounds, `WinGetPos` fallback).
 
@@ -446,7 +460,7 @@ Deliberately **not** cached: window positions. A cache is only valid when the ca
 
 `StopScheduler()` **re-checks `ActiveAnimations.Count` and refuses to stop while work is queued.** `RenderFrame` tests the count and then calls it, and those two steps are not atomic: anything that interrupts in between and calls `RegisterAnimation` saw `SchedulerRunning` still true (so `StartScheduler` was a no-op) and then had its timer killed underneath it. `Bye()` passes `StopScheduler(true)` to override, because it is about to undo every animation anyway.
 
-**Two animations must not share a window at the same priority — and the shell hook is a producer too.** `Pulse_<hwnd>` and `Glide_<hwnd>` both wrote `RS_Pos[hwnd]` at `RS_PRI_ANIM`; Map keys enumerate sorted, so `Pulse_` was produced last and won every frame, and `PulseStep` had captured a *mid-glide* rect that it then restored on its final frame — activating a window mid-snap discarded the snap. `PulseWindow` declines while anything owns the window's `"geom"` channel, the same guard `VerifySnap` uses - both used to name `Glide_` and `Bounce_` explicitly, which is why neither noticed `Jello_`. Focus Depth was worse: it wrote at `RS_PRI_USER`, out-ranking every glide, bounce and pulse on any window the user switched away from. It is an ambient depth cue, so it belongs at `RS_PRI_ANIM`; only `RestoreFocusDepth` stays `USER`, because that one *is* an explicit command.
+**Two animations must not share a window at the same priority — and the shell hook is a producer too.** Two animators that both wrote `RS_Pos[hwnd]` at `RS_PRI_ANIM` did not tie: Map keys enumerate sorted, so the alphabetically later key was produced last and won every frame, and the loser's captured rect — taken *mid-glide* — was then restored on its final frame, which discarded the snap the user had just made. That is what `Anim_Claim(hwnd, "geom", ...)` exists to prevent, and why a producer asks `Anim_Owner(hwnd, "geom")` rather than naming specific competitors: every hand-written list of rivals in this codebase had drifted and missed at least one. An **ambient** cue belongs at `RS_PRI_ANIM`; `RS_PRI_USER` is for an explicit command, and an ambient effect placed there out-ranks every glide and bounce on the window.
 
 ### Performance: what things actually cost
 
@@ -600,7 +614,7 @@ There is no single "the only timer" any more. `RenderFrame` at 16 ms while anima
 
 **A monitor is a `SetTimer`, never a `RegisterAnimation`.** The active border was registered as an animation whose callback always returned `true`, so `ActiveAnimations` was never empty, the scheduler never reached its idle shutdown, and enabling the border pinned the 15 ms frame loop *and* `timeBeginPeriod(1)` for the whole session. Same mistake as the OSD auto-hides. If it polls rather than interpolates, it is a timer — and it must call `RS_Commit()` itself.
 
-**A feature that owns an overlay must tear it down when its flag goes false, and the flag test belongs *inside* that function.** Gating the call site instead means switching the feature off stops the only code that could ever clean up: Start Menu Blur stranded a full-screen 170-alpha sheet over the desktop, Lightsaber left a cyan bar welded to a window edge, Privacy Blur left opaque sheets over every marked window. `RenderTaskbarWave` had the right shape; the others now match it, and `CheckTaskbarAndUI` calls all four unconditionally so they *can* clean up.
+**A feature that owns an overlay must tear it down when its flag goes false, and the flag test belongs *inside* that function.** Gating the call site instead means switching the feature off stops the only code that could ever clean up. Three separate overlays were stranded that way — a full-screen dimming sheet left over the desktop, a bar welded to a window edge, opaque sheets over marked windows — each visible with the feature that owned it disabled and no way left to reach it. `RenderTaskbarWave` has the right shape: `CheckTaskbarAndUI` calls its sub-checks unconditionally so they *can* clean up, and each tests its own flag as its first act.
 
 **Drag pipeline**: `SetWinEventHook` on `EVENT_SYSTEM_MOVESIZESTART`/`END` → `SampleVelocityStep` on the frame loop (EMA-smoothed velocity, parallax alpha) → `FinishDrag` deferred 50 ms with the start rect captured in the closure (it enumerates windows, so it must not run inside the hook) → `SnapWindow` → `Glide` → `VerifySnap` scheduled for after the glide lands. MOVESIZEEND also fires *after* the OS modal move loop, which is the only safe moment to reposition.
 
@@ -614,12 +628,50 @@ The hook callback is **not** created with `"F"` (fast) mode. Fast mode runs on t
 
 **Nothing in the drag or snap path may block.** `SnapWindow` used to spin twice for 40 ms in a busy-wait that never pumped messages, which froze every timer in the process — including the frame loop that had just been armed to run the glide it had started. Verification is a one-shot timer now, and it declines to act while a `Glide_<hwnd>` animation is still registered. Use `Sleep` (which yields) if you need to wait; there is no `PreciseSleep` any more.
 
+### Keystroke sounds, and the hook they ride on
+
+`AcousticKeystrokes.ahk` SYNTHESISES every click into a RIFF/WAVE image in
+memory and plays it with `PlaySound` + `SND_MEMORY`. It replaced a MIDI
+implementation that sent GM percussion (woodblock, rimshot, hi-hat, bass drum,
+hand clap) through `midiOutShortMsg` - those are orchestral samples from the
+Windows GS wavetable, so typing sounded like a drum kit rather than a keyboard,
+and the timbre could not be tuned at all. A voice here is a bright noise
+transient (the switch click) over a heavily damped low sine (the keycap
+bottoming out on the plate), plus an optional second click at a fixed delay -
+the spacebar's stabiliser rattle, and what makes the copy/cut voices read as a
+double tick. Measured: the full bank of 30 clips renders in **78 ms**, so it is
+built by a one-shot armed from `SyncKeySounds()` and never on the input path.
+
+**`InputHook.OnKeyDown` fires ONLY for keys carrying the Notify option.** The
+shared `SparkHook` set none, so ordinary letters were never reported and the
+keystroke sounds, the spark trail and the smooth caret only ever fired on a
+handful of keys - the whole reason the feature sounded like percussion hits
+rather than typing. `UpdateKeyboardHook()` now calls `KeyOpt("{All}", "N")`,
+which is also what makes `OnKeyUp` fire, which `AK_IsRepeat()` needs: auto-repeat
+delivers a key-down every 30-100 ms while a key is held and a real switch clicks
+once, so the gate is "is this key already down", not a repeat-rate guess.
+
+**A SUPPRESSING hotkey hides its key from the InputHook; a PASS-THROUGH one does
+not.** Measured on 2.0.26 with Notify on: `$^v` fires and the hook never sees
+`v`, but `~^c` fires AND the hook still reports `c`. So the two clipboard paths
+are not naturally exclusive - without a guard every `Ctrl+C` clicked twice, once
+from `AK_VoiceForKey()` and once from `TriggerCopyFeedback`. `AK_VoiceForKey()`
+returns `""` (a deliberate silence, distinct from an unknown voice) for `c`/`x`
+while `ClipboardAppendEnabled || CopyFeedbackEnabled` holds, and for `v` while
+`MorphingPasteEnabled` holds. Those two conditions MIRROR the `#HotIf` contexts
+in `InputBindings.ahk` and have to be changed together.
+
+**Purge playback before freeing a buffer.** `SND_ASYNC` means winmm is reading
+our `Buffer` after the call returns, so `AK_Shutdown()` calls `PlaySound` with
+`SND_PURGE` first and drops `AK_BANK` second. `Bye()` does the same, and it is
+also the tray -> Restart path.
+
 ### Win32 gotchas the code depends on
 
 - **Two coordinate spaces.** Snapping measures with `DWMWA_EXTENDED_FRAME_BOUNDS` (attr 9); `WinGetPos` differs by the invisible DWM border. `GetRects()` in `SnapCore.ahk` returns *both*, and `SnapWindow` converts back (`destX := winX + (newL - L)`). Ignore this and every snap lands ~7px off.
 - **`DWMWA_CLOAKED` (attr 14)** filters UWP-suspended and other-virtual-desktop windows; `WS_VISIBLE` alone does not catch them.
 - **Position memory is keyed on exe + window class**, and excludes owned/tool/non-resizable and Picture-in-Picture windows — every Chrome popup shares a class with the main window.
-- **New windows are detected via `RegisterShellHookWindow`, not polling — and that registration does not survive an Explorer restart.** `TaskbarCreated` is broadcast when the shell comes back; handling it and re-registering is the only thing keeping position memory, the open animations, focus pulse, breathing seeding, fly-to-mouse minimize and per-window cleanup alive after an Explorer crash (or after this app's own "Restart Explorer" button).
+- **New windows are detected via `RegisterShellHookWindow`, not polling — and that registration does not survive an Explorer restart.** `TaskbarCreated` is broadcast when the shell comes back; handling it and re-registering is the only thing keeping position memory, the open animations, breathing seeding, fly-to-mouse minimize and per-window cleanup alive after an Explorer crash (or after this app's own "Restart Explorer" button).
 - **Never make a foreign window layered speculatively.** `WinSetTransparent` on a new window forces `WS_EX_LAYERED`; on a GPU-composited or full-screen window that costs a redirection surface and can break exclusive full-screen presentation. `WillAnimateOpen()` is the single eligibility test, applied *before* hiding a new window rather than after.
 - **Never `SendMessage` to a foreign window without a timeout.** A window whose thread is not pumping messages ("Not Responding") never returns, freezing this whole process — every timer and every hotkey — with it. Use `SendMessageTimeout` with `SMTO_ABORTIFHUNG` (see `AskWindowIcon()` and the `WM_NCHITTEST` probe in the `*MButton` handler).
 - **A timer callback that throws pops an error dialog and kills that timer** — the feature is then dead for the rest of the session. Any window query in a monitor must be inside `try` with an explicit fallback; `IsMouseOverTaskbar()` is the pattern to copy.

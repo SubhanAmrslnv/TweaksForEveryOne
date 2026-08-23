@@ -12,10 +12,10 @@
 ; reaches the declaration. Worse, several of those calls pump the message queue,
 ; so a shell event queued during startup got dispatched right there: a window
 ; closing at that moment reached ShellEvent's HSHELL_WINDOWDESTROYED cleanup and
-; threw "This global variable has not been assigned a value" on
-; PushedBackWindows, declared thousands of lines below where the hook had been
-; registered. It reproduced on a fresh install (the setup window closes as the
-; app starts) and almost never when running from src\ on a quiet desktop.
+; threw "This global variable has not been assigned a value" on a map declared
+; thousands of lines below where the hook had been registered. It reproduced on
+; a fresh install (the setup window closes as the app starts) and almost never
+; when running from src\ on a quiet desktop.
 ;
 ; The program used to work around that with a "deferred init" block pinned to
 ; the bottom of WindowTweaks.ahk, plus a rule about which four calls were allowed
@@ -80,8 +80,8 @@ Boot() {
 
     ; Feature arming. Each Sync* starts or stops its own polling timer according
     ; to the flag LoadSettings() just read, so a feature nobody enabled costs
-    ; nothing. InitShakeFind() and InitLightsaber() are deliberately NOT called:
-    ; both build their overlay lazily on first use.
+    ; nothing. InitShakeFind() is deliberately NOT called: it builds its overlay
+    ; lazily on first use.
     SyncShakeDetector()
     SyncCursorFxTimer()
     SyncTaskbarUiTimer()
@@ -146,6 +146,12 @@ Bye(*) {
     ; survived past RS_Shutdown() with a live Gui behind it.
     try SetTimer(UpdateCustomClock, 0)
     try HideCustomClock()
+
+    ; Keystroke sounds play asynchronously straight out of a Buffer we own, so
+    ; playback has to be purged before those buffers are dropped - and Bye() is
+    ; also the tray -> Restart path, where the next process starts its own.
+    try SetTimer(AK_BuildBank, 0)
+    try AK_Shutdown()
 
     ; Rubber-band scroll parks a foreign window at an offset from its own base.
     ; Nothing else puts it back, so exiting mid-lean left it displaced.
@@ -220,12 +226,10 @@ Bye(*) {
     for hwnd, info in BottomWindows.Clone()
         try RestoreFromBottom(hwnd)
 
-    ; Three more maps that record foreign-window state we have to hand back, and
-    ; that nothing else can. Each of these used to outlive the process:
-    ;   Focus Depth  - windows left at 98% size and alpha 210, forever
+    ; Two more maps that record foreign-window state we have to hand back, and
+    ; that nothing else can. Both of these used to outlive the process:
     ;   Curtain Drop - every window on the desktop parked below the screen
     ;   Shatter      - the target window alive and invisible at x = -19999
-    try RestoreFocusDepth()
     try RestoreCurtain()
     try RestoreShatters()
 

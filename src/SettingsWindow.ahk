@@ -50,14 +50,14 @@ ShowWin() {
 
 BuildWin() {
     global Win, Pages, NavItems, C, CurPage, VERSION
-    global SnapEnabled, MagneticGroupsEnabled, ElasticScrollEnabled, SeamFlashEnabled, SNAP_DISTANCE, CORNER_BOOST, NEIGHBOUR_PROX
+    global SnapEnabled, MagneticGroupsEnabled, ElasticScrollEnabled, SNAP_DISTANCE, CORNER_BOOST, NEIGHBOUR_PROX
     global TextMagnifierEnabled, SmartGridEnabled
     global RippleClickEnabled, ContextMenuAnimEnabled, ElasticDragEnabled, BreatheCursorEnabled
     global GlideEnabled, GLIDE_THROW, GLIDE_MS
-    global BlackHoleMinimizeEnabled, MomentumTiltEnabled, FocusDepthEnabled
-    global CurtainDropEnabled, SparkTypingEnabled, CarouselAltTabEnabled, MotionBlurScrollEnabled
-    global TaskbarWaveEnabled, CustomClockEnabled, ClockLocation, ClockUnits, ClockAnchor, ClockWeatherEnabled, StartMenuBlurEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled, CursorYawnEnabled, ShatterEnabled, LightsaberSeamEnabled
-    global RestoreEnabled, BreathingEnabled, PulseEnabled, OpenAnim, FlyMinimizeEnabled, RollUpEnabled, TrayMinimizeEnabled, BossKeyEnabled, AltDragEnabled, TaskbarScrollEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, MorphingPasteEnabled, ClipboardAppendEnabled, SmoothCaretEnabled, TypingSoundsEnabled, CopyFeedbackEnabled, SmartCapsEnabled, SmartCapsAction, ParallaxEnabled, EP_Style, EP_IconSize, PrivacyBlurEnabled
+    global BlackHoleMinimizeEnabled, MomentumTiltEnabled
+    global CurtainDropEnabled
+    global TaskbarWaveEnabled, CustomClockEnabled, ClockLocation, ClockUnits, ClockAnchor, ClockWeatherEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled, CursorYawnEnabled, ShatterEnabled
+    global RestoreEnabled, BreathingEnabled, OpenAnim, FlyMinimizeEnabled, RollUpEnabled, TrayMinimizeEnabled, BossKeyEnabled, AltDragEnabled, TaskbarScrollEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, MorphingPasteEnabled, ClipboardAppendEnabled, SmoothCaretEnabled, TypingSoundsEnabled, CopyFeedbackEnabled, SmartCapsEnabled, SmartCapsAction, ParallaxEnabled, EP_Style, EP_IconSize
     global NAV, SEL, SELF, FG
 
     dark := IsDark()
@@ -123,12 +123,6 @@ BuildWin() {
     C["shatter"] := Box(pg, CW, FG, "Shatter to Close (Shift+Alt+F4)", ShatterEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Aggressively close the active window by smashing it into dozens of 3D glass shards.", "xm y+8")
     
-    C["lightsaber"] := Box(pg, CW, FG, "Lightsaber Seam Glow", LightsaberSeamEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Hovering between two snapped windows creates a neon glow that shoots down the seam.", "xm y+8")
-    
-    C["privacyblur"] := Box(pg, CW, FG, "Privacy Blur on Unfocus (Win+Alt+B)", PrivacyBlurEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Mark a window as private. When inactive, it gets a heavy frosted glass overlay.", "xm y+8")
-    
     C["smartgrid"] := Box(pg, CW, FG, "Smart Tiling Grid (Hold Shift while dragging)", SmartGridEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Shows a visual 3-zone layout grid. Drop the window into a zone to snap it.", "xm y+8")
     TuneRow(pg, "gridGap", FG, cSub)
@@ -142,8 +136,6 @@ BuildWin() {
     TuneRow(pg, "snapHyst",  FG, cSub)
     TuneRow(pg, "snapBoost", FG, cSub)
     TuneRow(pg, "snapProx",  FG, cSub)
-    C["flash"] := Box(pg, CW, FG, "Magnetic Seam Flash (neon spark on snap)", SeamFlashEnabled, "xm y+16")
-
     C["glide"] := Box(pg, CW, FG, "Enable ice glide (Physics-based throwing)", GlideEnabled, "xm y+16")
     TuneRow(pg, "glideThrow",  FG, cSub)
     TuneRow(pg, "glideMs",     FG, cSub)
@@ -163,14 +155,8 @@ BuildWin() {
     C["blackhole"] := Box(pg, CW, FG, "Black Hole Minimize (Taskbar suck effect)", BlackHoleMinimizeEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Minimizes windows directly into the bottom center like a funnel.", "xm y+8")
     
-    C["focusdepth"] := Box(pg, CW, FG, "Focus Depth of Field (3D background scale)", FocusDepthEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Pushes inactive windows back slightly and dims them.", "xm y+8")
-    
     C["curtain"] := Box(pg, CW, FG, "Curtain Drop (Win+Alt+D)", CurtainDropEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Smoothly drops windows down off-screen instead of instantly vanishing.", "xm y+8")
-    
-    C["carousel"] := Box(pg, CW, FG, "3D Carousel Alt-Tab", CarouselAltTabEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Replaces standard Alt-Tab with a spinning 3D ring of live windows.", "xm y+8")
     
     C["grabpan"] := Box(pg, CW, FG, "Universal Grab && Pan (Shift+Alt+Space)", GrabPanEnabled, "xm y+12")
     C["rollup"] := Box(pg, CW, FG, "Middle-click title bar to roll up", RollUpEnabled, "xm y+12")
@@ -285,11 +271,10 @@ BuildWin() {
     C["momentum"] := Box(pg, CW, FG, "Momentum Tilt (Jello bounce on drag stop)", MomentumTiltEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Window jiggles elastically when you suddenly stop moving it.", "xm y+8")
     
-    C["spark"] := Box(pg, CW, FG, "Spark Typing (Neon caret trail)", SparkTypingEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Spawns neon sparks behind the text caret while typing.", "xm y+8")
-
-    C["typingsounds"] := Box(pg, CW, FG, "Acoustic Keystrokes (MIDI)", TypingSoundsEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Zero-latency physical typing sounds matching structural characters and typing velocity.", "xm y+8")
+    C["typingsounds"] := Box(pg, CW, FG, "Mechanical Keystroke Sounds", TypingSoundsEnabled, "xm y+16")
+    Sub(pg, CW, cSub, "A synthesised switch click on every key, with its own voice for space, enter, backspace and copy/cut/paste.", "xm y+8")
+    TuneRow(pg, "keyVol",  FG, cSub)
+    TuneRow(pg, "keyTone", FG, cSub)
 
     C["smoothcaret"] := Box(pg, CW, FG, "Smooth Gliding Caret & Word Pop", SmoothCaretEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Premium macOS-style gliding caret interpolation and word completion feedback.", "xm y+8")
@@ -297,9 +282,6 @@ BuildWin() {
     C["copyfeedback"] := Box(pg, CW, FG, "Minimal Copy/Paste Feedback", CopyFeedbackEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Subtle visual vacuum collection and paste glow indicators.", "xm y+8")
 
-    C["motionblur"] := Box(pg, CW, FG, "Motion Blur Scroll (Vertical speed blur)", MotionBlurScrollEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Applies a cinematic vertical motion blur to text when scrolling fast.", "xm y+8")
-    
     C["textmag"] := Box(pg, CW, FG, "Text Selection Magnifier (iOS style)", TextMagnifierEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Shows a 2x zoom loupe when selecting text.", "xm y+8")
     
@@ -327,8 +309,6 @@ BuildWin() {
     TuneRow(pg, "breatheIdle",  FG, cSub)
     TuneRow(pg, "breatheAlpha", FG, cSub)
 
-    C["pulse"] := Box(pg, CW, FG, "Focus Pulse (Heartbeat on active)", PulseEnabled, "xm y+16")
-
     Lbl(pg, FG, "New window animation", "xm y+16")
     C["openanim"] := pg.AddDropDownList("x160 yp-3 w160 Choose" IndexOf(OPEN_ANIMS, OpenAnim), OPEN_ANIMS)
 
@@ -342,12 +322,9 @@ BuildWin() {
     Lbl(pg, FG, "Window animations", "xm y+16")
     TuneRow(pg, "animOpenMs",    FG, cSub)
     TuneRow(pg, "animOpenSlide", FG, cSub)
-    TuneRow(pg, "animPulseMs",   FG, cSub)
-    TuneRow(pg, "animPulse",     FG, cSub)
     TuneRow(pg, "animBounceMs",  FG, cSub)
     TuneRow(pg, "animBounce",    FG, cSub)
     TuneRow(pg, "animRollMs",    FG, cSub)
-    TuneRow(pg, "animSeamMs",    FG, cSub)
     TuneRow(pg, "animGravityMs", FG, cSub)
 
     Lbl(pg, FG, "Overlays", "xm y+20")
@@ -438,9 +415,6 @@ BuildWin() {
     Sub(pg, CW, cSub, "Hovering over the taskbar creates a magnifying glass bubble that tracks your mouse.", "xm y+8")
     
     ; The taskbar clock has its own page - see CreatePage("[clock]") above.
-    
-    C["startblur"] := Box(pg, CW, FG, "Start Menu Blur (Cinematic Focus)", StartMenuBlurEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Heavily blurs the background when the Start Menu is open.", "xm y+8")
     
     C["toast"] := Box(pg, CW, FG, "Elastic Toast Notifications", ToastBounceEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Notifications slide in elastically with an overshoot bounce.", "xm y+8")
@@ -669,13 +643,9 @@ ApplyUi(writeBack := false) {
     ; the flag is false the hotkey no longer exists and the user cannot undo the
     ; state by hand: ghosted windows stay click-through and topmost, pinned windows
     ; stay children of the desktop, thumbnails stay on screen.
-    ; Same reasoning for Focus Depth: it is driven from the shell hook rather than
-    ; a hotkey, so once the flag is false nothing ever calls BringForwardWindow
-    ; again and every pushed-back window stays 98% size at alpha 210 forever.
     uiOldGhost := ProximityGhostEnabled
     uiOldBottom := AlwaysOnBottomEnabled
     uiOldPip := LivePipEnabled
-    uiOldFocusDepth := FocusDepthEnabled
     ; Same class of problem, one step smaller. The drag layer is installed by a
     ; frame callback that stops running the moment the flag is false, so unticking
     ; the box mid-drag left the window it was fading stuck at that opacity with
@@ -687,11 +657,9 @@ ApplyUi(writeBack := false) {
         SmartGridEnabled := C["smartgrid"].Value
         ElasticScrollEnabled := C["elastic"].Value
 
-        SeamFlashEnabled := C["flash"].Value
         GlideEnabled   := C["glide"].Value
         RestoreEnabled := C["mem"].Value
         BreathingEnabled := C["breath"].Value
-        PulseEnabled   := C["pulse"].Value
         OpenAnim       := C["openanim"].Text
         FlyMinimizeEnabled := C["fly"].Value
         RollUpEnabled  := C["rollup"].Value
@@ -713,16 +681,12 @@ ApplyUi(writeBack := false) {
         InfiniteWrapEnabled := C["wrap"].Value
         BlackHoleMinimizeEnabled := C["blackhole"].Value
         MomentumTiltEnabled := C["momentum"].Value
-        FocusDepthEnabled := C["focusdepth"].Value
         CurtainDropEnabled := C["curtain"].Value
-        SparkTypingEnabled := C["spark"].Value
         TypingSoundsEnabled := C["typingsounds"].Value
         SmoothCaretEnabled := C["smoothcaret"].Value
         CopyFeedbackEnabled := C["copyfeedback"].Value
         MorphingPasteEnabled := C["morphingpaste"].Value
         ClipboardAppendEnabled := C["clipboardappend"].Value
-        CarouselAltTabEnabled := C["carousel"].Value
-        MotionBlurScrollEnabled := C["motionblur"].Value
         TaskbarWaveEnabled := C["twave"].Value
         CustomClockEnabled := C["customclock"].Value
         ClockUnits := C["clockunits"].Text
@@ -731,14 +695,11 @@ ApplyUi(writeBack := false) {
         ; Shape validation, like BorderColor above - it is not a number, so it is
         ; not a TUNE_SPEC row. Whatever survives goes straight into a URL.
         ClockLocation := CleanClockLocation(C["clockloc"].Value)
-        StartMenuBlurEnabled := C["startblur"].Value
         ToastBounceEnabled := C["toast"].Value
         MonitorThrowEnabled := C["monthrow"].Value
         BlackHoleDeleteEnabled := C["deletehole"].Value
         CursorYawnEnabled := C["cursoryawn"].Value
         ShatterEnabled := C["shatter"].Value
-        LightsaberSeamEnabled := C["lightsaber"].Value
-        PrivacyBlurEnabled := C["privacyblur"].Value
         TaskbarScrollEnabled := C["taskbarscroll"].Value
         PremiumVolumeOSDEnabled := C["osd"].Value
         QuickFolderJumpEnabled := C["quickfolder"].Value
@@ -812,8 +773,6 @@ ApplyUi(writeBack := false) {
         for src, pip in PipGuis.Clone()
             try ClosePiP(src)
     }
-    if (uiOldFocusDepth && !FocusDepthEnabled)
-        try RestoreFocusDepth()
     if (uiOldParallax && !ParallaxEnabled && DragHwnd) {
         try RS_ClearAlphaLayer(DragHwnd, "drag", RS_PRI_DRAG)
         try RS_Commit()
@@ -897,8 +856,6 @@ ShowHotkeys() {
   . "Shift+Alt+Q`tQuick Look (in Explorer)`n"
   . "Shift+Alt+F4`tShatter to close`n"
   . "Win+Alt+D`tCurtain drop (show the desktop)`n"
-  . "Win+Alt+B`tMark the window private (blur when inactive)`n"
-  . "Alt+Tab`t`tCarousel Alt-Tab`n"
   . "Delete`t`tBlack-hole delete (in Explorer)`n"
   . "Alt+LeftDrag`tMove a window from anywhere`n"
   . "Alt+RightDrag`tResize a window from the nearest edge`n"

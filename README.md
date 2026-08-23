@@ -140,11 +140,9 @@ Context Menu Unfold. Turn on whichever you want in the settings window.
 - **Bouncy Snapping**: Windows slightly squish and bounce back with realistic physics when hitting screen edges or other windows.
 - **Gravity Drop Close**: When closing a window, it collapses into a bitmap and falls with gravity (or gets sucked into a black hole).
 - **Breathing Backgrounds**: Inactive background windows slowly fade to 70% opacity after 6 seconds of inactivity, waking up instantly when hovered.
-- **Focus Pulse**: Switching to a window via Alt+Tab makes it pulse (expand by 2-3% and bounce back) to immediately draw your attention.
 - **Ghost Slide-In**: New apps slide up from 30px below while fading in, similar to modern smartphone app launches.
 - **Parallax Dragging**: Windows become transparent based on how fast you drag them, fading back to solid when you stop. The two speeds that define the ramp are settings: it starts fading at `[memory] parallaxfrom` px/s and reaches `parallaxmin` opacity at `parallaxfull` px/s.
 - **Custom Taskbar Clock**: time over date with the temperature beside it, drawn on the taskbar, with a settings page of its own. By default it sits left of every tray icon and covers nothing, painting no background at all so it reads as taskbar text; you can instead anchor it right beside the clock, which covers the tray buttons in that space. The info column shows a weather glyph with the temperature and the wind speed under it. It reads `--` until you set a city, and until then the program makes no network request at all.
-- **Magnetic Seam Flash**: A brief neon flash effect appears exactly on the seam when two windows magnetically snap together.
 - **Theater Spotlight**: A soft, circular vignette shadow follows your active window like a stage spotlight, dimming the rest of the screen.
 - **Fly-to-Mouse Minimize**: Minimized windows spin and vacuum directly into your mouse cursor instead of dropping to the taskbar.
 - **Window Unrolling**: New windows unroll from top to bottom like a window blind in 0.2 seconds.
@@ -157,21 +155,16 @@ Context Menu Unfold. Turn on whichever you want in the settings window.
 - **Momentum Tilt**: Dragging a window tilts it slightly in the direction of motion, swinging back with inertia when stopped.
 - **Black Hole Minimize & Delete**: Windows and deleted files get sucked into a tiny gravity well (funnel) with physics-based warping.
 - **Resistance Edge**: Snapping a window to a screen edge creates a satisfying rubber-band resistance effect.
-- **Focus Depth (Portal Scale-In)**: The active window subtly scales up and pushes background windows backward for depth of field.
-- **Spark Typing & Acoustic Keystrokes**: Type with zero-latency mechanical ASMR clicks (MIDI) while a neon equalizer bounces at the window bottom, and your caret leaves a glowing neon trail.
-- **Carousel Alt-Tab**: A 3D rotating carousel replacement for the standard flat Alt-Tab menu.
+- **Mechanical Keystroke Sounds**: Every key makes a synthesised mechanical switch sound - a bright click layered over the keycap bottoming out - with its own voice for space, enter, backspace and copy/cut/paste.
 - **Dynamic Notch (OSD)**: Volume and brightness adjustments drop down a sleek iOS-style Dynamic Island pill from the top of the screen.
 - **Curtain Drop (Win+D)**: Showing the desktop drops all windows simultaneously with a kinetic motion-blur effect.
-- **Motion Blur Scroll**: Fast mouse-wheel scrolling applies a vertical motion blur to make 60Hz screens feel fluid.
 - **Overscroll Bounce**: Scrolling past the end of a page elastically stretches and springs back.
 - **Taskbar Icon Wave & Elastic Toasts**: Hovering over the taskbar creates a macOS-like icon wave, and notifications bounce elastically into view.
 - **Start Menu Slide-Up Blur**: Opening the Start menu slides it up while deeply blurring the entire background.
 - **Window Throw & Catch**: Forcefully flick a window towards another monitor, and it will kinetically fly across screens.
 - **Shatter to Close**: Shift+Alt+F4 smashes the active window into dozens of 3D glass shards that fall with gravity.
-- **Lightsaber Seam Glow**: Hovering over the seam between two snapped windows ignites a neon cyan glow.
-- **Privacy Blur on Unfocus**: Mark a window as private (Win+Alt+B). When inactive, it gets a heavy frosted glass overlay.
 
-> **Note:** Some features might be annoying, such as **Focus Depth of Field** (3d background scale), **Focus Pulse** (HeartBeat Active), and **Motion Blur Scroll** (Vertical speed blur). If you don't like windows jumping up and down, you can turn them off! :)
+> **Note:** Every animation here has a checkbox. If you don't like windows jumping up and down, you can turn them off individually in the settings window. :)
 
 **Keyboard Window Layout:**
 - **Numpad Tiling**: `Shift + Alt + Numpad 1-9` tiles the active window to a 3x3 grid laid out exactly like the keypad — `7` is the top-left quarter, `4` the left half, `2` the bottom half. **Requires NumLock on** — only the digit names are bound.

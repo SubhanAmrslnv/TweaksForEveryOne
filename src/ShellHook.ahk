@@ -102,12 +102,6 @@ ShellEvent(wParam, lParam, *) {
                 WinCurrentAlpha.Delete(lParam)
             if WinLastActive.Has(lParam)
                 WinLastActive.Delete(lParam)
-            ; Focus Depth only ever removes the window being switched TO, so
-            ; without this the map grows by one entry for every window the user
-            ; has focused away from and never returned to, for the whole session.
-            global PushedBackWindows
-            if PushedBackWindows.Has(lParam)
-                PushedBackWindows.Delete(lParam)
             ; Same reasoning for the two layout maps: nothing else ever removes
             ; from them, so without this they grow by one entry per window the
             ; user has ever tiled or resized, for the whole session.
@@ -123,15 +117,6 @@ ShellEvent(wParam, lParam, *) {
 
     if ((wParam & 0x7FFF) = 4) { ; HSHELL_WINDOWACTIVATED
         if (lParam) {
-            if !BottomWindows.Has(lParam) {
-                PulseWindow(lParam)
-            }
-            
-            global FocusDepthEnabled
-            if (FocusDepthEnabled) {
-                ApplyFocusDepth(lParam)
-            }
-            
             global BreathingEnabled, WinLastActive, WinCurrentAlpha, WinTargetAlpha
             if (BreathingEnabled && IsRestorable(lParam) && !WinLastActive.Has(lParam)) {
                 ; 255 = "the breathe layer is dimming nothing yet". The user's

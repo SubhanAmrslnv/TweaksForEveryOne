@@ -570,155 +570,27 @@ DragTrailCallback(dt, now) {
     return true
 }
 
-global Sparks := []
-
-OnTypingSpark(ih, vk, sc) {
-    global SparkTypingEnabled
-    if (!SparkTypingEnabled)
-        return
-        
-    if !CaretGetPos(&cx, &cy)
-        return
-        
-    SpawnSpark(cx, cy)
-}
-
-SpawnSpark(x, y) {
-    global Sparks
-    idx := 0
-    loop Sparks.Length {
-        if (!Sparks[A_Index].Active) {
-            idx := A_Index
-            break
-        }
-    }
-    if (!idx) {
-        if (Sparks.Length >= 30) 
-            return
-        g := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
-        g.BackColor := "FFAA00"
-        WinSetRegion("0-0 w4 h4 E", g.Hwnd)
-        r := {Gui: g, Active: false, Start: 0, x: 0, y: 0, vx: 0, vy: 0}
-        Sparks.Push(r)
-        idx := Sparks.Length
-    }
-    
-    r := Sparks[idx]
-    r.Active := true
-    r.Start := QPC()
-    r.x := x
-    r.y := y
-    r.vx := (Random() - 0.5) * 6
-    r.vy := (Random() - 0.5) * 6 - 2
-    
-    RS_SetAlpha(r.Gui.Hwnd, 200, RS_PRI_ANIM)
-    RegisterAnimation("Spark_" idx, SparkCallback.Bind(idx))
-}
-
-SparkCallback(idx, dt, now) {
-    global Sparks
-    r := Sparks[idx]
-    if (!r.Active)
-        return false
-        
-    t := now - r.Start
-    if (t > 200) {
-        r.Active := false
-        RS_SetAlpha(r.Gui.Hwnd, "Off", RS_PRI_ANIM)
-        r.Gui.Hide()
-        return false
-    }
-    
-    r.vy += 0.4
-    r.x += r.vx
-    r.y += r.vy
-    
-    p := t / 200
-    ease := 1 - (1 - p)**3
-    alpha := Round(80 * (1 - ease))
-    
-    RS_SetAlpha(r.Gui.Hwnd, alpha, RS_PRI_ANIM)
-    RS_SetPos(r.Gui.Hwnd, r.x, r.y, -1, -1, RS_PRI_ANIM)
-    return true
-}
-
-global MotionBlurScrollSpeed := 0
-
-global MotionBlurLastTime := 0
-
-global MotionBlurGui := ""
-
-global MotionBlurThumb := 0
-
-global MotionBlurActiveHwnd := 0
-
-TriggerMotionBlur(hwnd, dir) {
-    global MotionBlurScrollSpeed, MotionBlurLastTime, MotionBlurActiveHwnd, MotionBlurGui
-    now := QPC()
-    dt := now - MotionBlurLastTime
-    
-    ; 120 ms, not 0.1. QPC() already returns MILLISECONDS, so the old threshold
-    ; was a tenth of a millisecond - true between any two wheel events - and the
-    ; accumulator was reset on every notch. The effect could never build up past
-    ; one notch's worth, which is why it always looked like it did nothing.
-    if (dt > 120 || hwnd != MotionBlurActiveHwnd)
-        MotionBlurScrollSpeed := 0
-        
-    MotionBlurScrollSpeed += dir * 12
-    MotionBlurLastTime := now
-    MotionBlurActiveHwnd := hwnd
-    
-    RegisterAnimation("MotionBlur", MotionBlurCallback)
-}
-
-MotionBlurCallback(dt, now) {
-    global MotionBlurScrollSpeed, MotionBlurGui
-    
-    if (Abs(MotionBlurScrollSpeed) < 1) {
-        MotionBlurScrollSpeed := 0
-        if (MotionBlurGui) {
-            RS_SetAlpha(MotionBlurGui.Hwnd, "Off", RS_PRI_ANIM)
-            MotionBlurGui.Hide()
-        }
-        return false
-    }
-    
-    MotionBlurScrollSpeed *= 0.85
-    
-    hwnd := WinExist("A")
-    if (!hwnd || !MotionBlurGui)
-        return false
-        
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    catch
-        return false
-        
-    RS_SetAlpha(MotionBlurGui.Hwnd, Round(Abs(MotionBlurScrollSpeed) * 3), RS_PRI_ANIM)
-    RS_SetPos(MotionBlurGui.Hwnd, x, y, w, h, RS_PRI_ANIM)
-    return true
-}
-
 ; ====== Clipboard Feedback ======
 global ClipAnimGui := ""
 
 TriggerCopyFeedback(isDouble := false) {
     if !InitClipGui("44AAFF")
         return
-    PlayAcousticSound("vacuum")
+    PlayAcousticSound("copy")
     RunClipAnim(-30, isDouble ? 250 : 200)
 }
 
 TriggerCutFeedback() {
     if !InitClipGui("FF4444")
         return
-    PlayAcousticSound("snip")
+    PlayAcousticSound("cut")
     RunClipAnim(30, 200)
 }
 
 TriggerPasteFeedback() {
     if !InitClipGui("44FF44")
         return
-    PlayAcousticSound("stamp")
+    PlayAcousticSound("paste")
     RunClipAnim(0, 300, true)
 }
 
@@ -766,59 +638,6 @@ RunClipAnim(yDir, duration, expand := false) {
         return true
     }
     RegisterAnimation(animKey, Step)
-}
-
-; ====== Acoustic Keystrokes (MIDI) ======
-global hMidiOut := 0
-
-InitMidi() {
-    global hMidiOut
-    if !hMidiOut
-        DllCall("winmm.dll\midiOutOpen", "ptr*", &hMidiOut, "uint", 0, "ptr", 0, "ptr", 0, "uint", 0)
-}
-
-PlayAcousticSound(type) {
-    global TypingSoundsEnabled, hMidiOut
-    if (!TypingSoundsEnabled)
-        return
-    if !hMidiOut
-        InitMidi()
-    if !hMidiOut
-        return
-
-    note := 0
-    vel := 80
-    
-    if (type == "normal") {
-        note := 76 ; Woodblock
-        vel := 60
-    } else if (type == "structural") {
-        note := 37 ; Rimshot
-        vel := 75
-    } else if (type == "operator") {
-        note := 42 ; Closed Hi-Hat
-        vel := 50
-    } else if (type == "space") {
-        note := 35 ; Acoustic Bass Drum
-        vel := 65
-    } else if (type == "enter") {
-        note := 36 ; Bass Drum 1
-        vel := 100
-    } else if (type == "vacuum" || type == "snip") {
-        note := 29 ; Scratch Push
-        vel := 90
-    } else if (type == "stamp") {
-        note := 28 ; Slap
-        vel := 90
-    } else if (type == "backspace") {
-        note := 39 ; Hand Clap (softened by vel)
-        vel := 40
-    }
-    
-    if note {
-        msg := 0x99 | (note << 8) | (vel << 16)
-        DllCall("winmm.dll\midiOutShortMsg", "ptr", hMidiOut, "uint", msg)
-    }
 }
 
 ; ====== Smooth Gliding Caret & Word Pop ======

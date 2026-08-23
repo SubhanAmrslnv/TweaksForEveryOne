@@ -19,16 +19,16 @@ EnterGameMode() {
     
     ; Define disruptive features to suspend
     global HotCornersEnabled, InfiniteWrapEnabled, MultiMonitorDimmerEnabled, GrabPanEnabled
-    global ActiveBorderEnabled, SnapEnabled, ElasticScrollEnabled, MotionBlurScrollEnabled
+    global ActiveBorderEnabled, SnapEnabled, ElasticScrollEnabled
     global SpotlightEnabled, QuickLookEnabled, CursorYawnEnabled, RippleClickEnabled
-    global LivePipEnabled, ProximityGhostEnabled, PrivacyBlurEnabled, BreathingEnabled
-    global PulseEnabled, ElasticDragEnabled, TextMagnifierEnabled, TaskbarScrollEnabled
+    global LivePipEnabled, ProximityGhostEnabled, BreathingEnabled
+    global ElasticDragEnabled, TextMagnifierEnabled, TaskbarScrollEnabled
     global MorphingPasteEnabled, ClipboardAppendEnabled, CopyFeedbackEnabled, SmartCapsEnabled
     global AltDragEnabled, MiddleClickCloseEnabled, RollUpEnabled, ContextMenuAnimEnabled
     global MagneticGroupsEnabled, BreatheCursorEnabled, BlackHoleMinimizeEnabled, MomentumTiltEnabled
-    global FocusDepthEnabled, CurtainDropEnabled, SparkTypingEnabled, CarouselAltTabEnabled
+    global CurtainDropEnabled
     global TaskbarWaveEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled
-    global ShatterEnabled, LightsaberSeamEnabled, ParallaxEnabled, SeamFlashEnabled
+    global ShatterEnabled, ParallaxEnabled
     global FlyMinimizeEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, SmoothCaretEnabled
     global TypingSoundsEnabled, PremiumVolumeOSDEnabled, MicKillSwitchEnabled, TextExpanderEnabled
     global ShakeFindEnabled, GravityCloseEnabled, GlideEnabled, AlwaysOnBottomEnabled
@@ -36,16 +36,16 @@ EnterGameMode() {
 
     features := [
         "HotCornersEnabled", "InfiniteWrapEnabled", "MultiMonitorDimmerEnabled", "GrabPanEnabled",
-        "ActiveBorderEnabled", "SnapEnabled", "ElasticScrollEnabled", "MotionBlurScrollEnabled",
+        "ActiveBorderEnabled", "SnapEnabled", "ElasticScrollEnabled",
         "SpotlightEnabled", "QuickLookEnabled", "CursorYawnEnabled", "RippleClickEnabled",
-        "LivePipEnabled", "ProximityGhostEnabled", "PrivacyBlurEnabled", "BreathingEnabled",
-        "PulseEnabled", "ElasticDragEnabled", "TextMagnifierEnabled", "TaskbarScrollEnabled",
+        "LivePipEnabled", "ProximityGhostEnabled", "BreathingEnabled",
+        "ElasticDragEnabled", "TextMagnifierEnabled", "TaskbarScrollEnabled",
         "MorphingPasteEnabled", "ClipboardAppendEnabled", "CopyFeedbackEnabled", "SmartCapsEnabled",
         "AltDragEnabled", "MiddleClickCloseEnabled", "RollUpEnabled", "ContextMenuAnimEnabled",
         "MagneticGroupsEnabled", "BreatheCursorEnabled", "BlackHoleMinimizeEnabled", "MomentumTiltEnabled",
-        "FocusDepthEnabled", "CurtainDropEnabled", "SparkTypingEnabled", "CarouselAltTabEnabled",
+        "CurtainDropEnabled",
         "TaskbarWaveEnabled", "ToastBounceEnabled", "MonitorThrowEnabled", "BlackHoleDeleteEnabled",
-        "ShatterEnabled", "LightsaberSeamEnabled", "ParallaxEnabled", "SeamFlashEnabled",
+        "ShatterEnabled", "ParallaxEnabled",
         "FlyMinimizeEnabled", "QuickFolderJumpEnabled", "PlainPasteEnabled", "SmoothCaretEnabled",
         "TypingSoundsEnabled", "PremiumVolumeOSDEnabled", "MicKillSwitchEnabled", "TextExpanderEnabled",
         "ShakeFindEnabled", "GravityCloseEnabled", "GlideEnabled", "AlwaysOnBottomEnabled"
@@ -75,16 +75,16 @@ ExitGameMode() {
     GameModeActive := false
     
     global HotCornersEnabled, InfiniteWrapEnabled, MultiMonitorDimmerEnabled, GrabPanEnabled
-    global ActiveBorderEnabled, SnapEnabled, ElasticScrollEnabled, MotionBlurScrollEnabled
+    global ActiveBorderEnabled, SnapEnabled, ElasticScrollEnabled
     global SpotlightEnabled, QuickLookEnabled, CursorYawnEnabled, RippleClickEnabled
-    global LivePipEnabled, ProximityGhostEnabled, PrivacyBlurEnabled, BreathingEnabled
-    global PulseEnabled, ElasticDragEnabled, TextMagnifierEnabled, TaskbarScrollEnabled
+    global LivePipEnabled, ProximityGhostEnabled, BreathingEnabled
+    global ElasticDragEnabled, TextMagnifierEnabled, TaskbarScrollEnabled
     global MorphingPasteEnabled, ClipboardAppendEnabled, CopyFeedbackEnabled, SmartCapsEnabled
     global AltDragEnabled, MiddleClickCloseEnabled, RollUpEnabled, ContextMenuAnimEnabled
     global MagneticGroupsEnabled, BreatheCursorEnabled, BlackHoleMinimizeEnabled, MomentumTiltEnabled
-    global FocusDepthEnabled, CurtainDropEnabled, SparkTypingEnabled, CarouselAltTabEnabled
+    global CurtainDropEnabled
     global TaskbarWaveEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled
-    global ShatterEnabled, LightsaberSeamEnabled, ParallaxEnabled, SeamFlashEnabled
+    global ShatterEnabled, ParallaxEnabled
     global FlyMinimizeEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, SmoothCaretEnabled
     global TypingSoundsEnabled, PremiumVolumeOSDEnabled, MicKillSwitchEnabled, TextExpanderEnabled
     global ShakeFindEnabled, GravityCloseEnabled, GlideEnabled, AlwaysOnBottomEnabled
@@ -92,16 +92,16 @@ ExitGameMode() {
 
     features := [
         "HotCornersEnabled", "InfiniteWrapEnabled", "MultiMonitorDimmerEnabled", "GrabPanEnabled",
-        "ActiveBorderEnabled", "SnapEnabled", "ElasticScrollEnabled", "MotionBlurScrollEnabled",
+        "ActiveBorderEnabled", "SnapEnabled", "ElasticScrollEnabled",
         "SpotlightEnabled", "QuickLookEnabled", "CursorYawnEnabled", "RippleClickEnabled",
-        "LivePipEnabled", "ProximityGhostEnabled", "PrivacyBlurEnabled", "BreathingEnabled",
-        "PulseEnabled", "ElasticDragEnabled", "TextMagnifierEnabled", "TaskbarScrollEnabled",
+        "LivePipEnabled", "ProximityGhostEnabled", "BreathingEnabled",
+        "ElasticDragEnabled", "TextMagnifierEnabled", "TaskbarScrollEnabled",
         "MorphingPasteEnabled", "ClipboardAppendEnabled", "CopyFeedbackEnabled", "SmartCapsEnabled",
         "AltDragEnabled", "MiddleClickCloseEnabled", "RollUpEnabled", "ContextMenuAnimEnabled",
         "MagneticGroupsEnabled", "BreatheCursorEnabled", "BlackHoleMinimizeEnabled", "MomentumTiltEnabled",
-        "FocusDepthEnabled", "CurtainDropEnabled", "SparkTypingEnabled", "CarouselAltTabEnabled",
+        "CurtainDropEnabled",
         "TaskbarWaveEnabled", "ToastBounceEnabled", "MonitorThrowEnabled", "BlackHoleDeleteEnabled",
-        "ShatterEnabled", "LightsaberSeamEnabled", "ParallaxEnabled", "SeamFlashEnabled",
+        "ShatterEnabled", "ParallaxEnabled",
         "FlyMinimizeEnabled", "QuickFolderJumpEnabled", "PlainPasteEnabled", "SmoothCaretEnabled",
         "TypingSoundsEnabled", "PremiumVolumeOSDEnabled", "MicKillSwitchEnabled", "TextExpanderEnabled",
         "ShakeFindEnabled", "GravityCloseEnabled", "GlideEnabled", "AlwaysOnBottomEnabled"

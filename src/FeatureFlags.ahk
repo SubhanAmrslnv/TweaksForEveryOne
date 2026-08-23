@@ -6,8 +6,8 @@
 ; and a #HotIf expression is evaluated against these globals from the first
 ; keypress, while a top-level "global X := ..." only runs when the auto-execute
 ; thread reaches that line. State declared thousands of lines away was therefore
-; unassigned for the whole of startup - "#HotIf CarouselActive" threw "This
-; global variable has not been assigned a value" on any Alt/Tab/Esc press.
+; unassigned for the whole of startup - a #HotIf on it threw "This global
+; variable has not been assigned a value" on the very first keypress.
 ;
 ; So FEATURE STATE LIVES NEXT TO ITS FLAG, never next to the function that uses
 ; it, and both live here.
@@ -76,25 +76,13 @@ global MomentumTiltEnabled := true
 ; these globals from the first keypress, while a top-level "global X := ..."
 ; only runs when the auto-execute thread reaches that line. State declared
 ; thousands of lines down is therefore unassigned for the whole of startup:
-; #HotIf CarouselActive threw "This global variable has not been assigned a
-; value" on any Alt/Tab/Esc press, and ShellEvent's HSHELL_WINDOWDESTROYED
-; cleanup threw the same on PushedBackWindows. See Boot() in
+; a #HotIf on such a global threw "This global variable has not been assigned
+; a value" on the first keypress, and ShellEvent's HSHELL_WINDOWDESTROYED
+; cleanup threw the same during window teardown. See Boot() in
 ; ProcessLifecycle.ahk for the other half of this rule.
-global FocusDepthEnabled := false
-global LastActiveHwnd := 0
-global PushedBackWindows := Map()
 global CurtainDropEnabled := true
 global CurtainDropped := false
 global CurtainWindows := Map()
-global SparkTypingEnabled := false        ; OFF-BY-DEFAULT: never rendered until now
-global CarouselAltTabEnabled := false     ; OFF-BY-DEFAULT: never rendered until now
-global CarouselActive := false
-global CarouselGui := ""
-global CarouselIndex := 1
-global CarouselWindows := []
-global Thumbnails := []
-global CarouselAngleOffset := 0
-global MotionBlurScrollEnabled := false   ; OFF-BY-DEFAULT: never rendered until now
 global TaskbarWaveEnabled := false        ; OFF-BY-DEFAULT: never rendered until now
 global CustomClockEnabled := true
 global CustomClockWeather := ""
@@ -108,7 +96,6 @@ global ClockAnchor := "TrayEdge"           ; which element the block sits beside
 global ClockWeatherEnabled := true         ; the temperature column; a location gives it a value
 global ClockWarnedNoCity := false          ; the "set a city" tip is said once per session
 global WeatherWarnedFor := "-"             ; last location we complained about, so it is said once
-global StartMenuBlurEnabled := true
 global ToastBounceEnabled := true
 global MonitorThrowEnabled := true
 global BlackHoleDeleteEnabled := false    ; OFF-BY-DEFAULT: never rendered until now
@@ -117,14 +104,9 @@ global CursorYawnActive := false
 global CursorYawnIdleTime := 900000
 global ShatterEnabled := false            ; OFF-BY-DEFAULT: never rendered until now
 global ActiveShatters := Map()
-global LightsaberSeamEnabled := true
-global PrivacyBlurEnabled := true
-global PrivacyBlurWindows := Map()
 global BreathingEnabled := true
-global PulseEnabled := true
 global OpenAnim := "Ghost Slide-In"
 global ParallaxEnabled := true
-global SeamFlashEnabled := true
 global FlyMinimizeEnabled := true
 ; OFF-BY-DEFAULT, both of these: they are what puts the *MButton handler in
 ; front of EVERY middle click in the system - swallowed, probed with a 50 ms

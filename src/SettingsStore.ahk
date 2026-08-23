@@ -104,14 +104,9 @@ LoadSettings() {
     ContextMenuAnimEnabled := IniStr("mouse", "contextanim", "0") = "1"
     ElasticDragEnabled := IniStr("mouse", "elasticdrag", "1") = "1"
     BreatheCursorEnabled := IniStr("mouse", "breathe", "1") = "1"
-    SeamFlashEnabled := IniStr("snap", "flash", "1") = "1"
     BlackHoleMinimizeEnabled := IniStr("memory", "blackhole", "1") = "1"
     MomentumTiltEnabled := IniStr("mouse", "momentum", "1") = "1"
-    FocusDepthEnabled := IniStr("memory", "focusdepth", "0") = "1"
     CurtainDropEnabled := IniStr("memory", "curtain", "1") = "1"
-    SparkTypingEnabled := IniStr("mouse", "spark", "0") = "1"
-    CarouselAltTabEnabled := IniStr("memory", "carousel", "0") = "1"
-    MotionBlurScrollEnabled := IniStr("mouse", "motionblur", "0") = "1"
     TaskbarWaveEnabled := IniStr("taskbar", "wave", "0") = "1"
     CustomClockEnabled := IniStr("taskbar", "customclock", "1") = "1"
     ClockLocation := CleanClockLocation(IniStr("taskbar", "clocklocation", ""))
@@ -120,14 +115,11 @@ LoadSettings() {
     ClockUnits := IniPick("taskbar", "clockunits", CLOCK_UNITS, "Celsius")
     ClockAnchor := IniPick("taskbar", "clockanchor", CLOCK_ANCHORS, "TrayEdge")
     ClockWeatherEnabled := IniStr("taskbar", "clockweather", "1") = "1"
-    StartMenuBlurEnabled := IniStr("taskbar", "startblur", "1") = "1"
     ToastBounceEnabled := IniStr("taskbar", "toastbounce", "1") = "1"
     MonitorThrowEnabled := IniStr("mouse", "monthrow", "1") = "1"
     BlackHoleDeleteEnabled := IniStr("mouse", "blackhole", "0") = "1"
     CursorYawnEnabled := IniStr("mouse", "cursoryawn", "1") = "1"
     ShatterEnabled := IniStr("mouse", "shatter", "0") = "1"
-    LightsaberSeamEnabled := IniStr("mouse", "lightsaber", "1") = "1"
-    PrivacyBlurEnabled := IniStr("window", "privacyblur", "1") = "1"
     ; SNAP_DISTANCE, CORNER_BOOST, NEIGHBOUR_PROX, GLIDE_THROW, GLIDE_MS,
     ; GLIDE_MAX, BREATHE_IDLE_MS and CursorYawnIdleTime are all loaded, clamped
     ; and mirrored back into their globals by TuneLoad() at the end of this
@@ -137,7 +129,6 @@ LoadSettings() {
     GravityCloseEnabled := IniStr("memory", "gravityclose", "1") = "1"
     DEBUG := IniStr("memory", "debuglog", "0") = "1"
     BreathingEnabled := IniStr("memory", "breathing", "1") = "1"
-    PulseEnabled := IniStr("memory", "pulse", "1") = "1"
     OpenAnim := IniPick("memory", "openanim", OPEN_ANIMS, "Ghost Slide-In")
     FlyMinimizeEnabled := IniStr("memory", "fly", "1") = "1"
     RollUpEnabled := IniStr("memory", "rollup", "0") = "1"
@@ -231,28 +222,20 @@ WriteSettings() {
     PutIni(ContextMenuAnimEnabled ? 1 : 0,  "mouse", "contextanim")
     PutIni(ElasticDragEnabled ? 1 : 0,  "mouse", "elasticdrag")
     PutIni(BreatheCursorEnabled ? 1 : 0,  "mouse", "breathe")
-    PutIni(SeamFlashEnabled ? 1 : 0, "snap", "flash")
     PutIni(BlackHoleMinimizeEnabled ? 1 : 0, "memory", "blackhole")
     PutIni(MomentumTiltEnabled ? 1 : 0, "mouse", "momentum")
-    PutIni(FocusDepthEnabled ? 1 : 0, "memory", "focusdepth")
     PutIni(CurtainDropEnabled ? 1 : 0, "memory", "curtain")
-    PutIni(SparkTypingEnabled ? 1 : 0, "mouse", "spark")
-    PutIni(CarouselAltTabEnabled ? 1 : 0, "memory", "carousel")
-    PutIni(MotionBlurScrollEnabled ? 1 : 0, "mouse", "motionblur")
     PutIni(TaskbarWaveEnabled ? 1 : 0, "taskbar", "wave")
     PutIni(CustomClockEnabled ? 1 : 0, "taskbar", "customclock")
     PutIni(ClockLocation, "taskbar", "clocklocation")
     PutIni(ClockUnits, "taskbar", "clockunits")
     PutIni(ClockAnchor, "taskbar", "clockanchor")
     PutIni(ClockWeatherEnabled ? 1 : 0, "taskbar", "clockweather")
-    PutIni(StartMenuBlurEnabled ? 1 : 0, "taskbar", "startblur")
     PutIni(ToastBounceEnabled ? 1 : 0, "taskbar", "toastbounce")
     PutIni(MonitorThrowEnabled ? 1 : 0, "mouse", "monthrow")
     PutIni(BlackHoleDeleteEnabled ? 1 : 0, "mouse", "blackhole")
     PutIni(CursorYawnEnabled ? 1 : 0, "mouse", "cursoryawn")
     PutIni(ShatterEnabled ? 1 : 0, "mouse", "shatter")
-    PutIni(LightsaberSeamEnabled ? 1 : 0, "mouse", "lightsaber")
-    PutIni(PrivacyBlurEnabled ? 1 : 0, "window", "privacyblur")
     PutIni(GlideEnabled ? 1 : 0,     "glide", "enabled")
     PutIni(RestoreEnabled ? 1 : 0,   "memory", "enabled")
     PutIni(GravityCloseEnabled ? 1 : 0, "memory", "gravityclose")
@@ -260,7 +243,6 @@ WriteSettings() {
     PutIni(BorderColor,              "border", "color")
     TuneSave()                       ; every tunable number, in one pass
     PutIni(BreathingEnabled ? 1 : 0, "memory", "breathing")
-    PutIni(PulseEnabled ? 1 : 0, "memory", "pulse")
     PutIni(OpenAnim, "memory", "openanim")
     PutIni(FlyMinimizeEnabled ? 1 : 0, "memory", "fly")
     PutIni(RollUpEnabled ? 1 : 0, "memory", "rollup")

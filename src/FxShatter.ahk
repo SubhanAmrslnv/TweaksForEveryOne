@@ -102,7 +102,7 @@ TriggerShatterClose(hwnd) {
             
             DllCall("SetWindowPos", "ptr", s.gui.Hwnd, "ptr", -1, "int", Round(curX), "int", Round(curY), "int", Round(curW), "int", Round(curH), "uint", 0x14 | 0x40) 
             
-            ; See the struct layout note in UpdateCarousel.
+            ; See the DWM_THUMBNAIL_PROPERTIES layout in RS_UpdateDwmThumbnail.
             RS_UpdateDwmThumbnail(s.thumb, [0, 0, Round(curW), Round(curH)], [Round(s.srcX), Round(s.srcY), s.w, s.h], alpha, true, true)
         }
         return true

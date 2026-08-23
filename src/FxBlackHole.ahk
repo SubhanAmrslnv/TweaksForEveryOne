@@ -81,7 +81,7 @@ TriggerBlackHoleDelete(hwnd) {
             
         DllCall("SetWindowPos", "ptr", guiObj.Hwnd, "ptr", -1, "int", Round(curX), "int", Round(curY), "int", curW, "int", curH, "uint", 0x14) 
         
-        ; See the struct layout note in UpdateCarousel.
+        ; See the DWM_THUMBNAIL_PROPERTIES layout in RS_UpdateDwmThumbnail.
         alpha := Round(255 * (1 - ease))
         RS_UpdateDwmThumbnail(thumb, [0, 0, curW, curH], [Round(srcX), Round(srcY), size, size], alpha, true, true)
         return true

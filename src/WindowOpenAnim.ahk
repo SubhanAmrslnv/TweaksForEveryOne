@@ -39,7 +39,6 @@
 
 global GhostHiddenWindows := Map()
 
-global PulsingWindows := Map()
 
 WillAnimateOpen(hwnd) {
     if !hwnd
@@ -222,89 +221,3 @@ PortalScaleIn(hwnd, restoredRect := "") {
     
     Anim_Claim(hwnd, "geom", animKey, PortalScaleStep)
 }
-
-PulseWindow(hwnd) {
-    global PulseEnabled, PulsingWindows
-    if (!PulseEnabled || !DllCall("IsWindow", "ptr", hwnd) || !IsRestorable(hwnd))
-        return
-
-    try {
-        if (WinGetMinMax(hwnd) != 0) ; skip maximized/minimized
-            return
-    } catch
-        return
-
-    global ActiveAnimations
-    ; Never pulse a window that is still being flown somewhere.
-    ;
-    ; Pulse_<hwnd> and Glide_<hwnd> both write RS_Pos[hwnd] at RS_PRI_ANIM, and
-    ; equal priority means last-writer-wins within a flush. AHK enumerates a Map
-    ; sorted by key, so "Pulse_" is produced after "Glide_" and won every frame -
-    ; and worse, PulseStep captured x/y/w/h at activation, i.e. a MID-GLIDE
-    ; position, then restored the window to it on its final frame. Activating a
-    ; window mid-snap threw away the snap. Same guard idiom as VerifySnap.
-    animKey := "Pulse_" hwnd
-    if Anim_Owner(hwnd, "geom")
-        return
-    if PulsingWindows.Has(hwnd) {
-        ; A callback dropped by the scheduler (it swallows exceptions) would
-        ; leave this flag set forever and that window could never pulse again.
-        if ActiveAnimations.Has(animKey)
-            return
-        PulsingWindows.Delete(hwnd)
-    }
-
-    PulsingWindows[hwnd] := true
-
-    try {
-        WinGetPos(&x, &y, &w, &h, hwnd)
-    } catch {
-        PulsingWindows.Delete(hwnd)
-        return
-    }
-
-    ; The 12 px cap stays internal: it stops the pulse from throwing a
-    ; full-screen window several centimetres, which is a property of the
-    ; effect, not a preference.
-    grow := Tune("animPulse") / 100
-    pw := Min(Round(w * grow), 12)
-    ph := Min(Round(h * grow), 12)
-
-    start := QPC()
-    ms := Tune("animPulseMs")
-
-    ; Same story as the bounce: this was three hard-coded stages at 16/32/48 ms,
-    ; which is 3 frames - not an animation so much as a flicker, and it assumed a
-    ; frame was exactly 16 ms. sin(pi*t) over 190 ms grows out from the centre and
-    ; settles back, which is the single "breath" a macOS focus cue gives you.
-    lastX := -99999, lastY := -99999
-    PulseStep(dt, now) {
-        if !DllCall("IsWindow", "ptr", hwnd) {
-            PulsingWindows.Delete(hwnd)
-            return false
-        }
-
-        t := (now - start) / ms
-        if (t >= 1) {
-            RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
-            PulsingWindows.Delete(hwnd)
-            return false
-        }
-
-        ; t**0.7 skews the half-sine so the window jumps out quickly and eases
-        ; back slowly. A symmetric pulse spends as long growing as returning,
-        ; which reads as a wobble rather than as "this window just took focus".
-        e := Sin(3.14159265 * t ** 0.7)
-        gx := Round(pw * e)
-        gy := Round(ph * e)
-        nx := x - gx, ny := y - gy
-        if (nx != lastX || ny != lastY) {
-            RS_SetPos(hwnd, nx, ny, w + gx * 2, h + gy * 2, RS_PRI_ANIM)
-            lastX := nx, lastY := ny
-        }
-        return true
-    }
-
-    Anim_Claim(hwnd, "geom", animKey, PulseStep)
-}
-

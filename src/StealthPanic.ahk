@@ -267,8 +267,8 @@ SuspendStealthFeatures() {
     ; In standalone mode, WindowTweaks variables might not exist
     ; So we check using IsSet
     global OpenAnim, ContextMenuAnimEnabled, RippleClickEnabled
-    global ActiveBorderEnabled, ProximityGhostEnabled, LivePipEnabled, PrivacyBlurEnabled
-    global SpotlightEnabled, BreathingEnabled, PulseEnabled, CursorYawnEnabled
+    global ActiveBorderEnabled, ProximityGhostEnabled, LivePipEnabled
+    global SpotlightEnabled, BreathingEnabled, CursorYawnEnabled
     
     if (StealthSuspendAnimations) {
         if IsSet(OpenAnim) {
@@ -297,10 +297,6 @@ SuspendStealthFeatures() {
             StealthSuspendedFeatures["LivePipEnabled"] := LivePipEnabled
             LivePipEnabled := false
         }
-        if IsSet(PrivacyBlurEnabled) {
-            StealthSuspendedFeatures["PrivacyBlurEnabled"] := PrivacyBlurEnabled
-            PrivacyBlurEnabled := false
-        }
     }
     if (StealthSuspendBackground) {
         if IsSet(SpotlightEnabled) {
@@ -310,10 +306,6 @@ SuspendStealthFeatures() {
         if IsSet(BreathingEnabled) {
             StealthSuspendedFeatures["BreathingEnabled"] := BreathingEnabled
             BreathingEnabled := false
-        }
-        if IsSet(PulseEnabled) {
-            StealthSuspendedFeatures["PulseEnabled"] := PulseEnabled
-            PulseEnabled := false
         }
         if IsSet(CursorYawnEnabled) {
             StealthSuspendedFeatures["CursorYawnEnabled"] := CursorYawnEnabled
@@ -330,8 +322,8 @@ RestoreStealthFeatures() {
     global StealthSuspendedFeatures
     
     global OpenAnim, ContextMenuAnimEnabled, RippleClickEnabled
-    global ActiveBorderEnabled, ProximityGhostEnabled, LivePipEnabled, PrivacyBlurEnabled
-    global SpotlightEnabled, BreathingEnabled, PulseEnabled, CursorYawnEnabled
+    global ActiveBorderEnabled, ProximityGhostEnabled, LivePipEnabled
+    global SpotlightEnabled, BreathingEnabled, CursorYawnEnabled
     
     for key, val in StealthSuspendedFeatures {
         if (key == "OpenAnim" && IsSet(OpenAnim)) {
@@ -352,17 +344,11 @@ RestoreStealthFeatures() {
         if (key == "LivePipEnabled" && IsSet(LivePipEnabled)) {
             LivePipEnabled := val
         }
-        if (key == "PrivacyBlurEnabled" && IsSet(PrivacyBlurEnabled)) {
-            PrivacyBlurEnabled := val
-        }
         if (key == "SpotlightEnabled" && IsSet(SpotlightEnabled)) {
             SpotlightEnabled := val
         }
         if (key == "BreathingEnabled" && IsSet(BreathingEnabled)) {
             BreathingEnabled := val
-        }
-        if (key == "PulseEnabled" && IsSet(PulseEnabled)) {
-            PulseEnabled := val
         }
         if (key == "CursorYawnEnabled" && IsSet(CursorYawnEnabled)) {
             CursorYawnEnabled := val

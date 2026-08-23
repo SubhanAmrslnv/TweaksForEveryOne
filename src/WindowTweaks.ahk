@@ -45,6 +45,7 @@
 ; ----- Shared services -----
 #Include MonitorGeometry.ahk
 #Include OverlayGui.ahk
+#Include AcousticKeystrokes.ahk
 
 ; ----- UI and input -----
 #Include SettingsWindow.ahk
@@ -75,7 +76,6 @@
 #Include TaskbarClock.ahk
 #Include FxGravity.ahk
 #Include FxCurtain.ahk
-#Include FxCarousel.ahk
 #Include FxBlackHole.ahk
 #Include FxShatter.ahk
 #Include GameMode.ahk
