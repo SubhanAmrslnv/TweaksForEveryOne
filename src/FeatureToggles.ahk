@@ -84,6 +84,7 @@ ToggleMemory() {
 ToggleFeatureFlag(label, isOn, ctrlKey) {
     global Win, C
     SaveSettings()
+    PlayHotkeySound(isOn ? "toggleon" : "toggleoff")
     if (Win && WinExist("ahk_id " Win.Hwnd))
         try C[ctrlKey].Value := isOn
     Notify(label " " (isOn ? "ON" : "OFF"))

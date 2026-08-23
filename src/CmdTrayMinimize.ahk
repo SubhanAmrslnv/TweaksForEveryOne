@@ -112,6 +112,9 @@ ToggleBossKey() {
         BossKeyWindows := []
         try SoundSetMute(BossKeyMuteState)
         BossKeyActive := false
+        ; Coming back only. On the way IN this mutes the system on purpose,
+        ; so a sound announcing it would be exactly the wrong thing.
+        PlayHotkeySound("alert")
     } else {
         try BossKeyMuteState := SoundGetMute()
         catch

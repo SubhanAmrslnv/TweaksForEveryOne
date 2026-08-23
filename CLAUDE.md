@@ -155,6 +155,7 @@ default. When something needs visual feedback, reach for a fade first.
 - **Black Hole Minimize & Delete**: Windows and deleted files get sucked into a tiny gravity well (funnel) with physics-based warping.
 - **Resistance Edge**: Snapping a window to a screen edge creates a satisfying rubber-band resistance effect.
 - **Mechanical Keystroke Sounds**: Every key makes a synthesised mechanical switch sound - a bright click layered over the keycap bottoming out - with its own voice for space, enter, backspace and copy/cut/paste.
+- **Hotkey Sounds**: Commands get their own voices, distinct from typing - a rising two-tone when a feature switches on, falling when it switches off, a short snap for a window layout command and a deeper hit for restore-all and the boss key. Keystrokes and commands have separate volume settings.
 - **Dynamic Notch (OSD)**: Volume and brightness adjustments drop down a sleek iOS-style Dynamic Island pill from the top of the screen.
 - **Curtain Drop (Win+D)**: Showing the desktop drops all windows simultaneously with a kinetic motion-blur effect.
 - **Overscroll Bounce**: Scrolling past the end of a page elastically stretches and springs back.
@@ -642,6 +643,26 @@ the spacebar's stabiliser rattle, and what makes the copy/cut voices read as a
 double tick. Measured: the full bank of 30 clips renders in **78 ms**, so it is
 built by a one-shot armed from `SyncKeySounds()` and never on the input path.
 
+**Action voices are a second family, on their own flag and their own volume.**
+`toggleon` / `toggleoff` / `command` / `alert` are rendered from the same synth
+with a second strike at a different pitch (`pitch2`), which is what makes them
+read as a deliberate gesture rather than as another key. `PlayHotkeySound()`
+gates on `HotkeySoundsEnabled`; `PlayAcousticSound()` gates on
+`TypingSoundsEnabled`; both go through `AK_Emit()`. **Every call site is a named
+feature function, never a hotkey body** - `ToggleFeatureFlag()` covers all
+thirteen feature toggles at once, `ApplyLayout()` covers centre/tile/cycle/next
+monitor/undo - so the tray menu and the settings window sound the same as the
+key. Measured at the shipped levels (keys 80%, actions 90%): 42 clips render in
+203 ms and **zero** samples clip, the loudest peak being 30205 of 32767.
+
+**`Map.Delete` THROWS on a key that is not in the map** - "Item has no value".
+`AK_KeyReleased()` runs on every key-up, and plenty of those arrive with no
+matching key-down: a key consumed by a suppressing hotkey (a Win chord sends no
+`LWin` down to the hook but does send the up), a key already held when the hook
+started, anything pressed while the feature was off. It is a hook callback, so
+the throw pops an error dialog at the user and kills the handler for the session.
+Guard every `Delete` with `Has()`.
+
 **`InputHook.OnKeyDown` fires ONLY for keys carrying the Notify option.** The
 shared `SparkHook` set none, so ordinary letters were never reported and the
 keystroke sounds, the spark trail and the smooth caret only ever fired on a
@@ -702,6 +723,32 @@ So the list lives in `StealthPanicApps.txt`, one entry per line, UTF-8 **with** 
 Two rules for that module: nothing in it may throw (it runs from a top-level initialiser that `WindowTweaks.ahk` includes, so an exception is a load-time error that kills the whole app), and the ini stores are purged only *after* the sidecar is written and read back — purging first turns a failed write into data loss. `src\test_stealthconfig.ahk` is the harness; it prints raw bytes both ways and exits with the failure count.
 
 `CLAUDE.md`'s "pure ASCII, no BOM" rule is about `.ahk` **source** files. The sidecar is runtime data and its BOM is deliberate.
+
+### Game Mode
+
+`Shift+Alt+F12` suspends ~48 disruptive features for gameplay, holding the user's
+real values in `GameModeSuspendedFeatures` and setting every flag to false.
+
+**The suppression is an in-memory OVERLAY and must never reach settings.ini.**
+`WriteSettings()` persists whatever the globals currently hold, so a shutdown,
+restart or reload while Game Mode was on wrote all ~48 features as `0` - the
+user's entire configuration, gone on the next launch with nothing to restore it
+from. `WriteSettings()` therefore brackets its whole body with
+`GameModeUnsuspendForWrite()` / `GameModeResuspend()` in a `try/finally`, so the
+file records the configuration rather than the overlay no matter which path
+writes it or what throws. `EnterGameMode()` additionally flushes settings BEFORE
+it touches a flag, which covers the case no exit handler can - a power cut or a
+`Stop-Process -Force` mid-session.
+
+**One feature list.** `GAME_MODE_FEATURES` is the only copy. It used to be
+written out twice, once per direction, and a name in one copy but not the other
+is a feature that gets suppressed and never restored.
+
+The four loops over it are assume-global (a bare `global`) because they assign
+through a dynamic reference, `%gmFeat% := ...`, which resolves to a LOCAL in an
+assume-local function and would silently suppress nothing at all. That makes
+every assignment in them global, hence the `gm` prefix on their scratch
+variables - the same rule `ApplyUi` follows with `ui`/`ep`.
 
 ### Runtime files
 

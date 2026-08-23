@@ -156,6 +156,7 @@ Context Menu Unfold. Turn on whichever you want in the settings window.
 - **Black Hole Minimize & Delete**: Windows and deleted files get sucked into a tiny gravity well (funnel) with physics-based warping.
 - **Resistance Edge**: Snapping a window to a screen edge creates a satisfying rubber-band resistance effect.
 - **Mechanical Keystroke Sounds**: Every key makes a synthesised mechanical switch sound - a bright click layered over the keycap bottoming out - with its own voice for space, enter, backspace and copy/cut/paste.
+- **Hotkey Sounds**: Commands get their own voices, distinct from typing - a rising two-tone when a feature switches on, falling when it switches off, a short snap for a window layout command and a deeper hit for restore-all and the boss key. Keystrokes and commands have separate volume settings.
 - **Dynamic Notch (OSD)**: Volume and brightness adjustments drop down a sleek iOS-style Dynamic Island pill from the top of the screen.
 - **Curtain Drop (Win+D)**: Showing the desktop drops all windows simultaneously with a kinetic motion-blur effect.
 - **Overscroll Bounce**: Scrolling past the end of a page elastically stretches and springs back.

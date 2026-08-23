@@ -54,11 +54,16 @@ global AK_KeysDown := Map()    ; vk -> tick of its last key-down, for the auto-r
 ; click  amplitude of the noise transient     ctau  its decay time constant, seconds
 ; body   amplitude of the damped sine         btau  its decay time constant, seconds
 ; ms     total length                         second  seconds until a second click, 0 = none
-AK_Voice(f0, click, body, ctau, btau, ms, second := 0) =>
-    {f0: f0, click: click, body: body, ctau: ctau, btau: btau, ms: ms, second: second}
+; pitch2 body pitch of that second hit, as a multiple of f0. 0 = click only, so a
+;        key gets a rattle while an action gets a deliberate two-tone gesture -
+;        rising for on, falling for off, which is legible without being musical.
+AK_Voice(f0, click, body, ctau, btau, ms, second := 0, pitch2 := 0) =>
+    {f0: f0, click: click, body: body, ctau: ctau, btau: btau, ms: ms
+    , second: second, pitch2: pitch2}
 
+; The keystroke voices. One per class of key - see AK_VoiceForKey().
 global AK_VOICES := Map(
-;      voice              f0  click  body    ctau   btau  ms  second
+;      voice              f0  click  body    ctau   btau  ms  second pitch2
   "normal"    , AK_Voice(168, 0.55, 0.42, 0.0032, 0.020, 48)
 , "structural", AK_Voice(205, 0.62, 0.36, 0.0028, 0.017, 46)
 , "operator"  , AK_Voice(186, 0.50, 0.34, 0.0030, 0.016, 44)
@@ -68,7 +73,17 @@ global AK_VOICES := Map(
 , "backspace" , AK_Voice(150, 0.52, 0.44, 0.0032, 0.022, 52)
 , "copy"      , AK_Voice(238, 0.60, 0.30, 0.0026, 0.014, 62, 0.034)
 , "cut"       , AK_Voice(262, 0.62, 0.26, 0.0022, 0.012, 54, 0.020)
-, "paste"     , AK_Voice(92 , 0.46, 0.70, 0.0042, 0.038, 88))
+, "paste"     , AK_Voice(92 , 0.46, 0.70, 0.0042, 0.038, 88)
+; ----- action voices: a hotkey did something, and it is worth hearing which -----
+, "toggleon"  , AK_Voice(196, 0.42, 0.75, 0.0026, 0.026, 132, 0.060, 1.500)
+, "toggleoff" , AK_Voice(196, 0.42, 0.75, 0.0026, 0.026, 132, 0.060, 0.667)
+, "command"   , AK_Voice(262, 0.50, 0.60, 0.0024, 0.018,  74)
+, "alert"     , AK_Voice(110, 0.46, 0.90, 0.0040, 0.042, 190, 0.075, 1.000))
+
+; Which voices are actions rather than keystrokes. They answer to their own
+; enable flag and their own volume, because a click that fires on every letter
+; and a click that fires when a feature switches off want very different levels.
+global AK_ACTION_VOICES := Map("toggleon", 1, "toggleoff", 1, "command", 1, "alert", 1)
 
 ; ====== Which voice a key gets ======
 
@@ -133,15 +148,43 @@ AK_IsRepeat(vk) {
 
 AK_KeyReleased(vk) {
     global AK_KeysDown
-    AK_KeysDown.Delete(vk)
+    ; Map.Delete THROWS on a key that is not in the map ("Item has no value"),
+    ; and this runs for every key that goes UP - including plenty whose key-down
+    ; the hook never saw: a key consumed by a suppressing hotkey (Win+Alt+B sends
+    ; no LWin down here but does send the up), a key already held when the hook
+    ; started, or anything pressed while the feature was switched off. This is a
+    ; hook callback, so the throw pops an error dialog in the user's face and
+    ; kills the handler for the rest of the session.
+    if AK_KeysDown.Has(vk)
+        AK_KeysDown.Delete(vk)
 }
 
 ; ====== Playback ======
 
+; A key was pressed. Gated on the keystroke flag.
 PlayAcousticSound(voice) {
-    global TypingSoundsEnabled, AK_BANK, AK_VARIANTS, AK_LastVariant
+    global TypingSoundsEnabled
     if (!TypingSoundsEnabled)
         return
+    AK_Emit(voice)
+}
+
+; A hotkey did something - a feature toggled, a window moved, everything was
+; restored. Gated on its OWN flag, so somebody who wants the commands audible but
+; not their typing (or the reverse) can have exactly that.
+;
+; Every call site is a named feature function that the tray menu and the settings
+; window also call, never a hotkey body, so the sound follows the ACTION rather
+; than the key that happened to trigger it.
+PlayHotkeySound(voice) {
+    global HotkeySoundsEnabled
+    if (!HotkeySoundsEnabled)
+        return
+    AK_Emit(voice)
+}
+
+AK_Emit(voice) {
+    global AK_BANK, AK_VARIANTS, AK_LastVariant
     ; "" is a deliberate silence, not a missing voice - AK_VoiceForKey returns it
     ; for a key whose sound another path is already making. It must NOT fall
     ; through to the unknown-voice fallback below.
@@ -175,23 +218,26 @@ PlayAcousticSound(voice) {
 ; ApplyUi() both call. Renders on a one-shot, re-renders when the volume or pitch
 ; setting changed, and frees the bank when the feature is switched off.
 SyncKeySounds() {
-    global TypingSoundsEnabled, AK_BANK, AK_BankVol, AK_BankTone
-    if (!TypingSoundsEnabled) {
+    global TypingSoundsEnabled, HotkeySoundsEnabled, AK_BANK, AK_BankVol, AK_BankHotVol, AK_BankTone
+    if (!TypingSoundsEnabled && !HotkeySoundsEnabled) {
         if AK_BANK.Count
             AK_Shutdown()
         return
     }
-    if (AK_BANK.Count && AK_BankVol = Tune("keyVol") && AK_BankTone = Tune("keyTone"))
+    if (AK_BANK.Count && AK_BankVol = Tune("keyVol") && AK_BankHotVol = Tune("hotkeyVol")
+        && AK_BankTone = Tune("keyTone"))
         return
     SetTimer(AK_BuildBank, -1)
 }
 
 AK_BuildBank() {
-    global AK_BANK, AK_VOICES, AK_VARIANTS, AK_BankVol, AK_BankTone, TypingSoundsEnabled
-    if (!TypingSoundsEnabled)
+    global AK_BANK, AK_VOICES, AK_ACTION_VOICES, AK_VARIANTS
+    global AK_BankVol, AK_BankHotVol, AK_BankTone, TypingSoundsEnabled, HotkeySoundsEnabled
+    if (!TypingSoundsEnabled && !HotkeySoundsEnabled)
         return
 
-    vol := Tune("keyVol") / 100
+    keyVol := Tune("keyVol") / 100
+    hotVol := Tune("hotkeyVol") / 100
     tone := Tune("keyTone") / 100
 
     ; Built into a local and published in one assignment. A keystroke can land
@@ -199,6 +245,9 @@ AK_BuildBank() {
     ; wrong voice or none.
     bank := Map()
     for voice, v in AK_VOICES {
+        ; Actions carry their own level. The pitch setting is deliberately shared:
+        ; it is the character of the whole sound set, not a per-sound tuning.
+        vol := AK_ACTION_VOICES.Has(voice) ? hotVol : keyVol
         Loop AK_VARIANTS {
             ; -6%, 0, +6% of pitch, with the detuned pair very slightly quieter.
             j := (A_Index - 2) * 0.06
@@ -207,8 +256,10 @@ AK_BuildBank() {
     }
     AK_BANK := bank
     AK_BankVol := Tune("keyVol")
+    AK_BankHotVol := Tune("hotkeyVol")
     AK_BankTone := Tune("keyTone")
-    try WriteLog("keysounds: rendered " bank.Count " clips, vol " AK_BankVol "% tone " AK_BankTone "%")
+    try WriteLog("keysounds: rendered " bank.Count " clips, keys " AK_BankVol "% actions "
+        AK_BankHotVol "% tone " AK_BankTone "%")
 }
 
 ; One voice, one variant -> a Buffer holding a complete RIFF/WAVE file image.
@@ -230,6 +281,8 @@ AK_Render(v, pitch, vol) {
     bd2 := Exp(-1 / (v.btau * 0.55 * sr))
     ce := 1.0, be := 1.0, be2 := 1.0
     se := 0.0                              ; the second click starts silent
+    sb := 0.0                              ; and so does the second body, if there is one
+    w2 := v.pitch2 ? (w0 * v.pitch2) : 0
     sAt := v.second ? Round(v.second * sr) : 0
     lp := 0.0
     fade := 96                             ; samples of tail ramp. A buffer that ends mid-swing
@@ -242,12 +295,18 @@ AK_Render(v, pitch, vol) {
                                            ; bright end of the noise - the plastic in the click
         s := hp * v.click * ce
         if (sAt && i = sAt)
-            se := 1.0
+            se := 1.0, sb := 1.0
         if (se > 0.0) {
             s += hp * v.click * 0.6 * se
             se *= cd
         }
         s += (Sin(w0 * i) * be + Sin(w1 * i) * 0.34 * be2) * v.body
+        ; The second hit's own pitch, phase-reset at the moment it lands so it
+        ; reads as a separate strike rather than as the first one wavering.
+        if (w2 && sb > 0.0) {
+            s += Sin(w2 * (i - sAt)) * sb * v.body
+            sb *= bd
+        }
 
         if (i < 8)                         ; a hard start is a DC step, and pops
             s *= i / 8

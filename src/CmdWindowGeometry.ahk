@@ -111,6 +111,9 @@ ApplyLayout(hwnd, tx, ty, tw := -1, th := -1) {
 
     RS_SetPos(hwnd, destX, destY, destW, destH, RS_PRI_USER)
     RS_Commit()                    ; one-shot producer: nothing else will flush
+    ; Every keyboard layout command lands here, so one call covers centre,
+    ; tile, cycle size, next monitor and undo without touching five hotkeys.
+    PlayHotkeySound("command")
     return true
 }
 
@@ -298,6 +301,7 @@ ToggleMaximize() {
             return
         Anim_Release(hwnd, "geom")
 
+        PlayHotkeySound("command")
         wasMax := (WinGetMinMax(hwnd) = 1)
         fromX := "", fromY := "", fromW := "", fromH := ""
         try WinGetPos(&fromX, &fromY, &fromW, &fromH, hwnd)

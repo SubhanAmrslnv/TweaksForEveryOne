@@ -57,7 +57,7 @@ BuildWin() {
     global BlackHoleMinimizeEnabled, MomentumTiltEnabled
     global CurtainDropEnabled
     global TaskbarWaveEnabled, CustomClockEnabled, ClockLocation, ClockUnits, ClockAnchor, ClockWeatherEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled, CursorYawnEnabled, ShatterEnabled
-    global RestoreEnabled, BreathingEnabled, OpenAnim, FlyMinimizeEnabled, RollUpEnabled, TrayMinimizeEnabled, BossKeyEnabled, AltDragEnabled, TaskbarScrollEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, MorphingPasteEnabled, ClipboardAppendEnabled, SmoothCaretEnabled, TypingSoundsEnabled, CopyFeedbackEnabled, SmartCapsEnabled, SmartCapsAction, ParallaxEnabled, EP_Style, EP_IconSize
+    global RestoreEnabled, BreathingEnabled, OpenAnim, FlyMinimizeEnabled, RollUpEnabled, TrayMinimizeEnabled, BossKeyEnabled, AltDragEnabled, TaskbarScrollEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, MorphingPasteEnabled, ClipboardAppendEnabled, SmoothCaretEnabled, TypingSoundsEnabled, HotkeySoundsEnabled, CopyFeedbackEnabled, SmartCapsEnabled, SmartCapsAction, ParallaxEnabled, EP_Style, EP_IconSize
     global NAV, SEL, SELF, FG
 
     dark := IsDark()
@@ -271,10 +271,14 @@ BuildWin() {
     C["momentum"] := Box(pg, CW, FG, "Momentum Tilt (Jello bounce on drag stop)", MomentumTiltEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Window jiggles elastically when you suddenly stop moving it.", "xm y+8")
     
-    C["typingsounds"] := Box(pg, CW, FG, "Mechanical Keystroke Sounds", TypingSoundsEnabled, "xm y+16")
+    Lbl(pg, FG, "Sound", "xm y+20")
+    C["typingsounds"] := Box(pg, CW, FG, "Mechanical Keystroke Sounds", TypingSoundsEnabled, "xm y+12")
     Sub(pg, CW, cSub, "A synthesised switch click on every key, with its own voice for space, enter, backspace and copy/cut/paste.", "xm y+8")
-    TuneRow(pg, "keyVol",  FG, cSub)
-    TuneRow(pg, "keyTone", FG, cSub)
+    C["hotkeysounds"] := Box(pg, CW, FG, "Hotkey Sounds", HotkeySoundsEnabled, "xm y+16")
+    Sub(pg, CW, cSub, "A distinct sound when a command runs - rising for a feature switched on, falling for off, a deeper tone for restore-all and the boss key.", "xm y+8")
+    TuneRow(pg, "keyVol",    FG, cSub)
+    TuneRow(pg, "hotkeyVol", FG, cSub)
+    TuneRow(pg, "keyTone",   FG, cSub)
 
     C["smoothcaret"] := Box(pg, CW, FG, "Smooth Gliding Caret & Word Pop", SmoothCaretEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Premium macOS-style gliding caret interpolation and word completion feedback.", "xm y+8")
@@ -683,6 +687,7 @@ ApplyUi(writeBack := false) {
         MomentumTiltEnabled := C["momentum"].Value
         CurtainDropEnabled := C["curtain"].Value
         TypingSoundsEnabled := C["typingsounds"].Value
+        HotkeySoundsEnabled := C["hotkeysounds"].Value
         SmoothCaretEnabled := C["smoothcaret"].Value
         CopyFeedbackEnabled := C["copyfeedback"].Value
         MorphingPasteEnabled := C["morphingpaste"].Value

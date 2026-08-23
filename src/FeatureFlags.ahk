@@ -123,6 +123,7 @@ global MorphingPasteEnabled := true
 global ClipboardAppendEnabled := true
 global SmoothCaretEnabled := true
 global TypingSoundsEnabled := true
+global HotkeySoundsEnabled := true
 global CopyFeedbackEnabled := true
 global SmartCapsEnabled := true
 global SmartCapsAction := "Escape"

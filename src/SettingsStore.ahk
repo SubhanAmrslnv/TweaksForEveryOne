@@ -142,6 +142,7 @@ LoadSettings() {
     ClipboardAppendEnabled := IniStr("memory", "clipboardappend", "1") = "1"
     SmoothCaretEnabled := IniStr("mouse", "smoothcaret", "1") = "1"
     TypingSoundsEnabled := IniStr("mouse", "typingsounds", "1") = "1"
+    HotkeySoundsEnabled := IniStr("mouse", "hotkeysounds", "1") = "1"
     CopyFeedbackEnabled := IniStr("mouse", "copyfeedback", "1") = "1"
     SmartCapsEnabled := IniStr("memory", "smartcaps", "1") = "1"
     SmartCapsAction := IniPick("memory", "smartcaps_act", CAPS_ACTIONS, "Escape")
@@ -213,93 +214,108 @@ SaveSettings() {
 WriteSettings() {
     global
     SetTimer(WriteSettings, 0)
-    PutIni(SnapEnabled ? 1 : 0,      "snap", "enabled")
-    PutIni(MagneticGroupsEnabled ? 1 : 0, "snap", "magnetic")
-    PutIni(ElasticScrollEnabled ? 1 : 0,  "snap", "elastic")
-    PutIni(TextMagnifierEnabled ? 1 : 0,  "mouse", "textmag")
-    PutIni(SmartGridEnabled ? 1 : 0, "snap", "smartgrid")
-    PutIni(RippleClickEnabled ? 1 : 0,  "mouse", "ripple")
-    PutIni(ContextMenuAnimEnabled ? 1 : 0,  "mouse", "contextanim")
-    PutIni(ElasticDragEnabled ? 1 : 0,  "mouse", "elasticdrag")
-    PutIni(BreatheCursorEnabled ? 1 : 0,  "mouse", "breathe")
-    PutIni(BlackHoleMinimizeEnabled ? 1 : 0, "memory", "blackhole")
-    PutIni(MomentumTiltEnabled ? 1 : 0, "mouse", "momentum")
-    PutIni(CurtainDropEnabled ? 1 : 0, "memory", "curtain")
-    PutIni(TaskbarWaveEnabled ? 1 : 0, "taskbar", "wave")
-    PutIni(CustomClockEnabled ? 1 : 0, "taskbar", "customclock")
-    PutIni(ClockLocation, "taskbar", "clocklocation")
-    PutIni(ClockUnits, "taskbar", "clockunits")
-    PutIni(ClockAnchor, "taskbar", "clockanchor")
-    PutIni(ClockWeatherEnabled ? 1 : 0, "taskbar", "clockweather")
-    PutIni(ToastBounceEnabled ? 1 : 0, "taskbar", "toastbounce")
-    PutIni(MonitorThrowEnabled ? 1 : 0, "mouse", "monthrow")
-    PutIni(BlackHoleDeleteEnabled ? 1 : 0, "mouse", "blackhole")
-    PutIni(CursorYawnEnabled ? 1 : 0, "mouse", "cursoryawn")
-    PutIni(ShatterEnabled ? 1 : 0, "mouse", "shatter")
-    PutIni(GlideEnabled ? 1 : 0,     "glide", "enabled")
-    PutIni(RestoreEnabled ? 1 : 0,   "memory", "enabled")
-    PutIni(GravityCloseEnabled ? 1 : 0, "memory", "gravityclose")
-    PutIni(DEBUG ? 1 : 0,            "memory", "debuglog")
-    PutIni(BorderColor,              "border", "color")
-    TuneSave()                       ; every tunable number, in one pass
-    PutIni(BreathingEnabled ? 1 : 0, "memory", "breathing")
-    PutIni(OpenAnim, "memory", "openanim")
-    PutIni(FlyMinimizeEnabled ? 1 : 0, "memory", "fly")
-    PutIni(RollUpEnabled ? 1 : 0, "memory", "rollup")
-    PutIni(TrayMinimizeEnabled ? 1 : 0, "memory", "traymin")
-    PutIni(BossKeyEnabled ? 1 : 0, "memory", "bosskey")
-    PutIni(AltDragEnabled ? 1 : 0, "memory", "altdrag")
-    PutIni(TaskbarScrollEnabled ? 1 : 0, "memory", "taskbarscroll")
-    PutIni(QuickFolderJumpEnabled ? 1 : 0, "memory", "quickfolder")
-    PutIni(PlainPasteEnabled ? 1 : 0, "memory", "plainpaste")
-    PutIni(MorphingPasteEnabled ? 1 : 0, "memory", "morphingpaste")
-    PutIni(ClipboardAppendEnabled ? 1 : 0, "memory", "clipboardappend")
-    PutIni(SmoothCaretEnabled ? 1 : 0, "mouse", "smoothcaret")
-    PutIni(TypingSoundsEnabled ? 1 : 0, "mouse", "typingsounds")
-    PutIni(CopyFeedbackEnabled ? 1 : 0, "mouse", "copyfeedback")
-    PutIni(SmartCapsEnabled ? 1 : 0, "memory", "smartcaps")
-    PutIni(SmartCapsAction, "memory", "smartcaps_act")
-    PutIni(ParallaxEnabled ? 1 : 0, "memory", "parallax")
-    PutIni(QuickLookEnabled ? 1 : 0, "memory", "quicklook")
-    PutIni(MultiMonitorDimmerEnabled ? 1 : 0, "memory", "multidimmer")
-    PutIni(HotCornersEnabled ? 1 : 0, "corners", "enabled")
-    PutIni(HotCornerTL, "corners", "tl")
-    PutIni(HotCornerTR, "corners", "tr")
-    PutIni(HotCornerBL, "corners", "bl")
-    PutIni(HotCornerBR, "corners", "br")
-    PutIni(PremiumVolumeOSDEnabled ? 1 : 0, "memory", "osd")
-    PutIni(LivePipEnabled ? 1 : 0, "memory", "pip")
-    PutIni(GrabPanEnabled ? 1 : 0, "memory", "grabpan")
-    PutIni(MicKillSwitchEnabled ? 1 : 0, "memory", "mickill")
-    PutIni(InfiniteWrapEnabled ? 1 : 0, "memory", "wrap")
-    PutIni(SpotlightEnabled ? 1 : 0, "memory", "spotlight")
-    PutIni(ActiveBorderEnabled ? 1 : 0, "memory", "border")
-    PutIni(AlwaysOnBottomEnabled ? 1 : 0, "memory", "bottom")
-    PutIni(TextExpanderEnabled ? 1 : 0, "memory", "expander")
-    PutIni(MiddleClickCloseEnabled ? 1 : 0, "memory", "midclose")
-    PutIni(ProximityGhostEnabled ? 1 : 0, "memory", "ghost")
-    PutIni(ShakeFindEnabled ? 1 : 0, "mouse", "shakefind")
-    PutIni(SmartTaskbarEnabled ? 1 : 0, "taskbar", "smart")
-    PutIni(MediaFallbackList, "memory", "media_fallback")
-    ; ExplorerPatcher treats any non-zero OldTaskbar as "Win10 taskbar", and the
-    ; shipped .reg uses 2. Only write when the on/off state actually changes, so
-    ; selecting Win10 does not quietly rewrite a working 2 down to a 1.
-    ; WriteSettings is assume-global, so every name assigned here becomes a
-    ; global - keep these prefixed so they cannot collide with a local elsewhere.
+    ; GAME MODE IS AN IN-MEMORY OVERLAY AND MUST NOT REACH THE FILE. It holds
+    ; ~48 feature flags at false while it is on, and this function persists
+    ; whatever the globals hold - so a shutdown, restart or reload during Game
+    ; Mode wrote every one of them as 0 and the user's configuration was gone
+    ; for good on the next launch. The real values go back for the duration of
+    ; the write and the suppression is re-applied in the finally, so no exit
+    ; path and no throw can leave the two out of step.
+    gmRestored := false
+    try gmRestored := GameModeUnsuspendForWrite()
     try {
-        epCur := 0
-        try epCur := RegRead(EP_KEY, "OldTaskbar", 0)
-        epWant := (EP_Style == "Win10")
-        if (epWant != (epCur != 0))
-            RegWrite(epWant ? 1 : 0, "REG_DWORD", EP_KEY, "OldTaskbar")
-    }
-    ; Registry writes are cheap, but not free, and this one runs every save.
-    epIcon := (EP_IconSize == "Small") ? 1 : 0
-    if (!IniCache.Has("epIcon") || IniCache["epIcon"] != epIcon) {
+        PutIni(SnapEnabled ? 1 : 0,      "snap", "enabled")
+        PutIni(MagneticGroupsEnabled ? 1 : 0, "snap", "magnetic")
+        PutIni(ElasticScrollEnabled ? 1 : 0,  "snap", "elastic")
+        PutIni(TextMagnifierEnabled ? 1 : 0,  "mouse", "textmag")
+        PutIni(SmartGridEnabled ? 1 : 0, "snap", "smartgrid")
+        PutIni(RippleClickEnabled ? 1 : 0,  "mouse", "ripple")
+        PutIni(ContextMenuAnimEnabled ? 1 : 0,  "mouse", "contextanim")
+        PutIni(ElasticDragEnabled ? 1 : 0,  "mouse", "elasticdrag")
+        PutIni(BreatheCursorEnabled ? 1 : 0,  "mouse", "breathe")
+        PutIni(BlackHoleMinimizeEnabled ? 1 : 0, "memory", "blackhole")
+        PutIni(MomentumTiltEnabled ? 1 : 0, "mouse", "momentum")
+        PutIni(CurtainDropEnabled ? 1 : 0, "memory", "curtain")
+        PutIni(TaskbarWaveEnabled ? 1 : 0, "taskbar", "wave")
+        PutIni(CustomClockEnabled ? 1 : 0, "taskbar", "customclock")
+        PutIni(ClockLocation, "taskbar", "clocklocation")
+        PutIni(ClockUnits, "taskbar", "clockunits")
+        PutIni(ClockAnchor, "taskbar", "clockanchor")
+        PutIni(ClockWeatherEnabled ? 1 : 0, "taskbar", "clockweather")
+        PutIni(ToastBounceEnabled ? 1 : 0, "taskbar", "toastbounce")
+        PutIni(MonitorThrowEnabled ? 1 : 0, "mouse", "monthrow")
+        PutIni(BlackHoleDeleteEnabled ? 1 : 0, "mouse", "blackhole")
+        PutIni(CursorYawnEnabled ? 1 : 0, "mouse", "cursoryawn")
+        PutIni(ShatterEnabled ? 1 : 0, "mouse", "shatter")
+        PutIni(GlideEnabled ? 1 : 0,     "glide", "enabled")
+        PutIni(RestoreEnabled ? 1 : 0,   "memory", "enabled")
+        PutIni(GravityCloseEnabled ? 1 : 0, "memory", "gravityclose")
+        PutIni(DEBUG ? 1 : 0,            "memory", "debuglog")
+        PutIni(BorderColor,              "border", "color")
+        TuneSave()                       ; every tunable number, in one pass
+        PutIni(BreathingEnabled ? 1 : 0, "memory", "breathing")
+        PutIni(OpenAnim, "memory", "openanim")
+        PutIni(FlyMinimizeEnabled ? 1 : 0, "memory", "fly")
+        PutIni(RollUpEnabled ? 1 : 0, "memory", "rollup")
+        PutIni(TrayMinimizeEnabled ? 1 : 0, "memory", "traymin")
+        PutIni(BossKeyEnabled ? 1 : 0, "memory", "bosskey")
+        PutIni(AltDragEnabled ? 1 : 0, "memory", "altdrag")
+        PutIni(TaskbarScrollEnabled ? 1 : 0, "memory", "taskbarscroll")
+        PutIni(QuickFolderJumpEnabled ? 1 : 0, "memory", "quickfolder")
+        PutIni(PlainPasteEnabled ? 1 : 0, "memory", "plainpaste")
+        PutIni(MorphingPasteEnabled ? 1 : 0, "memory", "morphingpaste")
+        PutIni(ClipboardAppendEnabled ? 1 : 0, "memory", "clipboardappend")
+        PutIni(SmoothCaretEnabled ? 1 : 0, "mouse", "smoothcaret")
+        PutIni(TypingSoundsEnabled ? 1 : 0, "mouse", "typingsounds")
+        PutIni(HotkeySoundsEnabled ? 1 : 0, "mouse", "hotkeysounds")
+        PutIni(CopyFeedbackEnabled ? 1 : 0, "mouse", "copyfeedback")
+        PutIni(SmartCapsEnabled ? 1 : 0, "memory", "smartcaps")
+        PutIni(SmartCapsAction, "memory", "smartcaps_act")
+        PutIni(ParallaxEnabled ? 1 : 0, "memory", "parallax")
+        PutIni(QuickLookEnabled ? 1 : 0, "memory", "quicklook")
+        PutIni(MultiMonitorDimmerEnabled ? 1 : 0, "memory", "multidimmer")
+        PutIni(HotCornersEnabled ? 1 : 0, "corners", "enabled")
+        PutIni(HotCornerTL, "corners", "tl")
+        PutIni(HotCornerTR, "corners", "tr")
+        PutIni(HotCornerBL, "corners", "bl")
+        PutIni(HotCornerBR, "corners", "br")
+        PutIni(PremiumVolumeOSDEnabled ? 1 : 0, "memory", "osd")
+        PutIni(LivePipEnabled ? 1 : 0, "memory", "pip")
+        PutIni(GrabPanEnabled ? 1 : 0, "memory", "grabpan")
+        PutIni(MicKillSwitchEnabled ? 1 : 0, "memory", "mickill")
+        PutIni(InfiniteWrapEnabled ? 1 : 0, "memory", "wrap")
+        PutIni(SpotlightEnabled ? 1 : 0, "memory", "spotlight")
+        PutIni(ActiveBorderEnabled ? 1 : 0, "memory", "border")
+        PutIni(AlwaysOnBottomEnabled ? 1 : 0, "memory", "bottom")
+        PutIni(TextExpanderEnabled ? 1 : 0, "memory", "expander")
+        PutIni(MiddleClickCloseEnabled ? 1 : 0, "memory", "midclose")
+        PutIni(ProximityGhostEnabled ? 1 : 0, "memory", "ghost")
+        PutIni(ShakeFindEnabled ? 1 : 0, "mouse", "shakefind")
+        PutIni(SmartTaskbarEnabled ? 1 : 0, "taskbar", "smart")
+        PutIni(MediaFallbackList, "memory", "media_fallback")
+        ; ExplorerPatcher treats any non-zero OldTaskbar as "Win10 taskbar", and the
+        ; shipped .reg uses 2. Only write when the on/off state actually changes, so
+        ; selecting Win10 does not quietly rewrite a working 2 down to a 1.
+        ; WriteSettings is assume-global, so every name assigned here becomes a
+        ; global - keep these prefixed so they cannot collide with a local elsewhere.
         try {
-            RegWrite(epIcon, "REG_DWORD", ADVANCED_KEY, "TaskbarSmallIcons")
-            IniCache["epIcon"] := epIcon
+            epCur := 0
+            try epCur := RegRead(EP_KEY, "OldTaskbar", 0)
+            epWant := (EP_Style == "Win10")
+            if (epWant != (epCur != 0))
+                RegWrite(epWant ? 1 : 0, "REG_DWORD", EP_KEY, "OldTaskbar")
         }
+        ; Registry writes are cheap, but not free, and this one runs every save.
+        epIcon := (EP_IconSize == "Small") ? 1 : 0
+        if (!IniCache.Has("epIcon") || IniCache["epIcon"] != epIcon) {
+            try {
+                RegWrite(epIcon, "REG_DWORD", ADVANCED_KEY, "TaskbarSmallIcons")
+                IniCache["epIcon"] := epIcon
+            }
+        }
+    } finally {
+        if gmRestored
+            GameModeResuspend()
     }
 }
 

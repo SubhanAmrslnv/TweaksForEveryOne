@@ -272,6 +272,7 @@
                 if DimmerGuis.Has(A_Index) {
                 if hdwp {
                 info.lastAlpha := targetAlpha
+                IniCache["epIcon"] := epIcon
                 intersecting := true
                 isDouble := true
                 k := 1 - Exp(-sampleDt / 30.0)
@@ -321,6 +322,8 @@
                 R := L + w, B := T + h
                 ratio := 1.0 - (dist / maxDist)
                 raw := SubStr(raw, 2)
+                RegWrite(epIcon, "REG_DWORD", ADVANCED_KEY, "TaskbarSmallIcons")
+                RegWrite(epWant ? 1 : 0, "REG_DWORD", EP_KEY, "OldTaskbar")
                 return
                 return
                 return
@@ -438,8 +441,10 @@
               MC_LivePid, MC_LiveExe, MC_LiveSessionExe, MC_MediaMonitor, MC_HwndInfo] {
             "ptr", MenuEventCb, "uint", 0, "uint", 0, "uint", 0x0002, "ptr")
             "ptr", WinEventCb, "uint", 0, "uint", 0, "uint", 0x0002, "ptr")
-            %feat% := false
-            %feat% := GameModeSuspendedFeatures[feat]
+            %gmFeat% := false
+            %gmFeat% := false
+            %gmFeat% := GameModeSuspendedFeatures[gmFeat]
+            %gmFeat% := GameModeSuspendedFeatures[gmFeat]
             , "int", 0, "int", 0, "int", 140, "int", 140
             , "ptr", MagHostGui.Hwnd, "ptr", 0, "ptr", DllCall("GetModuleHandle", "ptr", 0, "ptr"), "ptr", 0, "ptr")
             , "ptr", which, "ptr", 0, "uint", 2, "uint", 100, "ptr*", &res)
@@ -466,6 +471,7 @@
             : "Shift+Alt+W  opens this"
             ? "Scroll for more settings"
             || !RegExMatch(body, '"longitude"\s*:\s*(-?[0-9.]+)', &mLo)) {
+            }
             }
             }
             }
@@ -731,6 +737,8 @@
             endQuote := InStr(appStr, '"', false, 2)
             EnteredAt := A_TickCount
             entry.pri := pri
+            epCur := 0
+            epWant := (EP_Style == "Win10")
             exe := WinGetProcessName(hwnd)
             exec := shell.Exec(cmd)
             ExecuteHotCornerAction(action)
@@ -765,7 +773,8 @@
             g.Destroy()
             g.MarginX := 0, g.MarginY := 0
             g.Show("x" vx " y" vy " w" vw " h" vh " NoActivate")
-            GameModeSuspendedFeatures[feat] := %feat%
+            GameModeResuspend()
+            GameModeSuspendedFeatures[gmFeat] := %gmFeat%
             GetMicOSDPos(&x, &visibleY, &hiddenY)
             GetVolumeOSDPos(&x, &visibleY, &hiddenY)
             GetVolumeOSDPos(&x, &visibleY, &hiddenY)
@@ -857,6 +866,7 @@
             if (ElasticAwayCounts[hwnd] >= threshold) {
             if (ElasticAwayCounts[hwnd] >= threshold) {
             if (endQuote) {
+            if (epWant != (epCur != 0))
             if (ew > 0)
             if (h && DllCall("IsWindowVisible", "ptr", h))
             if (hwnd == aHwnd || hwnd == mHwnd || (anyMedia && MC_IsMediaHwnd(hwnd))) {
@@ -939,7 +949,6 @@
             if WinLastActive.Has(lParam)
             if WinTargetAlpha.Has(lParam)
             info .= "`n" CustomClockWind
-            IniCache["epIcon"] := epIcon
             IniCache[s.sec "`n" s.ini] := raw
             IniCache[section "`n" key] := String(raw)
             IniWrite(r.h, POS_FILE, key, "h")
@@ -1103,8 +1112,6 @@
             region .= " " px "-" py " W" pw " H" ph " R" (FocusRadius + pad) "-" (FocusRadius + pad)
             RegisterAnimation("BreathingAnimator", BreathingAnimatorStep)
             RegisterAnimation("MagLoupe", MagCallback)
-            RegWrite(epIcon, "REG_DWORD", ADVANCED_KEY, "TaskbarSmallIcons")
-            RegWrite(epWant ? 1 : 0, "REG_DWORD", EP_KEY, "OldTaskbar")
             RestoreFromTray(wParam)
             return
             return
@@ -1288,14 +1295,14 @@
             RS_SetPos(hwnd, x, destY, -1, -1, RS_PRI_USER)
             RS_SetPos(hwnd, x, destY, -1, -1, RS_PRI_USER)
             RS_SetPos(hwnd, x, y, -1, -1, RS_PRI_USER)
-            RS_SetPos(hwnd, X, Y, W, H, RS_PRI_ANIM)
             RS_SetPos(hwnd, x, y, w, h, RS_PRI_ANIM)
+            RS_SetPos(hwnd, X, Y, W, H, RS_PRI_ANIM)
             RS_SetPos(SmoothCaretGui.Hwnd, Round(LastCaretX), Round(LastCaretY), 2, 20, RS_PRI_ANIM)
             RS_SetRegion(ActiveBorderGui.Hwnd, rect1 "  " rect2 "  " rect3 "  " rect4, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "", RS_PRI_ANIM)
+            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
+            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "0-0 w" w " h" curH, RS_PRI_ANIM)
-            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
-            RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
             RS_SetRegion(MicOsdGui.Hwnd, "0-0 w240 h70 r20-20", RS_PRI_ANIM)
             RS_SetRegion(OsdGui.Hwnd, "0-0 w280 h64 r20-20", RS_PRI_ANIM)
             RS_UpdateDwmThumbnail(s.thumb, [0, 0, Round(curW), Round(curH)], [Round(s.srcX), Round(s.srcY), s.w, s.h], alpha, true, true)
@@ -1305,15 +1312,17 @@
             s *= (n - i) / fade
             s *= i / 8
             s += hp * v.click * 0.6 * se
+            s += Sin(w2 * (i - sAt)) * sb * v.body
             s.gui.Destroy()
             s.vy += 1.2 ; Gravity
             s.x += s.vx
             s.y += s.vy
             sampleDt := sampleNow - lastSample
             sampleNow := QPC()
+            sb *= bd
             score := d
             se *= cd
-            se := 1.0
+            se := 1.0, sb := 1.0
             Send("!{F4}")
             Send("^{v}")
             Send("^{v}")
@@ -1422,6 +1431,7 @@
             try {
             try {
             try {
+            try {
             try ApplyGridZone(hwnd, GridHoverZone)
             try CancelAnimation("Curtain_" hwnd)
             try ClosePiP(src)
@@ -1429,6 +1439,7 @@
             try DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", TaskbarWaveThumb)
             try DllCall("SetWindowPos", "ptr", hwnd, "ptr", entry.insertAfter
             try DllCall("ShowWindow", "ptr", SF_Hwnd, "int", 0)   ; SW_HIDE
+            try epCur := RegRead(EP_KEY, "OldTaskbar", 0)
             try FadeGui(MicOsdGui, TuneAlpha("osdAlpha"))
             try fh.Close()
             try guiObj.Destroy()
@@ -1459,8 +1470,8 @@
             try WinGetPos(&cx, &cy, &cw, &ch, OsdGui.Hwnd)
             try WinGetPos(&wx, &wy, &ww, &wh, hwndToMin)
             try WinGetPos(&x, &y, &w, &h, hwnd)
-            try WinGetPos(&X, &Y, &W, &H, hwnd)
             try WinGetPos(&x, &y, &w, &h, hwnd)
+            try WinGetPos(&X, &Y, &W, &H, hwnd)
             try WinHide(hwnd)
             try WinMove(ElasticBaseX, ElasticBaseY,,, ElasticHwnd)
             try WinSetAlwaysOnTop(1, OsdGui.Hwnd)
@@ -1532,35 +1543,8 @@
             y_off := pg.HasOwnProp("Y_Offset") ? pg.Y_Offset : 0
           , dirX := 0, dirY := 0, hyst := 0) {
          && Abs(st.r - fR) <= 2 && Abs(st.b - fB) <= 2)
-        "ActiveBorderEnabled", "SnapEnabled", "ElasticScrollEnabled",
-        "ActiveBorderEnabled", "SnapEnabled", "ElasticScrollEnabled",
-        "AltDragEnabled", "MiddleClickCloseEnabled", "RollUpEnabled", "ContextMenuAnimEnabled",
-        "AltDragEnabled", "MiddleClickCloseEnabled", "RollUpEnabled", "ContextMenuAnimEnabled",
-        "CurtainDropEnabled",
-        "CurtainDropEnabled",
-        "ElasticDragEnabled", "TextMagnifierEnabled", "TaskbarScrollEnabled",
-        "ElasticDragEnabled", "TextMagnifierEnabled", "TaskbarScrollEnabled",
-        "FlyMinimizeEnabled", "QuickFolderJumpEnabled", "PlainPasteEnabled", "SmoothCaretEnabled",
-        "FlyMinimizeEnabled", "QuickFolderJumpEnabled", "PlainPasteEnabled", "SmoothCaretEnabled",
-        "HotCornersEnabled", "InfiniteWrapEnabled", "MultiMonitorDimmerEnabled", "GrabPanEnabled",
-        "HotCornersEnabled", "InfiniteWrapEnabled", "MultiMonitorDimmerEnabled", "GrabPanEnabled",
-        "LivePipEnabled", "ProximityGhostEnabled", "BreathingEnabled",
-        "LivePipEnabled", "ProximityGhostEnabled", "BreathingEnabled",
-        "MagneticGroupsEnabled", "BreatheCursorEnabled", "BlackHoleMinimizeEnabled", "MomentumTiltEnabled",
-        "MagneticGroupsEnabled", "BreatheCursorEnabled", "BlackHoleMinimizeEnabled", "MomentumTiltEnabled",
-        "MorphingPasteEnabled", "ClipboardAppendEnabled", "CopyFeedbackEnabled", "SmartCapsEnabled",
-        "MorphingPasteEnabled", "ClipboardAppendEnabled", "CopyFeedbackEnabled", "SmartCapsEnabled",
-        "ShakeFindEnabled", "GravityCloseEnabled", "GlideEnabled", "AlwaysOnBottomEnabled"
-        "ShakeFindEnabled", "GravityCloseEnabled", "GlideEnabled", "AlwaysOnBottomEnabled"
-        "ShatterEnabled", "ParallaxEnabled",
-        "ShatterEnabled", "ParallaxEnabled",
-        "SpotlightEnabled", "QuickLookEnabled", "CursorYawnEnabled", "RippleClickEnabled",
-        "SpotlightEnabled", "QuickLookEnabled", "CursorYawnEnabled", "RippleClickEnabled",
-        "TaskbarWaveEnabled", "ToastBounceEnabled", "MonitorThrowEnabled", "BlackHoleDeleteEnabled",
-        "TaskbarWaveEnabled", "ToastBounceEnabled", "MonitorThrowEnabled", "BlackHoleDeleteEnabled",
-        "TypingSoundsEnabled", "PremiumVolumeOSDEnabled", "MicKillSwitchEnabled", "TextExpanderEnabled",
-        "TypingSoundsEnabled", "PremiumVolumeOSDEnabled", "MicKillSwitchEnabled", "TextExpanderEnabled",
         && Abs(eR - startR) < MIN_DRAG && Abs(eB - startB) < MIN_DRAG)
+        && AK_BankTone = Tune("keyTone"))
         , "SystemUsesLightTheme", 0)
         . "&latitude=" GeoLat "&longitude=" GeoLon
         . "?current=temperature_2m,weather_code,wind_speed_10m"
@@ -1575,6 +1559,7 @@
         || (vk >= 0xA0 && vk <= 0xA5))
         || GetKeyState("MButton", "P")) {
         || vk = 0xA0 || vk = 0xA1 || vk = 0xA2 || vk = 0xA3 || vk = 0xA4 || vk = 0xA5)
+        }
         }
         }
         }
@@ -1852,6 +1837,8 @@
         adapt := Tune("snapAdapt")
         again := true
         aHwnd := WinExist("A")
+        AK_BankHotVol "% tone " AK_BankTone "%")
+        AK_KeysDown.Delete(vk)
         alpha := fadeIn ? Round(220 * ease) : Round(220 * (1 - ease))
         alpha := Round(100 * (1 - p))
         alpha := Round(255 * (1 - (t ** 2)))
@@ -2180,8 +2167,7 @@
         entry.y   := y
         EP_IconSize    := C["epIconSize"].Text
         EP_Style       := C["epStyle"].Text
-        epCur := 0
-        epWant := (EP_Style == "Win10")
+        epIcon := (EP_IconSize == "Small") ? 1 : 0
         eqPos := InStr(line, "=")
         exe := StrLower(WinGetProcessName(hwnd))
         exe := WinGetProcessName(hwnd)
@@ -2329,6 +2315,7 @@
         HotCornerTL := C["corner_tl"].Text
         HotCornerTR := C["corner_tr"].Text
         HotIf()
+        HotkeySoundsEnabled := C["hotkeysounds"].Value
         hp := nz - lp                      ; ...subtracted back out, so what is left is the
         hr := DllCall("dwmapi\DwmGetWindowAttribute", "ptr", hwnd, "uint", 9, "ptr", rect, "uint", 16)
         hwnd := 0
@@ -2408,6 +2395,7 @@
         if (!GhostWindows.Has(hwnd))
         if (!GridActive)
         if (!hwnd || !IsRestorable(hwnd))
+        if (!IniCache.Has("epIcon") || IniCache["epIcon"] != epIcon) {
         if (!intersecting) {
         if (!KnownToasts.Has(hwnd)) {
         if (!MC_FALLBACK_NEEDS_SESSION || MC_LiveSessionExe.Has(info.exe))
@@ -2473,7 +2461,6 @@
         if (eh != h)
         if (elapsed <= StealthPanicTimeout) {
         if (ElasticHwnd) {
-        if (epWant != (epCur != 0))
         if (eqPos)
         if (exStyle & 0x80)
         if (exStyle & 0x80)                                       ; WS_EX_TOOLWINDOW
@@ -2484,7 +2471,9 @@
         if (forceW != "")
         if (forceX != "")
         if (format == "camelCase")
-        if (GameModeSuspendedFeatures.Has(feat) && IsSet(%feat%)) {
+        if (GameModeSuspendedFeatures.Has(gmFeat) && IsSet(%gmFeat%))
+        if (GameModeSuspendedFeatures.Has(gmFeat) && IsSet(%gmFeat%))
+        if (GameModeSuspendedFeatures.Has(gmFeat) && IsSet(%gmFeat%))
         if (GetKeyState("LButton", "P") || GetKeyState("RButton", "P") || GetKeyState("MButton", "P"))
         if (GetKeyState("LWin", "P") || GetKeyState("RWin", "P")) {
         if (GhostWindows.Count == 0)
@@ -2504,7 +2493,7 @@
         if (idle > CursorYawnIdleTime) {
         if (InStr(ctrl, "Edit") || InStr(ctrl, "Search") || InStr(ctrl, "Windows.UI.Core.CoreWindow"))
         if (isMuted)
-        if (IsSet(%feat%)) {
+        if (IsSet(%gmFeat%)) {
         if (IsSet(MC_AnyMedia)) {
         if (isTopmost)
         if (iv < 0)
@@ -2625,6 +2614,7 @@
         if (vsPath != "") {
         if (w < 2)
         if (w <= 0 || h <= 0)
+        if (w2 && sb > 0.0) {
         if (WinGetClass(hwnd) = "AutoHotkeyGUI")
         if (WinGetMinMax(hwnd) != 0)
         if (WinGetMinMax(hwnd) != 0)
@@ -2664,6 +2654,7 @@
         if GetRects(hwnd, &eL, &eT, &eR, &eB, &ex, &ey)
         if gh
         if GhostWindows.Has(hwnd) {
+        if gmRestored
         if hbm
         if hbm
         if hdcMem
@@ -2760,8 +2751,8 @@
         Loop count {
         Loop count {
         loop gridY {
-        loop MonitorGetCount() {
         Loop MonitorGetCount() {
+        loop MonitorGetCount() {
         loop nDev {
         Loop Reg, "HKLM\SOFTWARE\WOW6432Node\Microsoft\VisualStudio\SxS\VS7", "V" {
         lp := ((sY & 0xFFFF) << 16) | (sX & 0xFFFF)
@@ -2952,6 +2943,8 @@
         oldText := ControlGetText("Edit1", hwnd)
         OpenAnim       := C["openanim"].Text
         OpenAnim := "None"
+        OpenAnim := "None"
+        OpenAnim := GameModeSuspendedFeatures["OpenAnim"]
         OpenAnim := GameModeSuspendedFeatures["OpenAnim"]
         origH := RolledUpWindows[hwnd]
         OriginalTaskbarState := GetTaskbarState()
@@ -2999,13 +2992,83 @@
         placed := false
         PlainPasteEnabled := C["plainpaste"].Value
         PlayAcousticSound(AK_VoiceForKey(vk))
+        PlayHotkeySound("alert")
+        PlayHotkeySound("command")
         PostMessage(msg, wParam, newLParam,, "ahk_id " sourceHwnd)
         postponed++
         PremiumVolumeOSDEnabled := C["osd"].Value
         prevHwnd := layer.gui.Hwnd
         ProximityGhostEnabled := C["ghost"].Value
         pt := Buffer(8)
+        PutIni(ActiveBorderEnabled ? 1 : 0, "memory", "border")
+        PutIni(AltDragEnabled ? 1 : 0, "memory", "altdrag")
+        PutIni(AlwaysOnBottomEnabled ? 1 : 0, "memory", "bottom")
+        PutIni(BlackHoleDeleteEnabled ? 1 : 0, "mouse", "blackhole")
+        PutIni(BlackHoleMinimizeEnabled ? 1 : 0, "memory", "blackhole")
+        PutIni(BorderColor,              "border", "color")
+        PutIni(BossKeyEnabled ? 1 : 0, "memory", "bosskey")
+        PutIni(BreatheCursorEnabled ? 1 : 0,  "mouse", "breathe")
+        PutIni(BreathingEnabled ? 1 : 0, "memory", "breathing")
+        PutIni(ClipboardAppendEnabled ? 1 : 0, "memory", "clipboardappend")
+        PutIni(ClockAnchor, "taskbar", "clockanchor")
+        PutIni(ClockLocation, "taskbar", "clocklocation")
+        PutIni(ClockUnits, "taskbar", "clockunits")
+        PutIni(ClockWeatherEnabled ? 1 : 0, "taskbar", "clockweather")
+        PutIni(ContextMenuAnimEnabled ? 1 : 0,  "mouse", "contextanim")
+        PutIni(CopyFeedbackEnabled ? 1 : 0, "mouse", "copyfeedback")
+        PutIni(CursorYawnEnabled ? 1 : 0, "mouse", "cursoryawn")
+        PutIni(CurtainDropEnabled ? 1 : 0, "memory", "curtain")
+        PutIni(CustomClockEnabled ? 1 : 0, "taskbar", "customclock")
+        PutIni(DEBUG ? 1 : 0,            "memory", "debuglog")
+        PutIni(ElasticDragEnabled ? 1 : 0,  "mouse", "elasticdrag")
+        PutIni(ElasticScrollEnabled ? 1 : 0,  "snap", "elastic")
+        PutIni(FlyMinimizeEnabled ? 1 : 0, "memory", "fly")
+        PutIni(GlideEnabled ? 1 : 0,     "glide", "enabled")
+        PutIni(GrabPanEnabled ? 1 : 0, "memory", "grabpan")
+        PutIni(GravityCloseEnabled ? 1 : 0, "memory", "gravityclose")
+        PutIni(HotCornerBL, "corners", "bl")
+        PutIni(HotCornerBR, "corners", "br")
+        PutIni(HotCornersEnabled ? 1 : 0, "corners", "enabled")
+        PutIni(HotCornerTL, "corners", "tl")
+        PutIni(HotCornerTR, "corners", "tr")
+        PutIni(HotkeySoundsEnabled ? 1 : 0, "mouse", "hotkeysounds")
+        PutIni(InfiniteWrapEnabled ? 1 : 0, "memory", "wrap")
+        PutIni(LivePipEnabled ? 1 : 0, "memory", "pip")
+        PutIni(MagneticGroupsEnabled ? 1 : 0, "snap", "magnetic")
+        PutIni(MediaFallbackList, "memory", "media_fallback")
+        PutIni(MicKillSwitchEnabled ? 1 : 0, "memory", "mickill")
+        PutIni(MiddleClickCloseEnabled ? 1 : 0, "memory", "midclose")
+        PutIni(MomentumTiltEnabled ? 1 : 0, "mouse", "momentum")
+        PutIni(MonitorThrowEnabled ? 1 : 0, "mouse", "monthrow")
+        PutIni(MorphingPasteEnabled ? 1 : 0, "memory", "morphingpaste")
+        PutIni(MultiMonitorDimmerEnabled ? 1 : 0, "memory", "multidimmer")
+        PutIni(OpenAnim, "memory", "openanim")
+        PutIni(ParallaxEnabled ? 1 : 0, "memory", "parallax")
+        PutIni(PlainPasteEnabled ? 1 : 0, "memory", "plainpaste")
+        PutIni(PremiumVolumeOSDEnabled ? 1 : 0, "memory", "osd")
+        PutIni(ProximityGhostEnabled ? 1 : 0, "memory", "ghost")
+        PutIni(QuickFolderJumpEnabled ? 1 : 0, "memory", "quickfolder")
+        PutIni(QuickLookEnabled ? 1 : 0, "memory", "quicklook")
+        PutIni(RestoreEnabled ? 1 : 0,   "memory", "enabled")
+        PutIni(RippleClickEnabled ? 1 : 0,  "mouse", "ripple")
+        PutIni(RollUpEnabled ? 1 : 0, "memory", "rollup")
+        PutIni(ShakeFindEnabled ? 1 : 0, "mouse", "shakefind")
+        PutIni(ShatterEnabled ? 1 : 0, "mouse", "shatter")
+        PutIni(SmartCapsAction, "memory", "smartcaps_act")
+        PutIni(SmartCapsEnabled ? 1 : 0, "memory", "smartcaps")
+        PutIni(SmartGridEnabled ? 1 : 0, "snap", "smartgrid")
+        PutIni(SmartTaskbarEnabled ? 1 : 0, "taskbar", "smart")
+        PutIni(SmoothCaretEnabled ? 1 : 0, "mouse", "smoothcaret")
+        PutIni(SnapEnabled ? 1 : 0,      "snap", "enabled")
+        PutIni(SpotlightEnabled ? 1 : 0, "memory", "spotlight")
+        PutIni(TaskbarScrollEnabled ? 1 : 0, "memory", "taskbarscroll")
+        PutIni(TaskbarWaveEnabled ? 1 : 0, "taskbar", "wave")
+        PutIni(TextExpanderEnabled ? 1 : 0, "memory", "expander")
+        PutIni(TextMagnifierEnabled ? 1 : 0,  "mouse", "textmag")
+        PutIni(ToastBounceEnabled ? 1 : 0, "taskbar", "toastbounce")
+        PutIni(TrayMinimizeEnabled ? 1 : 0, "memory", "traymin")
         PutIni(TuneFormat(s, Tune(s.key)), s.sec, s.ini)
+        PutIni(TypingSoundsEnabled ? 1 : 0, "mouse", "typingsounds")
         pw := 320, ph := 180
         pw := hw + pad*2
         pw := Round(ph * (sw / sh))
@@ -3330,6 +3393,8 @@
         return
         return
         return
+        return
+        return
         return                         ; already clear: safe to call every frame
         return                        ; one in flight is enough
         return ""
@@ -3367,6 +3432,7 @@
         return defaultVal              ; absent: leave it uncached so it gets written
         return DllCall("GetClassLongW", "ptr", hwnd, "int", GCLP_HICON, "uint")
         return DllCall("Shell32\SHAppBarMessage", "uint", 4, "ptr", abd)
+        return false
         return false
         return false
         return false
@@ -3815,7 +3881,6 @@
         try DirCreate(dirOnly)
         try DllCall("UnhookWinEvent", "ptr", MenuEventHook)
         try DllCall("UnhookWinEvent", "ptr", WinEventHook)
-        try epCur := RegRead(EP_KEY, "OldTaskbar", 0)
         try FileAppend(A_Now " - " msg "`n", logPath)
         try FileDelete(tmpPath)
         try g.Destroy()
@@ -3888,6 +3953,7 @@
         TUNE_INDEX[s.key] := s
         TUNE_VAL[s.key] := TuneClean(s, IsNumber(raw) ? raw : Tune(s.key))
         TUNE_VAL[s.key] := v
+        TuneSave()                       ; every tunable number, in one pass
         tw := dw
         tx := Clamp(Round(VelX * GLIDE_THROW * 0.18), -GLIDE_MAX, GLIDE_MAX)
         tx := dl
@@ -3916,6 +3982,7 @@
         VelX := 0, VelY := 0, PrevX := sL, PrevY := sT
         vLeft := SysGet(76), vTop := SysGet(77)
         vLines.Push(wl, wr)
+        vol := AK_ACTION_VOICES.Has(voice) ? hotVol : keyVol
         vsPath := FindVisualStudio()
         vWidth := SysGet(78), vHeight := SysGet(79)
         vx := SysGet(76), vy := SysGet(77), vw := SysGet(78), vh := SysGet(79)
@@ -3981,15 +4048,28 @@
         ZOrderSpotlight()
         ZOrderSpotlight()
      && Abs(toW - fromW) < 4 && Abs(toH - fromH) < 4)
+    "ActiveBorderEnabled", "SnapEnabled", "ElasticScrollEnabled",
+    "AltDragEnabled", "MiddleClickCloseEnabled", "RollUpEnabled", "ContextMenuAnimEnabled",
+    "AlwaysOnBottomEnabled"
+    "CurtainDropEnabled",
+    "ElasticDragEnabled", "TextMagnifierEnabled", "TaskbarScrollEnabled",
+    "FlyMinimizeEnabled", "QuickFolderJumpEnabled", "PlainPasteEnabled", "SmoothCaretEnabled",
+    "HotCornersEnabled", "InfiniteWrapEnabled", "MultiMonitorDimmerEnabled", "GrabPanEnabled",
+    "LivePipEnabled", "ProximityGhostEnabled", "BreathingEnabled",
+    "MagneticGroupsEnabled", "BreatheCursorEnabled", "BlackHoleMinimizeEnabled", "MomentumTiltEnabled",
+    "MorphingPasteEnabled", "ClipboardAppendEnabled", "CopyFeedbackEnabled", "SmartCapsEnabled",
+    "ShatterEnabled", "ParallaxEnabled",
+    "SpotlightEnabled", "QuickLookEnabled", "CursorYawnEnabled", "RippleClickEnabled",
+    "TaskbarWaveEnabled", "ToastBounceEnabled", "MonitorThrowEnabled", "BlackHoleDeleteEnabled",
+    "TextExpanderEnabled", "ShakeFindEnabled", "GravityCloseEnabled", "GlideEnabled",
+    "TypingSoundsEnabled", "HotkeySoundsEnabled", "PremiumVolumeOSDEnabled", "MicKillSwitchEnabled",
     "Window Tweaks - Hotkeys", "Iconi")
     "WINDOWS AND MODES  (Shift+Alt)`n"
+    , second: second, pitch2: pitch2}
     , step: step, dec: dec, page: page, label: label, hint: hint}
-    ]
-    ]
     {
-    {f0: f0, click: click, body: body, ctau: ctau, btau: btau, ms: ms, second: second}
+    {f0: f0, click: click, body: body, ctau: ctau, btau: btau, ms: ms
     {key: key, sec: sec, ini: ini, def: def, lo: lo, hi: hi
-    }
     }
     }
     }
@@ -4466,12 +4546,12 @@
     } else {
     } else {
     } else {
-    } else {
     } else if (crashX < -4) {
     } else if (crashY < -4) {
     } else if (GlideEnabled && (Abs(dragVX) > 330 || Abs(dragVY) > 330)) {
     } else if (GridActive) {
     } else if (StealthEscCount == 3) {
+    } finally {
     } finally {
     } finally {
     A_Clipboard := A_Clipboard
@@ -4488,13 +4568,15 @@
     ahwnd := WinExist("A")
     AK_BANK := bank
     AK_BANK := Map()
+    AK_BankHotVol := Tune("hotkeyVol")
     AK_BankTone := -1
     AK_BankTone := Tune("keyTone")
     AK_BankVol := -1
     AK_BankVol := Tune("keyVol")
+    AK_Emit(voice)
+    AK_Emit(voice)
     AK_KeyReleased(vk)
     AK_KeysDown := Map()
-    AK_KeysDown.Delete(vk)
     AK_KeysDown[vk] := now
     AK_LastVariant[voice] := n
     AK_Tag(buf,  0, "RIFF")
@@ -4658,6 +4740,7 @@
     C["glide"] := Box(pg, CW, FG, "Enable ice glide (Physics-based throwing)", GlideEnabled, "xm y+16")
     C["grabpan"] := Box(pg, CW, FG, "Universal Grab && Pan (Shift+Alt+Space)", GrabPanEnabled, "xm y+12")
     C["gravityclose"] := Box(pg, CW, FG, "Gravity Drop on Close (Alt+F4)", GravityCloseEnabled, "xm y+16")
+    C["hotkeysounds"] := Box(pg, CW, FG, "Hotkey Sounds", HotkeySoundsEnabled, "xm y+16")
     C["magnetic"] := Box(pg, CW, FG, "Magnetic Window Groups (Shift+Alt+J)", MagneticGroupsEnabled, "xm y+16")
     C["mediafallback"] := pg.AddEdit("xm y+6 w" CW, MediaFallbackList)
     C["mem"] := Box(pg, CW, FG, "Remember window positions", RestoreEnabled, "xm y+16")
@@ -4690,7 +4773,7 @@
     C["toast"] := Box(pg, CW, FG, "Elastic Toast Notifications", ToastBounceEnabled, "xm y+16")
     C["traymin"] := Box(pg, CW, FG, "Minimize to Tray (Shift+Alt+H)", TrayMinimizeEnabled, "xm y+16")
     C["twave"] := Box(pg, CW, FG, "Taskbar Icon Wave", TaskbarWaveEnabled, "xm y+16")
-    C["typingsounds"] := Box(pg, CW, FG, "Mechanical Keystroke Sounds", TypingSoundsEnabled, "xm y+16")
+    C["typingsounds"] := Box(pg, CW, FG, "Mechanical Keystroke Sounds", TypingSoundsEnabled, "xm y+12")
     C["wrap"] := Box(pg, CW, FG, "Infinite Cursor Wrap (Shift+Alt+I)", InfiniteWrapEnabled, "xm y+16")
     C[key] := pg.AddEdit("x196 yp-3 w70" (s.dec > 0 ? "" : " Number"), TuneText(key))
     cache[guid] := buf
@@ -4905,6 +4988,7 @@
     else
     else
     else
+    else
     else {
     else if (action == "Action Center")
     else if (action == "Lock Screen")
@@ -4920,7 +5004,6 @@
     EnterStealthPanic()
     EP_IconSize := "Large"
     EP_Style := "Win11"
-    epIcon := (EP_IconSize == "Small") ? 1 : 0
     exStyle := 0
     ext := StrLower(RegExReplace(path, ".*\.([^.]+)$", "$1"))
     f := 1 - (0.85 ** (dt / FRAME_MS))
@@ -4930,8 +5013,6 @@
     FadeGui(g, 255)
     FadeGui(MorphGui, 220)
     FadeGuiStep(dt, now) {
-    features := [
-    features := [
     FG   := dark ? "FFFFFF" : "141414"      ; primary text
     fh := ""
     finalH := (z.B - z.T) + diffH
@@ -4954,10 +5035,12 @@
     for cls in order {
     for dev in MC_Endpoints {
     for eh in grp {
-    for feat in features {
-    for feat in features {
     for g in SmartGridGuis
     for g in SmartGridGuis {
+    for gmFeat in GAME_MODE_FEATURES {
+    for gmFeat in GAME_MODE_FEATURES {
+    for gmFeat in GAME_MODE_FEATURES {
+    for gmFeat in GAME_MODE_FEATURES {
     for h in g1
     for h in g2 {
     for h in newGroup
@@ -5087,6 +5170,10 @@
     global
     global
     global
+    global
+    global
+    global
+    global
     global ActiveAnimations
     global ActiveAnimations
     global ActiveAnimations
@@ -5096,8 +5183,6 @@
     global ActiveBorderEnabled, LastBorderHwnd, LastBorderX, LastBorderY, LastBorderW, LastBorderH
     global ActiveBorderEnabled, ProximityGhostEnabled, LivePipEnabled
     global ActiveBorderEnabled, ProximityGhostEnabled, LivePipEnabled
-    global ActiveBorderEnabled, SnapEnabled, ElasticScrollEnabled
-    global ActiveBorderEnabled, SnapEnabled, ElasticScrollEnabled
     global ActiveBorderGui, ActiveBorderShown
     global ActiveBorderGui, ActiveBorderShown, LastBorderHwnd
     global ActiveBorderGui, ActiveBorderShown, LastBorderHwnd
@@ -5107,12 +5192,12 @@
     global ActiveShatters
     global ActiveShatters
     global AK_BANK, AK_BankVol, AK_BankTone, AK_KeysDown
-    global AK_BANK, AK_VOICES, AK_VARIANTS, AK_BankVol, AK_BankTone, TypingSoundsEnabled
+    global AK_BANK, AK_VARIANTS, AK_LastVariant
+    global AK_BANK, AK_VOICES, AK_ACTION_VOICES, AK_VARIANTS
+    global AK_BankVol, AK_BankHotVol, AK_BankTone, TypingSoundsEnabled, HotkeySoundsEnabled
     global AK_KeysDown
     global AK_KeysDown
     global AK_SR
-    global AltDragEnabled, MiddleClickCloseEnabled, RollUpEnabled, ContextMenuAnimEnabled
-    global AltDragEnabled, MiddleClickCloseEnabled, RollUpEnabled, ContextMenuAnimEnabled
     global AnimOwner
     global AnimOwner, ANIM_CHANNELS
     global AnimOwner, AnimOwnerKey
@@ -5144,8 +5229,6 @@
     global CurrentDragAlpha          ; assigned below - without this it is a local and the reset never lands
     global CursorYawnEnabled, CursorYawnActive, CursorYawnIdleTime
     global CurtainDropEnabled
-    global CurtainDropEnabled
-    global CurtainDropEnabled
     global CurtainDropped, CurtainWindows
     global CurtainDropped, CurtainWindows
     global CustomClockBuiltFor, CustomClockRect
@@ -5168,15 +5251,11 @@
     global DragHwnd, VelX, VelY, PrevX, PrevY, ParallaxEnabled, CurrentDragAlpha, FRAME_MS, DEBUG
     global DragTrailGui, DragTrailActive, DragTrailX, DragTrailY, DragTrailVX, DragTrailVY
     global DragTrailStartX, DragTrailStartY, DragTrailActive, DragTrailX, DragTrailY, DragTrailGui
-    global ElasticDragEnabled, TextMagnifierEnabled, TaskbarScrollEnabled
-    global ElasticDragEnabled, TextMagnifierEnabled, TaskbarScrollEnabled
     global ElasticEdgeStates, ElasticAwayCounts
     global ElasticHwnd, ElasticBaseX, ElasticBaseY
     global ElasticHwnd, ElasticOffsetY, ElasticTargetY, ElasticVel, ElasticBaseX, ElasticBaseY
     global ElasticHwnd, ElasticOffsetY, ElasticTargetY, ElasticVel, ElasticBaseX, ElasticBaseY
     global ElasticTargetY
-    global FlyMinimizeEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, SmoothCaretEnabled
-    global FlyMinimizeEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, SmoothCaretEnabled
     global FocusFeather, FocusRadius
     global FocusFeather, FocusRadius
     global FocusGuis, FocusTargetHwnd
@@ -5185,8 +5264,6 @@
     global FocusModeEnabled, FocusTargetHwnd, SpotlightTarget
     global FrameProduceMs, FrameRenderMs, FrameOverbudget
     global GameModeActive
-    global GameModeActive, GameModeSuspendedFeatures
-    global GameModeActive, GameModeSuspendedFeatures
     global GeoFor, GeoLat, GeoLon, CustomClockWind
     global GeoLat, GeoLon, ClockUnits
     global GhostWindows
@@ -5206,8 +5283,7 @@
     global HotCornersEnabled
     global HotCornersEnabled
     global HotCornersEnabled, HotCornerTL, HotCornerTR, HotCornerBL, HotCornerBR
-    global HotCornersEnabled, InfiniteWrapEnabled, MultiMonitorDimmerEnabled, GrabPanEnabled
-    global HotCornersEnabled, InfiniteWrapEnabled, MultiMonitorDimmerEnabled, GrabPanEnabled
+    global HotkeySoundsEnabled
     global InfiniteWrapEnabled
     global InfiniteWrapEnabled
     global InfiniteWrapEnabled, DragHwnd
@@ -5219,8 +5295,6 @@
     global LastNonModifierKeyTime
     global LayoutUndo
     global LayoutUndo, SizeCycleIdx
-    global LivePipEnabled, ProximityGhostEnabled, BreathingEnabled
-    global LivePipEnabled, ProximityGhostEnabled, BreathingEnabled
     global LOG_FILE
     global LOG_FILE, MAX_LOG_BYTES
     global LogBuf, LOG_FILE
@@ -5232,8 +5306,6 @@
     global MagHostGui, MagFrameGui, MagChildHwnd, MagFailed
     global MagneticGroupsEnabled
     global MagneticGroupsEnabled
-    global MagneticGroupsEnabled, BreatheCursorEnabled, BlackHoleMinimizeEnabled, MomentumTiltEnabled
-    global MagneticGroupsEnabled, BreatheCursorEnabled, BlackHoleMinimizeEnabled, MomentumTiltEnabled
     global MagneticGroupsEnabled, MagGroups
     global MagStartX, MagStartY, MagActive
     global MC_CLSID_MMDeviceEnumerator, MC_IID_IMMDeviceEnumerator
@@ -5278,8 +5350,6 @@
     global MorphGui, MorphText, MORPH_PREVIEW_CHARS
     global MorphIndex, MorphFormats, MorphOriginalText
     global MorphIndex, MorphFormats, MorphOriginalText
-    global MorphingPasteEnabled, ClipboardAppendEnabled, CopyFeedbackEnabled, SmartCapsEnabled
-    global MorphingPasteEnabled, ClipboardAppendEnabled, CopyFeedbackEnabled, SmartCapsEnabled
     global MorphMode, MorphIndex, MorphOriginalText, MorphFormats, MORPH_MAX_LEN
     global MultiMonitorDimmerEnabled
     global MultiMonitorDimmerEnabled, DimmerGuis
@@ -5287,8 +5357,6 @@
     global NAV, SEL, SELF, FG
     global OldClipboard
     global OldClipboard, LastCtrlC_Time, CLIP_DOUBLE_MS, CLIP_BACKUP_MS
-    global OpenAnim
-    global OpenAnim
     global OpenAnim, ContextMenuAnimEnabled, RippleClickEnabled
     global OpenAnim, ContextMenuAnimEnabled, RippleClickEnabled
     global OpenAnim, GhostHiddenWindows
@@ -5314,7 +5382,7 @@
     global QuickLookGui
     global QuickLookGui
     global QuickLookGui
-    global RestoreEnabled, BreathingEnabled, OpenAnim, FlyMinimizeEnabled, RollUpEnabled, TrayMinimizeEnabled, BossKeyEnabled, AltDragEnabled, TaskbarScrollEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, MorphingPasteEnabled, ClipboardAppendEnabled, SmoothCaretEnabled, TypingSoundsEnabled, CopyFeedbackEnabled, SmartCapsEnabled, SmartCapsAction, ParallaxEnabled, EP_Style, EP_IconSize
+    global RestoreEnabled, BreathingEnabled, OpenAnim, FlyMinimizeEnabled, RollUpEnabled, TrayMinimizeEnabled, BossKeyEnabled, AltDragEnabled, TaskbarScrollEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, MorphingPasteEnabled, ClipboardAppendEnabled, SmoothCaretEnabled, TypingSoundsEnabled, HotkeySoundsEnabled, CopyFeedbackEnabled, SmartCapsEnabled, SmartCapsAction, ParallaxEnabled, EP_Style, EP_IconSize
     global RestoreEnabled, PendingPositions
     global RestoreEnabled, POS_FILE
     global RestoreEnabled, Win, C
@@ -5351,12 +5419,8 @@
     global ShakeFindActive, SF_Phase, SF_TargetSize, SF_Size, SF_Vel
     global ShakeFindActive, SF_Size, SF_TargetSize, SF_Vel, SF_Hwnd, SF_CircleSize
     global ShakeFindEnabled, CursorYawnEnabled, ShakeFindActive
-    global ShakeFindEnabled, GravityCloseEnabled, GlideEnabled, AlwaysOnBottomEnabled
-    global ShakeFindEnabled, GravityCloseEnabled, GlideEnabled, AlwaysOnBottomEnabled
     global ShakeFindEnabled, ShakeFindActive
     global ShakePrevX, ShakePrevY, ShakeDir, ShakeCount, ShakeLastTime
-    global ShatterEnabled, ParallaxEnabled
-    global ShatterEnabled, ParallaxEnabled
     global SizeCycleIdx, SIZE_CYCLE
     global SmartCapsAction
     global SmartGridEnabled, GridActive
@@ -5380,8 +5444,6 @@
     global SparkHook, MicKillSwitchEnabled, SpotlightEnabled, SmoothCaretEnabled, TypingSoundsEnabled
     global SpotlightEnabled, BreathingEnabled, CursorYawnEnabled
     global SpotlightEnabled, BreathingEnabled, CursorYawnEnabled
-    global SpotlightEnabled, QuickLookEnabled, CursorYawnEnabled, RippleClickEnabled
-    global SpotlightEnabled, QuickLookEnabled, CursorYawnEnabled, RippleClickEnabled
     global SpotlightGui
     global SpotlightGui, SpotlightInput, SpotlightResult
     global SpotlightGui, SpotlightInput, SpotlightResult
@@ -5407,8 +5469,6 @@
     global TaskbarWaveEnabled, CustomClockEnabled, ClockLocation, ClockUnits, ClockAnchor, ClockWeatherEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled, CursorYawnEnabled, ShatterEnabled
     global TaskbarWaveEnabled, ToastBounceEnabled
     global TaskbarWaveEnabled, ToastBounceEnabled
-    global TaskbarWaveEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled
-    global TaskbarWaveEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled
     global TaskbarWaveGui, TaskbarWaveThumb, TaskbarWaveEnabled
     global TextExpanderEnabled
     global TextMagnifierEnabled, RippleClickEnabled, ElasticDragEnabled
@@ -5423,10 +5483,8 @@
     global TUNE_VAL
     global TUNE_VAL, TUNE_SPEC, C
     global TUNE_VAL, TUNE_SPEC, INI, IniCache
-    global TypingSoundsEnabled, AK_BANK, AK_BankVol, AK_BankTone
-    global TypingSoundsEnabled, AK_BANK, AK_VARIANTS, AK_LastVariant
-    global TypingSoundsEnabled, PremiumVolumeOSDEnabled, MicKillSwitchEnabled, TextExpanderEnabled
-    global TypingSoundsEnabled, PremiumVolumeOSDEnabled, MicKillSwitchEnabled, TextExpanderEnabled
+    global TypingSoundsEnabled
+    global TypingSoundsEnabled, HotkeySoundsEnabled, AK_BANK, AK_BankVol, AK_BankHotVol, AK_BankTone
     global VelX, VelY, GLIDE_THROW, GLIDE_MAX
     global WeatherNextMs, WeatherFailMs
     global WeatherNextMs, WeatherFailMs, ClockLocation, ClockUnits
@@ -5441,6 +5499,7 @@
     global WinEventCb, WinEventHook, MenuEventCb, MenuEventHook
     global WinEventHook, WinEventCb, RolledUpWindows, CustomTrans
     glyph := fpt * 4 / 3 * 0.6
+    gmRestored := false
     GrabPanEnabled := !GrabPanEnabled
     GrabPanEnabled := IniStr("memory", "grabpan", "0") = "1"
     GravityCloseEnabled := IniStr("memory", "gravityclose", "1") = "1"
@@ -5489,6 +5548,8 @@
     HotCornerTR := IniPick("corners", "tr", CORNER_ACTIONS, "Task View")
     HotIf()
     HotIf(IsExpanderActive)
+    HotkeySoundsEnabled := IniStr("mouse", "hotkeysounds", "1") = "1"
+    hotVol := Tune("hotkeyVol") / 100
     hovered := 0
     hProc := DllCall("OpenProcess", "uint", 0x1000, "int", 0, "uint", pid, "ptr")
     hr := DllCall("dwmapi\DwmGetColorizationColor", "UInt*", &color, "Int*", &blend)
@@ -5700,6 +5761,8 @@
     if (!ElasticScrollEnabled)
     if (!FocusModeEnabled && FocusGuis.Length)
     if (!force && ActiveAnimations.Count)
+    if (!GameModeActive || !GameModeSuspendedFeatures.Count)
+    if (!GameModeActive)
     if (!GameModeActive)
     if (!GetKeyState("LButton", "P")) {
     if (!GetKeyState("LButton", "P")) {
@@ -5710,12 +5773,12 @@
     if (!GrabPanEnabled) {
     if (!guiObj.HasProp("Interactive") || !guiObj.Interactive)
     if (!HotCornersEnabled)
+    if (!HotkeySoundsEnabled)
     if (!hwnd || !DllCall("IsWindow", "ptr", hwnd)) {
     if (!hwnd)
     if (!hwnd) {
     if (!idx) {
     if (!InfiniteWrapEnabled)
-    if (!IniCache.Has("epIcon") || IniCache["epIcon"] != epIcon) {
     if (!inside) {
     if (!IsNumber(StealthPanicTimeout) || StealthPanicTimeout < 100)
     if (!IsRestorable(hwnd) || !IsMainApplicationWindow(hwnd))
@@ -5751,9 +5814,9 @@
     if (!TaskbarWaveGui) {
     if (!tbHwnd || !DllCall("IsWindowVisible", "ptr", tbHwnd)) {
     if (!TrayMinimizeEnabled)
+    if (!TypingSoundsEnabled && !HotkeySoundsEnabled)
+    if (!TypingSoundsEnabled && !HotkeySoundsEnabled) {
     if (!TypingSoundsEnabled)
-    if (!TypingSoundsEnabled)
-    if (!TypingSoundsEnabled) {
     if (!Win || !CurPage || !Pages.Has(CurPage))
     if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82))
     if ((code >= 71 && code <= 77) || code = 85 || code = 86)
@@ -5786,7 +5849,7 @@
     if (ActiveDeleteGuis.Has(animKey)) {
     if (ActiveShatters.Has(animKey)) {
     if (ahwnd != QuickLookGui.Hwnd && cls != "CabinetWClass")
-    if (AK_BANK.Count && AK_BankVol = Tune("keyVol") && AK_BankTone = Tune("keyTone"))
+    if (AK_BANK.Count && AK_BankVol = Tune("keyVol") && AK_BankHotVol = Tune("hotkeyVol")
     if (AK_LastVariant.Has(voice) && AK_LastVariant[voice] = n)
     if (alpha != "") {
     if (AnimOwner.Has(slot) && AnimOwner[slot] != key)
@@ -5861,8 +5924,10 @@
     if (g.mons.Length < 2) {
     if (g1 = g2)
     if (GameModeActive)
-    if (GameModeActive) {
-    if (GameModeSuspendedFeatures.Has("OpenAnim") && IsSet(OpenAnim)) {
+    if (GameModeActive)
+    if (GameModeSuspendedFeatures.Has("OpenAnim") && IsSet(OpenAnim))
+    if (GameModeSuspendedFeatures.Has("OpenAnim") && IsSet(OpenAnim))
+    if (GameModeSuspendedFeatures.Has("OpenAnim") && IsSet(OpenAnim))
     if (GeoFor != ClockLocation)
     if (GhostWindows.Count == 0)
     if (GhostWindows.Count == 1)
@@ -6075,6 +6140,7 @@
     if (zoneIndex < 1 || zoneIndex > SmartGridZones.Length)
     if ActiveAnimations.Has(key)
     if ahwnd
+    if AK_KeysDown.Has(vk)
     if Anim_Owner(hwnd, "geom")
     if ApplyLayout(hwnd, tx, ty, tw, th)
     if BottomWindows.Has(hwnd) {
@@ -6192,6 +6258,7 @@
     key := WindowKey(hwnd)
     keys := []
     keys := []
+    keyVol := Tune("keyVol") / 100
     L := Clamp(L, vx - w + margin, vx + vw - margin)
     landed := OnSnapLanded.Bind(hwnd, destX, destY, crashX, crashY)
     last := lastTriggers.Has(A_ThisHotkey) ? lastTriggers[A_ThisHotkey] : 0
@@ -6222,6 +6289,7 @@
     Lbl(pg, FG, "New window animation", "xm y+16")
     Lbl(pg, FG, "Overlays", "xm y+20")
     Lbl(pg, FG, "Sit beside", "xm y+16", 190)
+    Lbl(pg, FG, "Sound", "xm y+20")
     Lbl(pg, FG, "Taskbar Style", "xm y+16")
     Lbl(pg, FG, "Top Left:", "xm y+20")
     Lbl(pg, FG, "Top Right:", "x+30 yp+3")
@@ -6523,6 +6591,11 @@
     PlayAcousticSound("copy")
     PlayAcousticSound("cut")
     PlayAcousticSound("paste")
+    PlayHotkeySound("command")
+    PlayHotkeySound("toggleoff")
+    PlayHotkeySound("toggleon")
+    PlayHotkeySound(isOn ? "toggleon" : "toggleoff")
+    PlayHotkeySound(n ? "alert" : "command")
     PollWeather()
     PortalScaleStep(dt, now) {
     pos := 1
@@ -6536,73 +6609,6 @@
     props := Buffer(48, 0)
     ProximityGhostEnabled := IniStr("memory", "ghost", "1") = "1"
     pSE := 0
-    PutIni(ActiveBorderEnabled ? 1 : 0, "memory", "border")
-    PutIni(AltDragEnabled ? 1 : 0, "memory", "altdrag")
-    PutIni(AlwaysOnBottomEnabled ? 1 : 0, "memory", "bottom")
-    PutIni(BlackHoleDeleteEnabled ? 1 : 0, "mouse", "blackhole")
-    PutIni(BlackHoleMinimizeEnabled ? 1 : 0, "memory", "blackhole")
-    PutIni(BorderColor,              "border", "color")
-    PutIni(BossKeyEnabled ? 1 : 0, "memory", "bosskey")
-    PutIni(BreatheCursorEnabled ? 1 : 0,  "mouse", "breathe")
-    PutIni(BreathingEnabled ? 1 : 0, "memory", "breathing")
-    PutIni(ClipboardAppendEnabled ? 1 : 0, "memory", "clipboardappend")
-    PutIni(ClockAnchor, "taskbar", "clockanchor")
-    PutIni(ClockLocation, "taskbar", "clocklocation")
-    PutIni(ClockUnits, "taskbar", "clockunits")
-    PutIni(ClockWeatherEnabled ? 1 : 0, "taskbar", "clockweather")
-    PutIni(ContextMenuAnimEnabled ? 1 : 0,  "mouse", "contextanim")
-    PutIni(CopyFeedbackEnabled ? 1 : 0, "mouse", "copyfeedback")
-    PutIni(CursorYawnEnabled ? 1 : 0, "mouse", "cursoryawn")
-    PutIni(CurtainDropEnabled ? 1 : 0, "memory", "curtain")
-    PutIni(CustomClockEnabled ? 1 : 0, "taskbar", "customclock")
-    PutIni(DEBUG ? 1 : 0,            "memory", "debuglog")
-    PutIni(ElasticDragEnabled ? 1 : 0,  "mouse", "elasticdrag")
-    PutIni(ElasticScrollEnabled ? 1 : 0,  "snap", "elastic")
-    PutIni(FlyMinimizeEnabled ? 1 : 0, "memory", "fly")
-    PutIni(GlideEnabled ? 1 : 0,     "glide", "enabled")
-    PutIni(GrabPanEnabled ? 1 : 0, "memory", "grabpan")
-    PutIni(GravityCloseEnabled ? 1 : 0, "memory", "gravityclose")
-    PutIni(HotCornerBL, "corners", "bl")
-    PutIni(HotCornerBR, "corners", "br")
-    PutIni(HotCornersEnabled ? 1 : 0, "corners", "enabled")
-    PutIni(HotCornerTL, "corners", "tl")
-    PutIni(HotCornerTR, "corners", "tr")
-    PutIni(InfiniteWrapEnabled ? 1 : 0, "memory", "wrap")
-    PutIni(LivePipEnabled ? 1 : 0, "memory", "pip")
-    PutIni(MagneticGroupsEnabled ? 1 : 0, "snap", "magnetic")
-    PutIni(MediaFallbackList, "memory", "media_fallback")
-    PutIni(MicKillSwitchEnabled ? 1 : 0, "memory", "mickill")
-    PutIni(MiddleClickCloseEnabled ? 1 : 0, "memory", "midclose")
-    PutIni(MomentumTiltEnabled ? 1 : 0, "mouse", "momentum")
-    PutIni(MonitorThrowEnabled ? 1 : 0, "mouse", "monthrow")
-    PutIni(MorphingPasteEnabled ? 1 : 0, "memory", "morphingpaste")
-    PutIni(MultiMonitorDimmerEnabled ? 1 : 0, "memory", "multidimmer")
-    PutIni(OpenAnim, "memory", "openanim")
-    PutIni(ParallaxEnabled ? 1 : 0, "memory", "parallax")
-    PutIni(PlainPasteEnabled ? 1 : 0, "memory", "plainpaste")
-    PutIni(PremiumVolumeOSDEnabled ? 1 : 0, "memory", "osd")
-    PutIni(ProximityGhostEnabled ? 1 : 0, "memory", "ghost")
-    PutIni(QuickFolderJumpEnabled ? 1 : 0, "memory", "quickfolder")
-    PutIni(QuickLookEnabled ? 1 : 0, "memory", "quicklook")
-    PutIni(RestoreEnabled ? 1 : 0,   "memory", "enabled")
-    PutIni(RippleClickEnabled ? 1 : 0,  "mouse", "ripple")
-    PutIni(RollUpEnabled ? 1 : 0, "memory", "rollup")
-    PutIni(ShakeFindEnabled ? 1 : 0, "mouse", "shakefind")
-    PutIni(ShatterEnabled ? 1 : 0, "mouse", "shatter")
-    PutIni(SmartCapsAction, "memory", "smartcaps_act")
-    PutIni(SmartCapsEnabled ? 1 : 0, "memory", "smartcaps")
-    PutIni(SmartGridEnabled ? 1 : 0, "snap", "smartgrid")
-    PutIni(SmartTaskbarEnabled ? 1 : 0, "taskbar", "smart")
-    PutIni(SmoothCaretEnabled ? 1 : 0, "mouse", "smoothcaret")
-    PutIni(SnapEnabled ? 1 : 0,      "snap", "enabled")
-    PutIni(SpotlightEnabled ? 1 : 0, "memory", "spotlight")
-    PutIni(TaskbarScrollEnabled ? 1 : 0, "memory", "taskbarscroll")
-    PutIni(TaskbarWaveEnabled ? 1 : 0, "taskbar", "wave")
-    PutIni(TextExpanderEnabled ? 1 : 0, "memory", "expander")
-    PutIni(TextMagnifierEnabled ? 1 : 0,  "mouse", "textmag")
-    PutIni(ToastBounceEnabled ? 1 : 0, "taskbar", "toastbounce")
-    PutIni(TrayMinimizeEnabled ? 1 : 0, "memory", "traymin")
-    PutIni(TypingSoundsEnabled ? 1 : 0, "mouse", "typingsounds")
     px := blockX - 12
     qualifies := MC_MeterOk
     QuickFolderJumpEnabled := IniStr("memory", "quickfolder", "1") = "1"
@@ -6677,8 +6683,8 @@
     return (v >= 256) ? 255 : v
     return {alpha: Round(255 - f * (255 - TuneAlpha("parallaxMin"))), fade: f}
     return 0
-    return 0
     Return 0
+    return 0
     return 0
     return 1
     return 1
@@ -6744,6 +6750,7 @@
     return t
     return text
     return TextExpanderEnabled
+    return true
     return true
     return true
     return true
@@ -6857,6 +6864,7 @@
     sAt := v.second ? Round(v.second * sr) : 0
     SaveSettings()
     SaveSettings()
+    sb := 0.0                              ; and so does the second body, if there is one
     SchedulerLastTime := now
     ScreenGeom := ""
     se := 0.0                              ; the second click starts silent
@@ -7065,6 +7073,7 @@
     Sub(pg, 250, cSub, "auto = Windows accent, or a hex RRGGBB", "x+12 yp+3")
     Sub(pg, 250, cSub, "TrayEdge covers nothing", "x+12 yp+3")
     Sub(pg, 250, subCol, s.hint " (" TuneFormat(s, s.lo) "-" TuneFormat(s, s.hi)
+    Sub(pg, CW, cSub, "A distinct sound when a command runs - rising for a feature switched on, falling for off, a deeper tone for restore-all and the boss key.", "xm y+8")
     Sub(pg, CW, cSub, "A fast, minimalist search bar for calculations, folders, and apps.", "xm y+8")
     Sub(pg, CW, cSub, "A synthesised switch click on every key, with its own voice for space, enter, backspace and copy/cut/paste.", "xm y+8")
     Sub(pg, CW, cSub, "A window fades while you drag it and springs back to solid when you let go.", "xm y+8")
@@ -7321,6 +7330,7 @@
     try FlushLog()
     try g.Destroy()
     try g.Destroy()
+    try gmRestored := GameModeUnsuspendForWrite()
     try HideCustomClock()
     try Hotstring(":?*:@@date", (*) => Send(FormatTime(, "yyyy-MM-dd")), "On")
     try Hotstring(":?*:@@time", (*) => Send(FormatTime(, "HH:mm")), "On")
@@ -7432,8 +7442,8 @@
     try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
     try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
     try WinGetPos(&x, &cy, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&X, &Y, &W, &H, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(, , &bounceW, &bounceH, hwnd)
     try WinGetPos(, , &winW, &winH, hwnd)
@@ -7442,8 +7452,9 @@
     try WinHide(hwnd)
     try WinMove(destX, destY, destW, destH, hwnd)
     try WinSetAlwaysOnTop(1, MorphGui.Hwnd)
-    try WriteLog("keysounds: rendered " bank.Count " clips, vol " AK_BankVol "% tone " AK_BankTone "%")
+    try WriteLog("keysounds: rendered " bank.Count " clips, keys " AK_BankVol "% actions "
     try WritePositions()
+    try WriteSettings()
     try WriteSettings()
     TuneInit()
     TuneInit()
@@ -7476,8 +7487,9 @@
     TuneRow(pg, "glideSettle", FG, cSub)
     TuneRow(pg, "glideThrow",  FG, cSub)
     TuneRow(pg, "gridGap", FG, cSub)
-    TuneRow(pg, "keyTone", FG, cSub)
-    TuneRow(pg, "keyVol",  FG, cSub)
+    TuneRow(pg, "hotkeyVol", FG, cSub)
+    TuneRow(pg, "keyTone",   FG, cSub)
+    TuneRow(pg, "keyVol",    FG, cSub)
     TuneRow(pg, "osdAlpha", FG, cSub)
     TuneRow(pg, "osdHide",  FG, cSub)
     TuneRow(pg, "osdStep",  FG, cSub)
@@ -7498,7 +7510,6 @@
     TuneRow(pg, "wrapSpeed", FG, cSub)
     TuneRow(pg, "wrapTol",   FG, cSub)
     TuneRow(pg, "yawnIdle", FG, cSub)
-    TuneSave()                       ; every tunable number, in one pass
     tw := cols * 9
     tw := Round((wr - wl) * frac), th := Round((wb - wt) * frac)
     tw := Round(fw * dw / sw), th := Round(fh * dh / sh)
@@ -7541,7 +7552,6 @@
     visibleY := WB - 64 - margin
     visibleY := WT + 10
     vLines := []
-    vol := Tune("keyVol") / 100
     vswhere := EnvGet("ProgramFiles(x86)") "\Microsoft Visual Studio\Installer\vswhere.exe"
     vX := 0, vY := 0
     vX := L - PrevX
@@ -7556,6 +7566,7 @@
     w := wr - wl, h := wb - wt
     w0 := 6.283185307 * (v.f0 * pitch) / sr
     w1 := w0 * 2.63          ; the plate's second partial - inharmonic on purpose, a plain
+    w2 := v.pitch2 ? (w0 * v.pitch2) : 0
     wanted := BreathingEnabled || MultiMonitorDimmerEnabled || ProximityGhostEnabled || ParallaxEnabled
     wanted := TaskbarWaveEnabled || ToastBounceEnabled
     WeatherFailed("the request could not be started")
@@ -7705,15 +7716,19 @@ $^v:: {
 *+!WheelUp::ChangeTransparency(1)
 *CapsLock:: {
 *MButton:: {
+, "alert"     , AK_Voice(110, 0.46, 0.90, 0.0040, 0.042, 190, 0.075, 1.000))
 , "backspace" , AK_Voice(150, 0.52, 0.44, 0.0032, 0.022, 52)
+, "command"   , AK_Voice(262, 0.50, 0.60, 0.0024, 0.018,  74)
 , "copy"      , AK_Voice(238, 0.60, 0.30, 0.0026, 0.014, 62, 0.034)
 , "cut"       , AK_Voice(262, 0.62, 0.26, 0.0022, 0.012, 54, 0.020)
 , "enter"     , AK_Voice(126, 0.60, 0.58, 0.0036, 0.028, 68, 0.005)
 , "modifier"  , AK_Voice(132, 0.38, 0.40, 0.0038, 0.024, 52)
 , "operator"  , AK_Voice(186, 0.50, 0.34, 0.0030, 0.016, 44)
-, "paste"     , AK_Voice(92 , 0.46, 0.70, 0.0042, 0.038, 88))
+, "paste"     , AK_Voice(92 , 0.46, 0.70, 0.0042, 0.038, 88)
 , "space"     , AK_Voice(104, 0.50, 0.62, 0.0040, 0.030, 72, 0.007)
 , "structural", AK_Voice(205, 0.62, 0.36, 0.0028, 0.017, 46)
+, "toggleoff" , AK_Voice(196, 0.42, 0.75, 0.0026, 0.026, 132, 0.060, 0.667)
+, "toggleon"  , AK_Voice(196, 0.42, 0.75, 0.0026, 0.026, 132, 0.060, 1.500)
 , TS("animBounce"   , "anim"     , "bounce"      ,     15,     1,     40,     1, 0, "anim"   , "Snap bounce depth"      , "px of squash on impact")
 , TS("animBounceMs" , "anim"     , "bouncems"    ,    150,    60,    600,    10, 0, "anim"   , "Snap bounce"            , "ms")
 , TS("animFadeMs"   , "anim"     , "fadems"      ,    110,    30,    500,    10, 0, "anim"   , "Overlay fade"           , "ms for dimmers and previews")
@@ -7742,8 +7757,9 @@ $^v:: {
 , TS("glideSettle"  , "glide"    , "settle"      ,      6,     0,     30,     1, 0, "win"    , "Settle overshoot"       , "px past the target on a hard landing, 0 = none")
 , TS("glideThrow"   , "glide"    , "throw"       ,    0.9,     0,      3,   0.1, 1, "win"    , "Throw strength"         , "0 = stop where you let go")
 , TS("gridGap"      , "snap"     , "smartgap"    ,      8,     0,     40,     2, 0, "win"    , "Tiling grid gap"        , "px between tiled windows")
+, TS("hotkeyVol"    , "mouse"    , "hotkeysoundvol",   90,     5,    100,     5, 0, "multi"  , "Hotkey sound volume"    , "% of full scale")
 , TS("keyTone"      , "mouse"    , "keysoundtone",    100,    60,    180,     5, 0, "multi"  , "Keystroke pitch"        , "% - lower is a deeper thock, higher is a sharper clack")
-, TS("keyVol"       , "mouse"    , "keysoundvol" ,     55,     5,    100,     5, 0, "multi"  , "Keystroke volume"       , "% of full scale")
+, TS("keyVol"       , "mouse"    , "keysoundvol" ,     80,     5,    100,     5, 0, "multi"  , "Keystroke volume"       , "% of full scale")
 , TS("osdAlpha"     , "osd"      , "alpha"       ,     86,    40,    100,     5, 0, "media"  , "OSD opacity"            , "%")
 , TS("osdHide"      , "osd"      , "hidems"      ,   1500,   500,  10000,   250, 0, "media"  , "OSD hold time"          , "ms on screen after the last change")
 , TS("osdStep"      , "osd"      , "volumestep"  ,      2,     1,     20,     1, 0, "media"  , "Volume step"            , "% per wheel notch")
@@ -7764,8 +7780,13 @@ $^v:: {
 , TS("wrapTol"      , "wrap"     , "tolerance"   ,      2,     0,     20,     1, 0, "multi"  , "Edge tolerance"         , "px band that counts as the edge")
 , TS("yawnIdle"     , "mouse"    , "cursoryawntime", 900000, 60000, 7200000, 60000, 0, "multi", "Cursor yawn after"    , "ms idle (900000 = 15 min)")
 ]
+]
 ^!v:: {
 ^g:: {
+}
+}
+}
+}
 }
 }
 }
@@ -8224,12 +8245,13 @@ ActivateExistingInstance(exeName) {
 ActivateExplorer(args) {
 ActiveBorderMonitorStep() {
 AK_BuildBank() {
+AK_Emit(voice) {
 AK_IsRepeat(vk) {
 AK_KeyReleased(vk) {
 AK_Render(v, pitch, vol) {
 AK_Shutdown() {
 AK_Tag(buf, off, tag) {
-AK_Voice(f0, click, body, ctau, btau, ms, second := 0) =>
+AK_Voice(f0, click, body, ctau, btau, ms, second := 0, pitch2 := 0) =>
 AK_VoiceForKey(vk) {
 AK_WavHeader(buf, n, sr) {
 AltDragMove() {
@@ -8311,7 +8333,9 @@ FocusAnimatorStep(dt:=0, now:=0) {
 FocusMonitorStep() {
 ForecastUrl() {
 ForgetPositions() {
+GameModeResuspend() {
 GameModeSyncFeatures() {
+GameModeUnsuspendForWrite() {
 GetAccentColor() {
 GetActiveExplorerPath() {
 GetDesktopHwnd() {
@@ -8333,6 +8357,7 @@ global ActiveBorderShown := false
 global ActiveDeleteGuis := Map()
 global ActiveShatters := Map()
 global ADVANCED_KEY := "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+global AK_ACTION_VOICES := Map("toggleon", 1, "toggleoff", 1, "command", 1, "alert", 1)
 global AK_BANK := Map()        ; "voice|n" -> Buffer holding a complete RIFF/WAVE image
 global AK_BankTone := -1       ; change that differs from these is what forces a re-render
 global AK_BankVol := -1        ; the volume and pitch the bank was rendered at. A settings
@@ -8425,6 +8450,7 @@ global FRAME_MS := 15
 global FrameOverbudget := 0   ; count of frames where produce > 12 ms
 global FrameProduceMs := 0
 global FrameRenderMs  := 0
+global GAME_MODE_FEATURES := [
 global GameModeActive := false
 global GameModeSuspendedFeatures := Map()
 global GhostHiddenWindows := Map()
@@ -8440,6 +8466,7 @@ global GridHoverZone := 0
 global HotCornerBL := "None", HotCornerBR := "Show Desktop"
 global HotCornersEnabled := false
 global HotCornerTL := "None", HotCornerTR := "Task View"
+global HotkeySoundsEnabled := true
 global InfiniteWrapEnabled := false
 global INI      := A_ScriptDir "\settings.ini"
 global IniCache := Map()
@@ -8736,6 +8763,7 @@ PipGuiContextMenu(guiObj, *) {
 PipGuiResize(guiObj, minMax, width, height) {
 PiPMonitorStep() {
 PlayAcousticSound(voice) {
+PlayHotkeySound(voice) {
 PollWeather() {
 PortalScaleIn(hwnd, restoredRect := "") {
 ProcessSetPriority "BelowNormal"

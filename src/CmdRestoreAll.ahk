@@ -56,5 +56,6 @@ RestoreAllWindows() {
     RS_Commit()                     ; one-shot producer: nothing else will flush
 
     SyncMediaCore()
+    PlayHotkeySound(n ? "alert" : "command")
     Notify(n ? "Restored " n " window(s)" : "Nothing to restore")
 }
