@@ -52,6 +52,8 @@ global AK_BankTone := -1       ; All three are declared HERE: SyncKeySounds() co
                                ; read of an unassigned variable waiting to happen
 global AK_LastVariant := Map() ; voice -> the variant used last, so it is not used twice running
 global AK_KeysDown := Map()    ; vk -> tick of its last key-down, for the auto-repeat gate
+global AK_Voices := []         ; pool of waveOut voices for concurrent playback
+global AK_NextVoice := 1       ; round-robin index into AK_Voices
 
 ; f0     plate resonance in Hz - low is a "thock", high is a "clack"
 ; click  amplitude of the noise transient     ctau  its decay time constant, seconds
@@ -188,6 +190,7 @@ PlayHotkeySound(voice) {
 
 AK_Emit(voice) {
     global AK_BANK, AK_VARIANTS, AK_LastVariant
+    global AK_Voices, AK_NextVoice
     ; "" is a deliberate silence, not a missing voice - AK_VoiceForKey returns it
     ; for a key whose sound another path is already making. It must NOT fall
     ; through to the unknown-voice fallback below.
@@ -195,7 +198,7 @@ AK_Emit(voice) {
         return
     ; Not rendered yet. SyncKeySounds() has armed that, and a keystroke is not
     ; worth a stall to do it here.
-    if (!AK_BANK.Count)
+    if (!AK_BANK.Count || !AK_Voices.Length)
         return
 
     n := Random(1, AK_VARIANTS)
@@ -209,10 +212,32 @@ AK_Emit(voice) {
     if !AK_BANK.Has(key)
         return
 
-    ; SND_ASYNC | SND_NODEFAULT | SND_MEMORY. ASYNC because this is on the
-    ; keyboard path and must not block, NODEFAULT so a malformed buffer is
-    ; silence rather than the Windows ding on every keystroke.
-    try DllCall("winmm\PlaySoundW", "ptr", AK_BANK[key].Ptr, "ptr", 0, "uint", 0x0001 | 0x0002 | 0x0004)
+    buf := AK_BANK[key]
+    v := AK_Voices[AK_NextVoice]
+    AK_NextVoice := Mod(AK_NextVoice, AK_Voices.Length) + 1
+
+    try DllCall("winmm\waveOutReset", "ptr", v.hwo)
+
+    if v.prepared {
+        try DllCall("winmm\waveOutUnprepareHeader", "ptr", v.hwo, "ptr", v.hdr.Ptr, "uint", v.hdr.Size)
+        v.prepared := false
+    }
+
+    NumPut("ptr", buf.Ptr + 44, v.hdr, 0)
+    NumPut("uint", buf.Size - 44, v.hdr, A_PtrSize)
+    NumPut("uint", 0, v.hdr, A_PtrSize + 4)
+    NumPut("ptr", 0, v.hdr, A_PtrSize + 8)
+    NumPut("uint", 0, v.hdr, A_PtrSize * 2 + 8)
+    NumPut("uint", 0, v.hdr, A_PtrSize * 2 + 12)
+    NumPut("ptr", 0, v.hdr, A_PtrSize * 2 + 16)
+    NumPut("ptr", 0, v.hdr, A_PtrSize * 3 + 16)
+
+    try {
+        if (DllCall("winmm\waveOutPrepareHeader", "ptr", v.hwo, "ptr", v.hdr.Ptr, "uint", v.hdr.Size) == 0) {
+            v.prepared := true
+            DllCall("winmm\waveOutWrite", "ptr", v.hwo, "ptr", v.hdr.Ptr, "uint", v.hdr.Size)
+        }
+    }
 }
 
 ; ====== The bank ======
@@ -269,7 +294,8 @@ AK_BuildBank() {
     ; purge has stopped anything still sounding from them.
     oldBank := AK_BANK
     AK_BANK := bank
-    try DllCall("winmm\PlaySoundW", "ptr", 0, "ptr", 0, "uint", 0x0040)   ; SND_PURGE
+    AK_ShutdownPool()
+    AK_InitPool()
     oldBank := ""
 
     prevVol := AK_BankVol, prevHot := AK_BankHotVol, prevTone := AK_BankTone
@@ -386,10 +412,48 @@ AK_Tag(buf, off, tag) {
 ; a wrong note. Called by Bye() and whenever the feature is switched off.
 AK_Shutdown() {
     global AK_BANK, AK_BankVol, AK_BankHotVol, AK_BankTone, AK_KeysDown
-    try DllCall("winmm\PlaySoundW", "ptr", 0, "ptr", 0, "uint", 0x0040)   ; SND_PURGE
+    AK_ShutdownPool()
     AK_BANK := Map()
     AK_KeysDown := Map()
     AK_BankVol := -1
     AK_BankHotVol := -1
     AK_BankTone := -1
+}
+
+AK_InitPool() {
+    global AK_Voices, AK_NextVoice, AK_SR
+    if AK_Voices.Length
+        return
+
+    AK_NextVoice := 1
+
+    wfx := Buffer(18, 0)
+    NumPut("ushort", 1, wfx, 0) ; wFormatTag = WAVE_FORMAT_PCM
+    NumPut("ushort", 1, wfx, 2) ; nChannels = 1
+    NumPut("uint", AK_SR, wfx, 4) ; nSamplesPerSec
+    NumPut("uint", AK_SR * 2, wfx, 8) ; nAvgBytesPerSec
+    NumPut("ushort", 2, wfx, 12) ; nBlockAlign
+    NumPut("ushort", 16, wfx, 14) ; wBitsPerSample
+    NumPut("ushort", 0, wfx, 16) ; cbSize
+
+    Loop 16 {
+        hwo := 0
+        if DllCall("winmm\waveOutOpen", "ptr*", &hwo, "uint", 0xFFFFFFFF, "ptr", wfx.Ptr, "ptr", 0, "ptr", 0, "uint", 0) == 0 {
+            hdr := Buffer(A_PtrSize == 8 ? 48 : 32, 0)
+            AK_Voices.Push({hwo: hwo, hdr: hdr, prepared: false})
+        }
+    }
+}
+
+AK_ShutdownPool() {
+    global AK_Voices
+    for v in AK_Voices {
+        try DllCall("winmm\waveOutReset", "ptr", v.hwo)
+        if v.prepared {
+            try DllCall("winmm\waveOutUnprepareHeader", "ptr", v.hwo, "ptr", v.hdr.Ptr, "uint", v.hdr.Size)
+            v.prepared := false
+        }
+        try DllCall("winmm\waveOutClose", "ptr", v.hwo)
+    }
+    AK_Voices := []
 }
