@@ -52,8 +52,8 @@ global AK_BankTone := -1       ; All three are declared HERE: SyncKeySounds() co
                                ; read of an unassigned variable waiting to happen
 global AK_LastVariant := Map() ; voice -> the variant used last, so it is not used twice running
 global AK_KeysDown := Map()    ; vk -> tick of its last key-down, for the auto-repeat gate
-global AK_Voices := []         ; pool of waveOut voices for concurrent playback
-global AK_NextVoice := 1       ; round-robin index into AK_Voices
+global AK_Pool := []         ; pool of waveOut voices for concurrent playback
+global AK_NextVoice := 1       ; round-robin index into AK_Pool
 
 ; f0     plate resonance in Hz - low is a "thock", high is a "clack"
 ; click  amplitude of the noise transient     ctau  its decay time constant, seconds
@@ -189,8 +189,9 @@ PlayHotkeySound(voice) {
 }
 
 AK_Emit(voice) {
+    Critical "On"
     global AK_BANK, AK_VARIANTS, AK_LastVariant
-    global AK_Voices, AK_NextVoice
+    global AK_Pool, AK_NextVoice
     ; "" is a deliberate silence, not a missing voice - AK_VoiceForKey returns it
     ; for a key whose sound another path is already making. It must NOT fall
     ; through to the unknown-voice fallback below.
@@ -198,7 +199,7 @@ AK_Emit(voice) {
         return
     ; Not rendered yet. SyncKeySounds() has armed that, and a keystroke is not
     ; worth a stall to do it here.
-    if (!AK_BANK.Count || !AK_Voices.Length)
+    if (!AK_BANK.Count || !AK_Pool.Length)
         return
 
     n := Random(1, AK_VARIANTS)
@@ -213,8 +214,8 @@ AK_Emit(voice) {
         return
 
     buf := AK_BANK[key]
-    v := AK_Voices[AK_NextVoice]
-    AK_NextVoice := Mod(AK_NextVoice, AK_Voices.Length) + 1
+    v := AK_Pool[AK_NextVoice]
+    AK_NextVoice := Mod(AK_NextVoice, AK_Pool.Length) + 1
 
     try DllCall("winmm\waveOutReset", "ptr", v.hwo)
 
@@ -421,8 +422,8 @@ AK_Shutdown() {
 }
 
 AK_InitPool() {
-    global AK_Voices, AK_NextVoice, AK_SR
-    if AK_Voices.Length
+    global AK_Pool, AK_NextVoice, AK_SR
+    if AK_Pool.Length
         return
 
     AK_NextVoice := 1
@@ -440,14 +441,15 @@ AK_InitPool() {
         hwo := 0
         if DllCall("winmm\waveOutOpen", "ptr*", &hwo, "uint", 0xFFFFFFFF, "ptr", wfx.Ptr, "ptr", 0, "ptr", 0, "uint", 0) == 0 {
             hdr := Buffer(A_PtrSize == 8 ? 48 : 32, 0)
-            AK_Voices.Push({hwo: hwo, hdr: hdr, prepared: false})
+            AK_Pool.Push({hwo: hwo, hdr: hdr, prepared: false})
         }
     }
 }
 
 AK_ShutdownPool() {
-    global AK_Voices
-    for v in AK_Voices {
+    Critical "On"
+    global AK_Pool
+    for v in AK_Pool {
         try DllCall("winmm\waveOutReset", "ptr", v.hwo)
         if v.prepared {
             try DllCall("winmm\waveOutUnprepareHeader", "ptr", v.hwo, "ptr", v.hdr.Ptr, "uint", v.hdr.Size)
@@ -455,5 +457,5 @@ AK_ShutdownPool() {
         }
         try DllCall("winmm\waveOutClose", "ptr", v.hwo)
     }
-    AK_Voices := []
+    AK_Pool := []
 }

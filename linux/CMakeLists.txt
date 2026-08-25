@@ -50,6 +50,9 @@ add_library(TweakCore
     src/core/SnapGeometry.cpp
     src/core/VelocitySampler.cpp
     src/core/WeatherFetcher.cpp
+    src/core/GameMode.cpp
+    src/core/AcousticKeystrokes.cpp
+    src/core/ClipboardManager.cpp
 )
 
 target_include_directories(TweakCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)

@@ -564,6 +564,7 @@
             action := HotCornerTL
             action := HotCornerTR
             again := false
+            AK_Pool.Push({hwo: hwo, hdr: hdr, prepared: false})
             AK_Shutdown()
             alpha := a
             alpha := Round(220 * (1 - ease))
@@ -698,6 +699,7 @@
             DllCall("SetWindowPos", "ptr", s.gui.Hwnd, "ptr", -1, "int", Round(curX), "int", Round(curY), "int", Round(curW), "int", Round(curH), "uint", 0x14 | 0x40)
             DllCall("SetWindowPos", "ptr", SF_Hwnd, "ptr", -1, "int", mx - s//2, "int", my - s//2, "int", s, "int", s, "uint", 0x50) ; SWP_NOACTIVATE | SWP_SHOWWINDOW
             DllCall("Shcore\GetDpiForMonitor", "Ptr", hMonitor, "Int", 0, "UInt*", &dpiX:=0, "UInt*", &dpiY:=0)
+            DllCall("winmm\waveOutWrite", "ptr", v.hwo, "ptr", v.hdr.Ptr, "uint", v.hdr.Size)
             doc := ComObject("htmlfile")
             doc.write("<body><script>document.write(eval('" text "'));</script></body>")
             DragTrailGui := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
@@ -787,6 +789,7 @@
             h := baseSize + 45 - (55 * ease)
             h := DllCall("FindWindowExW", "ptr", notify, "ptr", 0, "str", cls, "ptr", 0, "ptr")
             h := DllCall("FindWindowExW", "ptr", tbHwnd, "ptr", 0, "str", cls, "ptr", 0, "ptr")
+            hdr := Buffer(A_PtrSize == 8 ? 48 : 32, 0)
             hdwp := DllCall("BeginDeferWindowPos", "int", list.Length, "ptr")
             HideCustomClock()
             HideCustomClock()
@@ -1286,8 +1289,8 @@
             RS_SetPos(hwnd, X, Y, W, H, RS_PRI_ANIM)
             RS_SetPos(SmoothCaretGui.Hwnd, Round(LastCaretX), Round(LastCaretY), 2, 20, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "", RS_PRI_ANIM)
-            RS_SetRegion(hwnd, "0-0 w" w " h" curH, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
+            RS_SetRegion(hwnd, "0-0 w" w " h" curH, RS_PRI_ANIM)
             RS_SetRegion(hwnd, "0-0 W" w " H" curH, RS_PRI_ANIM)
             RS_SetRegion(MicOsdGui.Hwnd, "0-0 w240 h70 r20-20", RS_PRI_ANIM)
             RS_SetRegion(OsdGui.Hwnd, "0-0 w280 h64 r20-20", RS_PRI_ANIM)
@@ -1425,6 +1428,7 @@
             try DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", TaskbarWaveThumb)
             try DllCall("SetWindowPos", "ptr", hwnd, "ptr", entry.insertAfter
             try DllCall("ShowWindow", "ptr", SF_Hwnd, "int", 0)   ; SW_HIDE
+            try DllCall("winmm\waveOutUnprepareHeader", "ptr", v.hwo, "ptr", v.hdr.Ptr, "uint", v.hdr.Size)
             try epCur := RegRead(EP_KEY, "OldTaskbar", 0)
             try FadeGui(MicOsdGui, TuneAlpha("osdAlpha"))
             try fh.Close()
@@ -1468,6 +1472,8 @@
             UngroupWindow(DragHwnd)
             UnrollWindow(hwnd, restoredRect)
             v *= f
+            v.prepared := false
+            v.prepared := true
             val := 32767
             val := -32767
             vLines.Push(oLeft, oRight)
@@ -1492,8 +1498,8 @@
             winCy := wy + wh/2
             WinGetPos(&ex, &ey, &ew, &eh, "ahk_id " h)
             WinGetPos(&gx, &gy, &gw, &gh, hwnd)
-            WinGetPos(&wX, &wY, &wW, &wH, hwnd)
             WinGetPos(&wx, &wy, &ww, &wh, hwnd)
+            WinGetPos(&wX, &wY, &wW, &wH, hwnd)
             WinGetPos(&X, &Y, &W, &H, hwnd)
             WinLastActive.Delete(hwnd)
             WinLastActive[hwnd] := QPC()
@@ -1542,6 +1548,9 @@
         || (vk >= 0xA0 && vk <= 0xA5))
         || GetKeyState("MButton", "P")) {
         || vk = 0xA0 || vk = 0xA1 || vk = 0xA2 || vk = 0xA3 || vk = 0xA4 || vk = 0xA5)
+        }
+        }
+        }
         }
         }
         }
@@ -2296,6 +2305,7 @@
         hwnds := WinGetList()
         hwnds := WinGetList()
         hwnds := WinGetList()
+        hwo := 0
         i += 1
         icon := WeatherIcon(Integer(mC[1])) " "
         idle := A_TimeIdlePhysical
@@ -2419,6 +2429,7 @@
         if (dirOnly != "" && FileExist(exePath)) {
         if (distX > distY) {
         if (DllCall("IsWindow", "ptr", obj.hwnd))
+        if (DllCall("winmm\waveOutPrepareHeader", "ptr", v.hwo, "ptr", v.hdr.Ptr, "uint", v.hdr.Size) == 0) {
         if (dotProduct > 0) {
         if (DragHwnd != 0 && DragHwnd != hwnd) {
         if (DragHwnd == ElasticHwnd)
@@ -2603,6 +2614,7 @@
         if DllCall("MoveFileExW", "wstr", tmpPath, "wstr", targetPath
         if DllCall("QueryFullProcessImageNameW", "ptr", hProc, "uint", 0,
         if DllCall("SystemParametersInfoW", "uint", 0x26, "uint", 0, "ptr", buf, "uint", 0)
+        if DllCall("winmm\waveOutOpen", "ptr*", &hwo, "uint", 0xFFFFFFFF, "ptr", wfx.Ptr, "ptr", 0, "ptr", 0, "uint", 0) == 0 {
         if expand {
         if FileExist(appPath) {
         if FileExist(appPath) {
@@ -2655,6 +2667,7 @@
         if ShowMag(mx, my) {
         if ThrowWindowToNextMonitor(hwnd, L, T, R - L, B - T, VelX, VelY)
         if TrayIcons.Has(wParam)
+        if v.prepared {
         if wasMax
         if WinCurrentAlpha.Has(hwnd)
         if WinExist("ahk_class CabinetWClass") {
@@ -3075,6 +3088,7 @@
         RestoreFromBottom(hwnd)
         RestoreFromTray(hwnd)
         RestoreStealthPanic()
+        return
         return
         return
         return
@@ -3826,6 +3840,9 @@
         try DirCreate(dirOnly)
         try DllCall("UnhookWinEvent", "ptr", MenuEventHook)
         try DllCall("UnhookWinEvent", "ptr", WinEventHook)
+        try DllCall("winmm\waveOutClose", "ptr", v.hwo)
+        try DllCall("winmm\waveOutReset", "ptr", v.hwo)
+        try DllCall("winmm\waveOutUnprepareHeader", "ptr", v.hwo, "ptr", v.hdr.Ptr, "uint", v.hdr.Size)
         try FileAppend(A_Now " - " msg "`n", logPath)
         try FileDelete(tmpPath)
         try g.Destroy()
@@ -3921,6 +3938,7 @@
         v := RS_Alpha[hwnd].value
         v := RS_LastAlpha[hwnd]
         v := TuneClean(s, raw)
+        v.prepared := false
         val := EnvGet(match[1])
         val := Round(s * vol * 32767)
         VelX := 0, VelY := 0, PrevX := sL, PrevY := sT
@@ -4431,6 +4449,10 @@
     }
     }
     }
+    }
+    }
+    }
+    }
     } catch
     } catch
     } catch
@@ -4509,10 +4531,16 @@
     AK_BankVol := Tune("keyVol")
     AK_Emit(voice)
     AK_Emit(voice)
+    AK_InitPool()
     AK_KeyReleased(vk)
     AK_KeysDown := Map()
     AK_KeysDown[vk] := now
     AK_LastVariant[voice] := n
+    AK_NextVoice := 1
+    AK_NextVoice := Mod(AK_NextVoice, AK_Pool.Length) + 1
+    AK_Pool := []
+    AK_ShutdownPool()
+    AK_ShutdownPool()
     AK_Tag(buf,  0, "RIFF")
     AK_Tag(buf,  8, "WAVE")
     AK_Tag(buf, 12, "fmt ")
@@ -4619,6 +4647,7 @@
     BreatheStart := QPC()
     BreathingEnabled := !BreathingEnabled
     BreathingEnabled := IniStr("memory", "breathing", "1") = "1"
+    buf := AK_BANK[key]
     buf := Buffer(16, 0)
     buf := Buffer(44 + n * 2, 0)
     BuildTray()
@@ -4791,6 +4820,8 @@
     corrected := false
     crashX := 0, crashY := 0
     CreatePage(name) {
+    Critical "On"
+    Critical "On"
     cSub  := dark ? "9A9A9A" : "5A5A5A"      ; secondary text
     ctl := pg.AddCheckbox(pos " w" w " c" col (checked ? " Checked" : ""), txt)
     cur := 0
@@ -5032,6 +5063,7 @@
     for src, pip in PipGuis.Clone()
     for srcHwnd, pipGui in PipGuis.Clone() {
     for token in StrSplit(RegExReplace(s, "[;\s]+", ","), ",") {
+    for v in AK_Pool {
     for v in lines {
     for voice, v in AK_VOICES {
     for w in hwnds {
@@ -5118,6 +5150,9 @@
     global AK_BankVol, AK_BankHotVol, AK_BankTone, TypingSoundsEnabled, HotkeySoundsEnabled
     global AK_KeysDown
     global AK_KeysDown
+    global AK_Pool
+    global AK_Pool, AK_NextVoice
+    global AK_Pool, AK_NextVoice, AK_SR
     global AK_SR
     global AnimOwner
     global AnimOwner, ANIM_CHANNELS
@@ -5657,7 +5692,7 @@
     if !WorkAreaOf(mon, &wl, &wt, &wr, &wb)
     if !WorkAreaOf(nxt, &dl, &dt, &dr, &db)
     if !WorkAreaOf(targetMon, &mL, &mT, &mR, &mB)
-    if (!AK_BANK.Count)
+    if (!AK_BANK.Count || !AK_Pool.Length)
     if (!approachOk)
     if (!BossKeyEnabled && !BossKeyActive)
     if (!BreatheCursorActive) {
@@ -6060,6 +6095,7 @@
     if ActiveAnimations.Has(key)
     if ahwnd
     if AK_KeysDown.Has(vk)
+    if AK_Pool.Length
     if Anim_Owner(hwnd, "geom")
     if ApplyLayout(hwnd, tx, ty, tw, th)
     if BottomWindows.Has(hwnd) {
@@ -6147,6 +6183,7 @@
     if StealthAppCache.Has(exeName) {
     if TrayIcons.Has(hwnd) {
     if TUNE_INDEX.Count
+    if v.prepared {
     if wanted
     if wanted {
     if WinCurrentAlpha.Has(hwnd)
@@ -6234,6 +6271,7 @@
     LogLaunch("`n--- Launch Sequence Complete ---")
     LogLaunch(msg) {
     logPath := A_AppData "\StealthPanic_Launch.log"
+    Loop 16 {
     Loop 4
     loop gridX {
     loop monCount {
@@ -6398,21 +6436,36 @@
     now := QPC()
     numAlpha := (alpha == "Off") ? 255 : Integer(alpha)
     numAlpha := (alpha == "Off") ? 256 : Integer(alpha)
+    NumPut("ptr", 0, v.hdr, A_PtrSize * 2 + 16)
+    NumPut("ptr", 0, v.hdr, A_PtrSize * 3 + 16)
+    NumPut("ptr", 0, v.hdr, A_PtrSize + 8)
     NumPut("ptr", A_ScriptHwnd, nid, A_PtrSize == 8 ? 8 : 4)
+    NumPut("ptr", buf.Ptr + 44, v.hdr, 0)
     NumPut("ptr", hIcon, nid, A_PtrSize == 8 ? 32 : 20)
+    NumPut("uint", 0, v.hdr, A_PtrSize * 2 + 12)
+    NumPut("uint", 0, v.hdr, A_PtrSize * 2 + 8)
+    NumPut("uint", 0, v.hdr, A_PtrSize + 4)
     NumPut("uint", 0x1000, nid, A_PtrSize == 8 ? 24 : 16)
     NumPut("uint", 0x7, nid, A_PtrSize == 8 ? 20 : 12)
     NumPut("uint", 16, buf, 16)            ; fmt chunk size
     NumPut("uint", 36 + bytes, buf, 4)
+    NumPut("uint", AK_SR * 2, wfx, 8) ; nAvgBytesPerSec
+    NumPut("uint", AK_SR, wfx, 4) ; nSamplesPerSec
+    NumPut("uint", buf.Size - 44, v.hdr, A_PtrSize)
     NumPut("uint", bytes, buf, 40)
     NumPut("uint", cbSize, nid, 0)
     NumPut("uint", hwnd, nid, A_PtrSize == 8 ? 16 : 8)
     NumPut("uint", sr * 2, buf, 28)        ; byte rate
     NumPut("uint", sr, buf, 24)
+    NumPut("ushort", 0, wfx, 16) ; cbSize
     NumPut("ushort", 1, buf, 20)           ; PCM
     NumPut("ushort", 1, buf, 22)           ; mono
+    NumPut("ushort", 1, wfx, 0) ; wFormatTag = WAVE_FORMAT_PCM
+    NumPut("ushort", 1, wfx, 2) ; nChannels = 1
     NumPut("ushort", 16, buf, 34)          ; bits per sample
+    NumPut("ushort", 16, wfx, 14) ; wBitsPerSample
     NumPut("ushort", 2, buf, 32)           ; block align
+    NumPut("ushort", 2, wfx, 12) ; nBlockAlign
     nxt := Mod(cur, g.mons.Length) + 1
     ny := 88
     ok := false
@@ -7209,6 +7262,7 @@
     try {
     try {
     try {
+    try {
     try AK_Shutdown()
     try back := FileRead(appsPath, "UTF-8")
     try body := CustomClockReq.ResponseText
@@ -7227,9 +7281,7 @@
     try DllCall("DeregisterShellHookWindow", "ptr", A_ScriptHwnd)
     try DllCall("dwmapi\DwmUnregisterThumbnail", "ptr", pip.ThumbId)
     try DllCall("SystemParametersInfoW", "uint", 0x25, "uint", 1, "ptr", 0, "uint", 3)
-    try DllCall("winmm\PlaySoundW", "ptr", 0, "ptr", 0, "uint", 0x0040)   ; SND_PURGE
-    try DllCall("winmm\PlaySoundW", "ptr", 0, "ptr", 0, "uint", 0x0040)   ; SND_PURGE
-    try DllCall("winmm\PlaySoundW", "ptr", AK_BANK[key].Ptr, "ptr", 0, "uint", 0x0001 | 0x0002 | 0x0004)
+    try DllCall("winmm\waveOutReset", "ptr", v.hwo)
     try EP_IconSize := RegRead(ADVANCED_KEY, "TaskbarSmallIcons", 0) != 0 ? "Small" : "Large"
     try EP_Style := RegRead(EP_KEY, "OldTaskbar", 0) != 0 ? "Win10" : "Win11"
     try exStyle := WinGetExStyle(hwnd)
@@ -7354,9 +7406,9 @@
     try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
     try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
     try WinGetPos(&x, &cy, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
+    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(&X, &Y, &W, &H, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-    try WinGetPos(&x, &y, &w, &h, hwnd)
     try WinGetPos(, , &bounceW, &bounceH, hwnd)
     try WinGetPos(, , &winW, &winH, hwnd)
     try WinGetPos(,, &rawW, &rawH, hwnd)
@@ -7450,6 +7502,7 @@
     v := ""
     v := ""
     v := 0
+    v := AK_Pool[AK_NextVoice]
     v := Chr(1)
     v := Clamp(Number(v), s.lo, s.hi)
     v := IniStr(section, key, defaultVal)
@@ -7486,6 +7539,7 @@
     WeatherNextMs := WeatherFailMs
     WeatherStage := ""
     WeatherWarnedFor := key
+    wfx := Buffer(18, 0)
     wh := NumGet(rc, 12, "int") - NumGet(rc, 4, "int")
     while (attempt < 4) {
     while (pos := RegExMatch(str, "%([^%]+)%", &match, pos)) {
@@ -8090,6 +8144,8 @@ $^v:: {
 }
 }
 }
+}
+}
 ~^c:: {
 ~^x:: {
 ~Delete:: {
@@ -8147,10 +8203,12 @@ ActivateExistingInstance(exeName) {
 ActivateExplorer(args) {
 AK_BuildBank() {
 AK_Emit(voice) {
+AK_InitPool() {
 AK_IsRepeat(vk) {
 AK_KeyReleased(vk) {
 AK_Render(v, pitch, vol) {
 AK_Shutdown() {
+AK_ShutdownPool() {
 AK_Tag(buf, off, tag) {
 AK_Voice(f0, click, body, ctau, btau, ms, second := 0, pitch2 := 0) =>
 AK_VoiceForKey(vk) {
@@ -8259,6 +8317,8 @@ global AK_BankTone := -1       ; All three are declared HERE: SyncKeySounds() co
 global AK_BankVol := -1        ; the levels and pitch the bank was rendered at. A settings
 global AK_KeysDown := Map()    ; vk -> tick of its last key-down, for the auto-repeat gate
 global AK_LastVariant := Map() ; voice -> the variant used last, so it is not used twice running
+global AK_NextVoice := 1       ; round-robin index into AK_Pool
+global AK_Pool := []         ; pool of waveOut voices for concurrent playback
 global AK_SR := 22050          ; sample rate. A click is broadband but short - 22 kHz is
 global AK_VARIANTS := 3        ; alternates per voice, so held-down typing does not machine-gun
 global AK_VOICES := Map(

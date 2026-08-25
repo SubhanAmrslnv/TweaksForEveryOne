@@ -36,6 +36,10 @@ Desktop columns name the three supported targets: **Cinnamon** (Linux Mint, X11)
 | **Focus/Cinema Mode** | Dims background windows | Set opacity on all other windows or draw overlay behind active window. | ✅ | 🔌 | ✅ | 🔌 | 🔌 | Planned |
 | **Smart Caps Lock** | Tap=Esc, Hold=Caps | `evdev` / `uinput` interception (requires `input` group or compositor help). | ✅ | 🔌 | ✅ | 🔌 | 🔌 | Planned |
 | **Global Text Paste** | Paste as plain text | Clipboard manager interception. | ✅ | ✅ | ✅ | ✅ | ✅ | Planned |
+| **Morphing Paste** | Cycle through cases on paste | Input interception + Clipboard modification. | ✅ | ✅ | ✅ | ✅ | ✅ | Planned |
+| **Clipboard Append** | Double Ctrl+C to append | Clipboard manager interception. | ✅ | ✅ | ✅ | ✅ | ✅ | Planned |
+| **Copy Feedback** | Visual cues for copy/paste | Custom overlay or notification. | ✅ | ✅ | ✅ | ✅ | ✅ | Planned |
+| **Smooth Caret** | Fluid text editing cursor | Custom overlay tracked to caret position. | ✅ | 🔌 | ✅ | 🔌 | 🔌 | Planned |
 | **Text Expander** | `@@time` etc | `evdev` interception and injection. | ✅ | 🔌 | ✅ | 🔌 | 🔌 | Planned |
 | **Spotlight Launcher**| Centered search/launch GUI | Qt6/QML frameless window, Wayland Layer Shell. | ✅ | ✅ | ✅ | ✅ | ✅ | Planned |
 | **Quick Look** | Spacebar preview in file mgr | D-Bus integration with Nautilus/Dolphin + overlay window. | ✅ | ✅ | ✅ | ✅ | ✅ | Planned |
@@ -45,10 +49,12 @@ Desktop columns name the three supported targets: **Cinnamon** (Linux Mint, X11)
 | **Grab & Pan** | Middle-click drag to pan | Requires global pointer capture (challenging on Wayland). | ✅ | 🔌 | ✅ | 🔌 | 🔌 | Planned |
 | **Hot Corners** | Pointer hits corner -> action | Daemon reads global pointer or DE native hot corner integration. | ✅ | 🔌 | ✅ | 🔌 | 🔌 | Planned |
 | **Cursor Wrap** | Pointer wrap between monitors | Daemon sets pointer pos (requires X11 `XTest` / `wlr-virtual-pointer`). | ✅ | 🔌 | ✅ | 🔌 | 🔌 | Planned |
-| **Active Window Border**| Draw border over active window | X11 overlay / Wayland Layer Shell / KWin effect. | ✅ | 🔌 | ✅ | 🔌 | 🔌 | Planned |
 | **Multi-Monitor Dimmer**| Dim inactive monitors | Transparent Layer Shell overlay on inactive monitors. | ✅ | ✅ | ✅ | ✅ | ✅ | Planned |
 | **Magnetic Groups** | Snapped windows move together| Daemon topology tracking. | ✅ | 🔌 | ✅ | 🔌 | 🔌 | Planned |
 | **Stealth Panic Mode**| Triple Esc -> hide & mute | Daemon input interception + PipeWire mute + window minimization. | ✅ | 🔌 | ✅ | 🔌 | 🔌 | Planned |
+| **Game Mode** | Suppress disruptive features during gameplay | Daemon detects fullscreen game and suspends visual overlays/sounds. | ✅ | ✅ | ✅ | ✅ | ✅ | Planned |
+| **Acoustic Keystrokes** | Mechanical keystroke sounds | Input interception + low-latency audio playback (ALSA/PipeWire). | ✅ | 🔌 | ✅ | 🔌 | 🔌 | Planned |
+| **Hotkey Sounds** | Distinct sounds for hotkeys | Daemon plays distinct audio cue via PulseAudio/PipeWire. | ✅ | ✅ | ✅ | ✅ | ✅ | Planned |
 
 ### Legend
 

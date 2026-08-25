@@ -70,8 +70,9 @@ One feature works end to end, and only on GNOME:
 
 Everything else — position memory, PiP, roll-up, tray minimize, boss key, tiling, centering,
 transparency, focus mode, smart caps lock, text expander, spotlight, quick look, mic kill
-switch, grab & pan, hot corners, cursor wrap, active border, dimmer, magnetic groups,
-stealth panic — exists only as a row in `FEATURE-MATRIX.md`.
+switch, grab & pan, hot corners, cursor wrap, dimmer, magnetic groups,
+stealth panic, game mode, acoustic keystrokes, hotkey sounds, morphing paste,
+clipboard append, copy feedback, smooth caret — exists only as a row in `FEATURE-MATRIX.md`.
 
 ## Known defects
 
