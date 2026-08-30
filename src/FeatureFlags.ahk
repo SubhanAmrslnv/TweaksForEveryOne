@@ -38,7 +38,7 @@ global GravityCloseEnabled := true
 ; How long a window must go untouched before breathing dims it. MediaCore's hold
 ; window is derived from this (MC_SetHoldMs in SyncMediaCore) so the two can never
 ; be set into a dim/wake flicker - see MC_HoldMs() in MediaCore.ahk.
-global BREATHE_IDLE_MS := 6000
+global BREATHE_IDLE_MS := 1800000
 
 global GlideEnabled  := true
 global GLIDE_THROW   := 0.9

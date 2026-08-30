@@ -89,7 +89,7 @@ global TUNE_SPEC := [
 , TS("wrapSpeed"    , "wrap"     , "speed"       ,    250,     0,   3000,    50, 0, "multi"  , "Approach speed"         , "px/s minimum, 0 = any speed")
 , TS("wrapCool"     , "wrap"     , "cooldown"    ,    700,   100,   5000,    50, 0, "multi"  , "Cooldown"               , "ms before it can wrap again")
 , TS("dimmerAlpha"  , "dimmer"   , "alpha"       ,     47,    10,     90,     5, 0, "multi"  , "Dim strength"           , "% on inactive monitors")
-, TS("breatheIdle"  , "breathing", "idle"        ,   6000,  1000,  60000,   500, 0, "multi"  , "Breathe after"          , "ms of inactivity")
+, TS("breatheIdle"  , "breathing", "idle_mins"   ,     30,     1,   1440,     1, 0, "multi"  , "Breathe after"          , "minutes of inactivity")
 , TS("breatheAlpha" , "breathing", "alpha"       ,     70,    20,     95,     5, 0, "multi"  , "Breathe opacity"        , "% once dimmed")
 , TS("yawnIdle"     , "mouse"    , "cursoryawntime", 900000, 60000, 7200000, 60000, 0, "multi", "Cursor yawn after"    , "ms idle (900000 = 15 min)")
 , TS("keyVol"       , "mouse"    , "keysoundvol" ,     80,     5,    100,     5, 0, "media"  , "Keystroke volume"       , "% of full scale")
@@ -238,7 +238,7 @@ SyncTuningGlobals() {
     GLIDE_THROW        := Tune("glideThrow")
     GLIDE_MS           := Integer(Tune("glideMs"))
     GLIDE_MAX          := Integer(Tune("glideMax"))
-    BREATHE_IDLE_MS    := Integer(Tune("breatheIdle"))
+    BREATHE_IDLE_MS    := Integer(Tune("breatheIdle")) * 60000
     CursorYawnIdleTime := Integer(Tune("yawnIdle"))
 }
 
