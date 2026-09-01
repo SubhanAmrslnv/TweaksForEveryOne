@@ -267,10 +267,10 @@ internal static class TuningRegistry
         new TuningDescriptor
         {
             Key = ClockAnchor, Page = PageScreen, Group = "Taskbar clock", Kind = TuningKind.Choice,
-            Title = "Sit left of", DefaultText = "TrayEdge",
-            Choices = new[] { "TrayEdge", "Clock" },
-            ChoiceLabels = new[] { "The whole tray (safe)", "The system clock (closer)" },
-            Description = "A real trade-off. The tray edge never covers anything but sits further left, because the notification area's width moves with its icon count. The clock sits closer and covers whatever is in those last ~115 px."
+            Title = "Placement", DefaultText = "TaskbarLeft",
+            Choices = new[] { "TaskbarLeft", "TrayEdge", "Clock" },
+            ChoiceLabels = new[] { "Left edge of taskbar", "Right: whole tray (safe)", "Right: system clock (closer)" },
+            Description = "Where the clock sits. Taskbar Left is best for Windows 11 with centered buttons. Right side sits to the left of the system tray."
         },
         new TuningDescriptor
         {

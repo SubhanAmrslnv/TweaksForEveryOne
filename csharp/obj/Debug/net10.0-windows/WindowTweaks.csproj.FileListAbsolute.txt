@@ -20,3 +20,25 @@ C:\Users\subhan.amiraslanov\Desktop\TweaksForEveryOne\csharp\obj\Debug\net10.0-w
 C:\Users\subhan.amiraslanov\Desktop\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\ref\WindowTweaks.dll
 C:\Users\subhan.amiraslanov\Desktop\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\WindowTweaks_MarkupCompile.lref
 C:\Users\subhan.amiraslanov\Desktop\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\App.baml
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\bin\Debug\net10.0-windows\WindowTweaks.exe
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\bin\Debug\net10.0-windows\WindowTweaks.deps.json
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\bin\Debug\net10.0-windows\WindowTweaks.runtimeconfig.json
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\bin\Debug\net10.0-windows\WindowTweaks.dll
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\bin\Debug\net10.0-windows\WindowTweaks.pdb
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\MainWindow.baml
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\MainWindow.g.cs
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\App.g.cs
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\WindowTweaks_MarkupCompile.cache
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\WindowTweaks_MarkupCompile.lref
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\App.baml
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\WindowTweaks.g.resources
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\WindowTweaks.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\WindowTweaks.AssemblyInfoInputs.cache
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\WindowTweaks.AssemblyInfo.cs
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\WindowTweaks.csproj.CoreCompileInputs.cache
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\WindowTweaks.sourcelink.json
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\WindowTweaks.dll
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\refint\WindowTweaks.dll
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\WindowTweaks.pdb
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\WindowTweaks.genruntimeconfig.cache
+C:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\ref\WindowTweaks.dll

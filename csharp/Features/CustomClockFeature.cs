@@ -227,6 +227,9 @@ public class CustomClockFeature : IDisposable
                 NativeMethods.SetWindowLong(handle, NativeMethods.GWL_EXSTYLE,
                     ex | NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE
                        | NativeMethods.WS_EX_TRANSPARENT);
+
+                int doNotRound = NativeMethods.DWMWCP_DONOTROUND;
+                NativeMethods.DwmSetWindowAttribute(handle, NativeMethods.DWMWA_WINDOW_CORNER_PREFERENCE, ref doNotRound, sizeof(int));
             }
             catch
             {
@@ -362,20 +365,32 @@ public class CustomClockFeature : IDisposable
         if (width <= 0 || height <= 0) return;
 
         int gap = TuningRegistry.Int(TuningRegistry.ClockGap);
+        string preference = TuningRegistry.Choice(TuningRegistry.ClockAnchor);
+        double left;
+        double barLeft = bar.Left * scaleX;
 
-        double left = anchorLeft * scaleX - gap - width;
+        if (string.Equals(preference, "TaskbarLeft", StringComparison.OrdinalIgnoreCase))
+        {
+            left = barLeft + gap;
+        }
+        else
+        {
+            left = anchorLeft * scaleX - gap - width;
+            if (left < barLeft) left = barLeft;
+        }
+
         double barTop = bar.Top * scaleY;
         double barHeight = (bar.Bottom - bar.Top) * scaleY;
         double top = barTop + (barHeight - height) / 2.0;
 
-        // Never let the block run off the left edge of the bar.
-        double barLeft = bar.Left * scaleX;
-        if (left < barLeft) left = barLeft;
-
         if (Math.Abs(_clockWindow.Left - left) > 0.5) _clockWindow.Left = left;
         if (Math.Abs(_clockWindow.Top - top) > 0.5) _clockWindow.Top = top;
 
-        SampleTaskbarColour(left, barTop, barHeight, scaleX, scaleY);
+        // Sample color slightly outside the block.
+        // If on the left, sample to the right of it; if on the right, sample to the left of it.
+        bool isLeft = string.Equals(preference, "TaskbarLeft", StringComparison.OrdinalIgnoreCase);
+        double sampleLeft = isLeft ? left + width + 24 * scaleX : left - 24 * scaleX;
+        SampleTaskbarColour(sampleLeft, barTop, barHeight, scaleX, scaleY);
 
         // Stay above the taskbar. Re-asserted each tick because the shell raises itself.
         try
@@ -430,14 +445,14 @@ public class CustomClockFeature : IDisposable
     /// can never sample its own pixels. Measured on this shell: the bar is one flat colour (0x202020
     /// at x = 200, 600, 1000, 1200, 1300 and 1400, including over inactive task buttons).
     /// </summary>
-    private void SampleTaskbarColour(double blockLeft, double barTop, double barHeight, double scaleX, double scaleY)
+    private void SampleTaskbarColour(double sampleXDIU, double barTop, double barHeight, double scaleX, double scaleY)
     {
         if (_panel == null || _clockWindow == null) return;
 
         IntPtr dc = IntPtr.Zero;
         try
         {
-            int sampleX = (int)((blockLeft / scaleX) - 24);
+            int sampleX = (int)(sampleXDIU / scaleX);
             int sampleY = (int)((barTop + barHeight / 2.0) / scaleY);
             if (sampleX < 0) return;
 

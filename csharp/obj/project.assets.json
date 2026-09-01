@@ -8,25 +8,23 @@
     "net10.0-windows": []
   },
   "packageFolders": {
-    "C:\\Users\\subhan.amiraslanov\\.nuget\\packages\\": {},
-    "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {},
-    "C:\\Program Files\\dotnet\\sdk\\NuGetFallbackFolder": {}
+    "C:\\Users\\emras\\.nuget\\packages\\": {},
+    "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\csharp\\WindowTweaks.csproj",
+      "projectUniqueName": "C:\\Users\\emras\\OneDrive\\Рабочий стол\\TweaksForEveryOne\\csharp\\WindowTweaks.csproj",
       "projectName": "WindowTweaks",
-      "projectPath": "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\csharp\\WindowTweaks.csproj",
-      "packagesPath": "C:\\Users\\subhan.amiraslanov\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\csharp\\obj\\",
+      "projectPath": "C:\\Users\\emras\\OneDrive\\Рабочий стол\\TweaksForEveryOne\\csharp\\WindowTweaks.csproj",
+      "packagesPath": "C:\\Users\\emras\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\emras\\OneDrive\\Рабочий стол\\TweaksForEveryOne\\csharp\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
-        "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages",
-        "C:\\Program Files\\dotnet\\sdk\\NuGetFallbackFolder"
+        "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
       ],
       "configFilePaths": [
-        "C:\\Users\\subhan.amiraslanov\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Users\\emras\\AppData\\Roaming\\NuGet\\NuGet.Config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
@@ -35,6 +33,7 @@
       ],
       "sources": {
         "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+        "C:\\Program Files\\dotnet\\library-packs": {},
         "https://api.nuget.org/v3/index.json": {}
       },
       "frameworks": {
@@ -54,7 +53,7 @@
         "auditLevel": "low",
         "auditMode": "all"
       },
-      "SdkAnalysisLevel": "10.0.400"
+      "SdkAnalysisLevel": "10.0.300"
     },
     "frameworks": {
       "net10.0-windows": {
@@ -79,7 +78,7 @@
             "privateAssets": "none"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.400/PortableRuntimeIdentifierGraph.json",
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.301/PortableRuntimeIdentifierGraph.json",
         "packagesToPrune": {
           "Microsoft.CSharp": "(,4.7.32767]",
           "Microsoft.VisualBasic": "(,10.4.32767]",
