@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("WindowTweaks")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+06ae5784b10017ae4e902d7e7e4d4ce5fe73fbd8")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b0889324ece6026b59682032331d7167feb69016")]
 [assembly: System.Reflection.AssemblyProductAttribute("WindowTweaks")]
 [assembly: System.Reflection.AssemblyTitleAttribute("WindowTweaks")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

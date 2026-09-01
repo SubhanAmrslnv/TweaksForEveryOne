@@ -1,127 +1,98 @@
 <Window x:Class="WindowTweaks.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="TweaksForEveryOne" Height="300" Width="400"
+        Title="Window Tweaks Settings" Height="700" Width="850"
         WindowStartupLocation="CenterScreen"
-        Background="#F5F5F5">
-    <StackPanel Margin="20">
-        <TextBlock Text="TweaksForEveryOne" FontSize="20" FontWeight="Bold" Margin="0,0,0,10"/>
+        Background="#F3F3F3"
+        FontFamily="Segoe UI">
+    
+    <Window.Resources>
+        <!-- Style for Toggle Switches / Checkboxes -->
+        <Style TargetType="CheckBox" x:Key="ToggleSwitchStyle">
+            <Setter Property="Margin" Value="0,12"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
         
-        <TextBlock Text="Global Hotkeys:" FontWeight="Bold" Margin="0,10,0,5"/>
-        <Grid Margin="10,0,0,0">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="150"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="Shift + Alt + W" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="0" Grid.Column="1" Text="Open Settings Window"/>
-            
-            <TextBlock Grid.Row="1" Grid.Column="0" Text="Shift + Alt + O" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="1" Grid.Column="1" Text="Toggle Always on Top"/>
-            
-            <TextBlock Grid.Row="2" Grid.Column="0" Text="Shift + Alt + F" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="2" Grid.Column="1" Text="Toggle Focus Mode"/>
+        <Style TargetType="TextBlock" x:Key="HeaderStyle">
+            <Setter Property="FontSize" Value="24"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="0,0,0,20"/>
+            <Setter Property="Foreground" Value="#111111"/>
+        </Style>
 
-            <TextBlock Grid.Row="3" Grid.Column="0" Text="Shift + Alt + S" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="3" Grid.Column="1" Text="Toggle Magnetic Snapping"/>
+        <Style TargetType="TextBlock" x:Key="SubHeaderStyle">
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,15,0,10"/>
+            <Setter Property="Foreground" Value="#333333"/>
+        </Style>
 
-            <TextBlock Grid.Row="4" Grid.Column="0" Text="Shift + Alt + M" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="4" Grid.Column="1" Text="Toggle Position Memory"/>
+        <Style TargetType="TextBlock" x:Key="DescriptionStyle">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#666666"/>
+            <Setter Property="Margin" Value="20,-8,0,12"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </Window.Resources>
 
-            <TextBlock Grid.Row="5" Grid.Column="0" Text="Shift + Alt + E" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="5" Grid.Column="1" Text="Toggle Breathing Windows"/>
-
-            <TextBlock Grid.Row="6" Grid.Column="0" Text="Shift + Alt + R" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="6" Grid.Column="1" Text="Roll up / Unroll Window"/>
-
-            <TextBlock Grid.Row="7" Grid.Column="0" Text="Shift + Alt + H" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="7" Grid.Column="1" Text="Minimize to Tray"/>
-
-            <TextBlock Grid.Row="8" Grid.Column="0" Text="Shift + Alt + Esc / Esc x3" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="8" Grid.Column="1" Text="Boss Key / Stealth Panic Mode"/>
-
-            <TextBlock Grid.Row="9" Grid.Column="0" Text="Shift + Alt + Wheel" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="9" Grid.Column="1" Text="Change Window Transparency"/>
-
-            <TextBlock Grid.Row="10" Grid.Column="0" Text="Shift + Alt + X" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="10" Grid.Column="1" Text="Reset Window Transparency"/>
-
-            <TextBlock Grid.Row="11" Grid.Column="0" Text="Shift + Alt + Y" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="11" Grid.Column="1" Text="Restore All Rolled/Hidden Windows"/>
-
-            <TextBlock Grid.Row="12" Grid.Column="0" Text="Shift + Alt + C" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="12" Grid.Column="1" Text="Toggle macOS-style Hot Corners"/>
-
-            <TextBlock Grid.Row="13" Grid.Column="0" Text="Shift + Alt + I" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="13" Grid.Column="1" Text="Toggle Infinite Cursor Wrap"/>
-
-            <TextBlock Grid.Row="14" Grid.Column="0" Text="Shift + Alt + D" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="14" Grid.Column="1" Text="Toggle Multi-monitor Dimmer"/>
-
-            <TextBlock Grid.Row="15" Grid.Column="0" Text="Shift + Alt + T" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="15" Grid.Column="1" Text="Toggle Smart Auto-hide Taskbar"/>
-
-            <TextBlock Grid.Row="16" Grid.Column="0" Text="Shift + Alt + J" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="16" Grid.Column="1" Text="Toggle Magnetic Window Groups"/>
-
-            <TextBlock Grid.Row="17" Grid.Column="0" Text="Shift + Alt + Space" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="17" Grid.Column="1" Text="Toggle Universal Grab &amp; Pan"/>
-
-            <TextBlock Grid.Row="18" Grid.Column="0" Text="Shift + Alt + K" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="18" Grid.Column="1" Text="Center Window"/>
-
-            <TextBlock Grid.Row="19" Grid.Column="0" Text="Shift + Alt + U" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="19" Grid.Column="1" Text="Cycle Window Size (50% / 75% / 90%)"/>
-
-            <TextBlock Grid.Row="20" Grid.Column="0" Text="Shift + Alt + N" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="20" Grid.Column="1" Text="Move to Next Monitor"/>
-
-            <TextBlock Grid.Row="21" Grid.Column="0" Text="Shift + Alt + Z" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="21" Grid.Column="1" Text="Undo Layout Change"/>
-
-            <TextBlock Grid.Row="22" Grid.Column="0" Text="Shift + Alt + Numpad0" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="22" Grid.Column="1" Text="Maximize / Restore Window"/>
-
-            <TextBlock Grid.Row="23" Grid.Column="0" Text="Shift + Alt + Numpad1-9" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="23" Grid.Column="1" Text="Tile to that cell of a 3x3 Grid"/>
-
-            <TextBlock Grid.Row="24" Grid.Column="0" Text="Shift + Alt + Up/Down" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="24" Grid.Column="1" Text="Tile to Top / Bottom Half (Laptop Alias)"/>
-
-            <TextBlock Grid.Row="25" Grid.Column="0" Text="Shift + Alt + F5/F6" FontFamily="Consolas"/>
-            <TextBlock Grid.Row="25" Grid.Column="1" Text="Restart / Exit Application"/>
-        </Grid>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
         
-        <TextBlock Text="Status:" FontWeight="Bold" Margin="0,20,0,5"/>
-        <TextBlock Text="Engine is running in the background." Foreground="Green" Margin="10,0,0,0"/>
-    </StackPanel>
+        <!-- Sidebar -->
+        <Border Background="#E6E6E6" Grid.Column="0">
+            <StackPanel>
+                <TextBlock Text="Window Tweaks" FontSize="20" FontWeight="Bold" Margin="20,20,20,2"/>
+                <TextBlock Text="version 1.0.0" FontSize="12" Foreground="#666666" Margin="20,0,20,30"/>
+                
+                <ListBox x:Name="SidebarList" Background="Transparent" BorderThickness="0" SelectionChanged="SidebarList_SelectionChanged" SelectedIndex="0">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="20,12"/>
+                            <Setter Property="FontSize" Value="14"/>
+                            <Setter Property="Foreground" Value="#222222"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="#FFFFFF"/>
+                                    <Setter Property="Foreground" Value="#000000"/>
+                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                </Trigger>
+                                <MultiTrigger>
+                                    <MultiTrigger.Conditions>
+                                        <Condition Property="IsMouseOver" Value="True"/>
+                                        <Condition Property="IsSelected" Value="False"/>
+                                    </MultiTrigger.Conditions>
+                                    <Setter Property="Background" Value="#D8D8D8"/>
+                                </MultiTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBoxItem Content="🪟  Window Management" Tag="WindowManagement"/>
+                    <ListBoxItem Content="⚡  Power Features" Tag="PowerFeatures"/>
+                    <ListBoxItem Content="✨  Animation" Tag="Animation"/>
+                    <ListBoxItem Content="📐  Hot Corners" Tag="HotCorners"/>
+                    <ListBoxItem Content="⚙️  General" Tag="General"/>
+                </ListBox>
+            </StackPanel>
+        </Border>
+
+        <!-- Main Content -->
+        <Border Grid.Column="1" Background="#FFFFFF">
+            <ScrollViewer Margin="40,30,40,30" VerticalScrollBarVisibility="Auto">
+                <ContentControl x:Name="MainContent"/>
+            </ScrollViewer>
+        </Border>
+    </Grid>
 </Window>

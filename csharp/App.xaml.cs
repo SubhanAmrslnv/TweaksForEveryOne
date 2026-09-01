@@ -32,8 +32,23 @@ public partial class App : System.Windows.Application
     private readonly SmartTaskbarFeature _smartTaskbarFeature = new();
     private readonly MagneticGroupsFeature _magneticGroupsFeature = new();
     private readonly GrabPanFeature _grabPanFeature = new();
+    private readonly AlwaysOnBottomFeature _alwaysOnBottomFeature = new();
+    private readonly ProximityGhostFeature _proximityGhostFeature = new();
+    private readonly LivePipFeature _livePipFeature = new();
+    private readonly SpotlightFeature _spotlightFeature = new();
+    private readonly MicMuteFeature _micMuteFeature = new();
+    private readonly QuickLookFeature _quickLookFeature = new();
+    private readonly ShatterCloseFeature _shatterCloseFeature = new();
+    private readonly GravityCloseFeature _gravityCloseFeature = new();
+    private readonly PlainPasteFeature _plainPasteFeature = new();
+    private readonly QuickFolderJumpFeature _quickFolderJumpFeature = new();
+    private readonly SmartCapsFeature _smartCapsFeature = new();
+    private readonly CustomClockFeature _customClockFeature = new();
     private RestoreAllFeature _restoreAllFeature;
+    private AltDragFeature _altDragFeature;
     private StealthPanicTrigger _stealthPanicTrigger;
+    private DoubleAltTrigger _doubleAltTrigger;
+    private DoubleCtrlTrigger _doubleCtrlTrigger;
 
     private const uint VK_O = 0x4F;
     private const uint VK_F = 0x46;
@@ -56,6 +71,16 @@ public partial class App : System.Windows.Application
     private const uint VK_T = 0x54;
     private const uint VK_J = 0x4A;
     private const uint VK_SPACE = 0x20;
+    private const uint VK_B = 0x42;
+    private const uint VK_G = 0x47;
+    private const uint VK_P = 0x50;
+    private const uint VK_L = 0x4C;
+    private const uint VK_A = 0x41;
+    private const uint VK_Q = 0x51;
+    private const uint VK_F4 = 0x73;
+    private const uint VK_V = 0x56;
+
+    public const uint MOD_CONTROL = 0x0002;
 
     private const uint VK_NUMPAD0 = 0x60;
     private const uint VK_NUMPAD1 = 0x61;
@@ -83,13 +108,25 @@ public partial class App : System.Windows.Application
         {
             Dispatcher.Invoke(() => _bossKeyFeature.Toggle());
         });
+        
+        _doubleAltTrigger = new DoubleAltTrigger(() =>
+        {
+            Dispatcher.Invoke(() => _micMuteFeature.Toggle());
+        });
+        
+        _doubleCtrlTrigger = new DoubleCtrlTrigger(() =>
+        {
+            Dispatcher.Invoke(() => _spotlightFeature.Toggle());
+        });
 
         // 1. Initialize UI Managers
         _systemTrayManager = new SystemTrayManager(ShowSettingsWindow, ReloadApp, Shutdown);
         _hotkeyManager = new HotkeyManager();
+        
+        _altDragFeature = new AltDragFeature();
+        _altDragFeature.Toggle(); // Enable by default
 
-        // 2. Register Hotkeys (Shift + Alt + Key)
-        uint modifiers = NativeMethods.MOD_ALT | NativeMethods.MOD_SHIFT;
+        var modifiers = NativeMethods.MOD_ALT | NativeMethods.MOD_SHIFT;
         
         _hotkeyManager.Register(modifiers, VK_O, _alwaysOnTopFeature.Toggle);
         _hotkeyManager.Register(modifiers, VK_F, _focusModeFeature.Toggle);
@@ -112,6 +149,22 @@ public partial class App : System.Windows.Application
         _hotkeyManager.Register(modifiers, VK_T, _smartTaskbarFeature.Toggle);
         _hotkeyManager.Register(modifiers, VK_J, _magneticGroupsFeature.Toggle);
         _hotkeyManager.Register(modifiers, VK_SPACE, _grabPanFeature.Toggle);
+        _hotkeyManager.Register(modifiers, VK_B, _alwaysOnBottomFeature.Toggle);
+        _hotkeyManager.Register(modifiers, VK_G, _proximityGhostFeature.Toggle);
+        _hotkeyManager.Register(modifiers, VK_P, _livePipFeature.Toggle);
+        _hotkeyManager.Register(modifiers, VK_L, _spotlightFeature.Toggle);
+        _hotkeyManager.Register(modifiers, VK_A, _micMuteFeature.Toggle);
+        _hotkeyManager.Register(modifiers, VK_Q, _quickLookFeature.Toggle);
+        _hotkeyManager.Register(modifiers, VK_F4, _shatterCloseFeature.Toggle);
+        
+        // Gravity Drop is just Alt + F4
+        _hotkeyManager.Register(NativeMethods.MOD_ALT, VK_F4, _gravityCloseFeature.Toggle);
+
+        // Plain Paste is Ctrl + Alt + V
+        _hotkeyManager.Register(NativeMethods.MOD_ALT | MOD_CONTROL, VK_V, _plainPasteFeature.Toggle);
+
+        // Quick Folder Jump is Ctrl + G
+        _hotkeyManager.Register(MOD_CONTROL, VK_G, _quickFolderJumpFeature.Toggle);
 
         _hotkeyManager.Register(modifiers, VK_NUMPAD0, _maximizeRestoreFeature.Toggle);
         _hotkeyManager.Register(modifiers, VK_NUMPAD1, () => _tileWindowFeature.TileWindow(1));
@@ -172,6 +225,18 @@ public partial class App : System.Windows.Application
         _multiMonitorDimmerFeature?.Dispose();
         _infiniteWrapFeature?.Dispose();
         _hotCornersFeature?.Dispose();
+        _alwaysOnBottomFeature?.Dispose();
+        _proximityGhostFeature?.Dispose();
+        _livePipFeature?.Dispose();
+        _spotlightFeature?.Dispose();
+        _quickLookFeature?.Dispose();
+        _shatterCloseFeature?.Dispose();
+        _gravityCloseFeature?.Dispose();
+        _altDragFeature?.Dispose();
+        _doubleAltTrigger?.Dispose();
+        _doubleCtrlTrigger?.Dispose();
+        _smartCapsFeature?.Dispose();
+        _customClockFeature?.Dispose();
         
         base.OnExit(e);
     }

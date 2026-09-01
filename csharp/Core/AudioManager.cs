@@ -69,6 +69,26 @@ public static class AudioManager
         return endpointVolume;
     }
 
+    private static IAudioEndpointVolume GetMicVolumeObject()
+    {
+        IMMDeviceEnumerator deviceEnumerator = null;
+        IMMDevice defaultDevice = null;
+        IAudioEndpointVolume endpointVolume = null;
+        try
+        {
+            deviceEnumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+            // eCapture = 1, eMultimedia = 1
+            deviceEnumerator.GetDefaultAudioEndpoint(1, 1, out defaultDevice); 
+            if (defaultDevice != null)
+            {
+                Guid iid = typeof(IAudioEndpointVolume).GUID;
+                defaultDevice.Activate(ref iid, 23, IntPtr.Zero, out endpointVolume); 
+            }
+        }
+        catch { }
+        return endpointVolume;
+    }
+
     public static bool GetMute()
     {
         try
@@ -90,6 +110,36 @@ public static class AudioManager
         try
         {
             var vol = GetMasterVolumeObject();
+            if (vol != null)
+            {
+                vol.SetMute(mute, Guid.Empty);
+                Marshal.ReleaseComObject(vol);
+            }
+        }
+        catch { }
+    }
+
+    public static bool GetMicMute()
+    {
+        try
+        {
+            var vol = GetMicVolumeObject();
+            if (vol != null)
+            {
+                vol.GetMute(out bool isMuted);
+                Marshal.ReleaseComObject(vol);
+                return isMuted;
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    public static void SetMicMute(bool mute)
+    {
+        try
+        {
+            var vol = GetMicVolumeObject();
             if (vol != null)
             {
                 vol.SetMute(mute, Guid.Empty);

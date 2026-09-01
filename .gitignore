@@ -45,3 +45,17 @@ compile_commands.json
 *.so.*
 *.a
 tweaksd
+
+# .NET Core / C# Project Ignores
+bin/
+obj/
+csharp/bin/
+csharp/obj/
+*.user
+*.userosscache
+*.sln.docstates
+.vs/
+TestResults/
+*.suo
+*.userprefs
+packages/

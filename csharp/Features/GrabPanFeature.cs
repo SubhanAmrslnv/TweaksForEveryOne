@@ -119,10 +119,35 @@ public class GrabPanFeature : IDisposable
                     
                     if (!_dragged)
                     {
-                        // Simulate regular click
-                        _ignoreClicks = 2; // Ignore our synthetic down and up
-                        NativeMethods.mouse_event(NativeMethods.MOUSEEVENTF_MIDDLEDOWN, 0, 0, 0, IntPtr.Zero);
-                        NativeMethods.mouse_event(NativeMethods.MOUSEEVENTF_MIDDLEUP, 0, 0, 0, IntPtr.Zero);
+                        bool handled = false;
+                        
+                        // Check if we middle-clicked on a title bar (HTCAPTION = 2)
+                        NativeMethods.POINT pt = new NativeMethods.POINT { X = hookStruct.pt.X, Y = hookStruct.pt.Y };
+                        IntPtr hwnd = NativeMethods.WindowFromPoint(pt);
+                        if (hwnd != IntPtr.Zero)
+                        {
+                            IntPtr root = NativeMethods.GetAncestor(hwnd, NativeMethods.GA_ROOT);
+                            if (root != IntPtr.Zero)
+                            {
+                                int lp = (hookStruct.pt.Y << 16) | (hookStruct.pt.X & 0xFFFF);
+                                IntPtr res = IntPtr.Zero;
+                                NativeMethods.SendMessageTimeout(root, NativeMethods.WM_NCHITTEST, IntPtr.Zero, new IntPtr(lp), 2, 50, out res);
+                                
+                                if (res.ToInt32() == 2) // HTCAPTION
+                                {
+                                    NativeMethods.PostMessage(root, NativeMethods.WM_SYSCOMMAND, new IntPtr(NativeMethods.SC_CLOSE), IntPtr.Zero);
+                                    handled = true;
+                                }
+                            }
+                        }
+
+                        if (!handled)
+                        {
+                            // Simulate regular click
+                            _ignoreClicks = 2; // Ignore our synthetic down and up
+                            NativeMethods.mouse_event(NativeMethods.MOUSEEVENTF_MIDDLEDOWN, 0, 0, 0, IntPtr.Zero);
+                            NativeMethods.mouse_event(NativeMethods.MOUSEEVENTF_MIDDLEUP, 0, 0, 0, IntPtr.Zero);
+                        }
                     }
                     
                     return (IntPtr)1; // Swallow the physical up

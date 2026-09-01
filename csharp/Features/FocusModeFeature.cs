@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using WindowTweaks.Core;
@@ -13,6 +14,10 @@ public class FocusModeFeature
     private Window? _overlayWindow;
     private DispatcherTimer? _monitorTimer;
     private IntPtr _currentTargetHwnd;
+    private RadialGradientBrush? _spotlightMask;
+    
+    // Smooth trailing variables for the cinematic spotlight movement
+    private double _currentX, _currentY, _currentW, _currentH;
 
     public bool IsEnabled => _overlayWindow != null;
 
@@ -30,7 +35,6 @@ public class FocusModeFeature
 
     private void Enable()
     {
-        // Spans all monitors
         double left = SystemParameters.VirtualScreenLeft;
         double top = SystemParameters.VirtualScreenTop;
         double width = SystemParameters.VirtualScreenWidth;
@@ -40,68 +44,95 @@ public class FocusModeFeature
         {
             WindowStyle = WindowStyle.None,
             AllowsTransparency = true,
-            Background = System.Windows.Media.Brushes.Transparent,
+            Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(230, 0, 0, 0)), // Very dark vignette
             Topmost = false,
             ShowInTaskbar = false,
             Left = left,
             Top = top,
             Width = width,
             Height = height,
-            IsHitTestVisible = false // Passes clicks through
+            IsHitTestVisible = false,
+            Opacity = 0 // Start fully transparent
         };
 
-        // Create the dimming background with a hole
-        var path = new Path
+        // Create a radial opacity mask to punch a soft hole
+        _spotlightMask = new RadialGradientBrush
         {
-            Fill = new SolidColorBrush(System.Windows.Media.Color.FromArgb(200, 0, 0, 0)), // 80% Black
+            GradientOrigin = new System.Windows.Point(0.5, 0.5),
+            Center = new System.Windows.Point(0.5, 0.5),
+            RadiusX = 0.5,
+            RadiusY = 0.5,
+            MappingMode = BrushMappingMode.Absolute
         };
 
-        _overlayWindow.Content = path;
+        // The center of the window is fully visible (0 opacity in the mask means we don't draw the dark overlay)
+        _spotlightMask.GradientStops.Add(new GradientStop(System.Windows.Media.Color.FromArgb(0, 0, 0, 0), 0.0));
+        _spotlightMask.GradientStops.Add(new GradientStop(System.Windows.Media.Color.FromArgb(0, 0, 0, 0), 0.7)); // Inner clear zone
+        _spotlightMask.GradientStops.Add(new GradientStop(System.Windows.Media.Color.FromArgb(255, 0, 0, 0), 1.0)); // Soft cinematic fade out to darkness
+
+        _overlayWindow.OpacityMask = _spotlightMask;
         _overlayWindow.Show();
 
-        // Start monitoring active window
+        // Cinematic Fade In
+        DoubleAnimation fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.6))
+        {
+            EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
+        };
+        _overlayWindow.BeginAnimation(Window.OpacityProperty, fadeIn);
+
+        // Start tracking
         _monitorTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(30)
+            Interval = TimeSpan.FromMilliseconds(16) // 60 FPS
         };
         _monitorTimer.Tick += MonitorTimer_Tick;
         _monitorTimer.Start();
         
-        UpdateSpotlight();
+        UpdateSpotlight(true);
     }
 
     private void Disable()
     {
+        if (_overlayWindow == null) return;
+
         _monitorTimer?.Stop();
-        _overlayWindow?.Close();
-        _overlayWindow = null;
+
+        // Cinematic Fade Out
+        DoubleAnimation fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.4))
+        {
+            EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
+        };
+        
+        fadeOut.Completed += (s, e) => 
+        {
+            _overlayWindow?.Close();
+            _overlayWindow = null;
+        };
+
+        _overlayWindow.BeginAnimation(Window.OpacityProperty, fadeOut);
     }
 
     private void MonitorTimer_Tick(object? sender, EventArgs e)
     {
-        UpdateSpotlight();
+        UpdateSpotlight(false);
     }
 
-    private void UpdateSpotlight()
+    private void UpdateSpotlight(bool snap)
     {
-        if (_overlayWindow == null) return;
+        if (_overlayWindow == null || _spotlightMask == null) return;
 
         IntPtr activeWindow = NativeMethods.GetForegroundWindow();
-        
-        // If no active window or it's our own overlay, ignore
         var helper = new WindowInteropHelper(_overlayWindow);
         if (activeWindow == IntPtr.Zero || activeWindow == helper.Handle)
             return;
 
         _currentTargetHwnd = activeWindow;
 
-        // Ensure overlay is directly behind the active window
         NativeMethods.SetWindowPos(helper.Handle, _currentTargetHwnd, 0, 0, 0, 0, 
             NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
 
         if (NativeMethods.GetWindowRect(_currentTargetHwnd, out NativeMethods.RECT rect))
         {
-            // Convert physical screen coordinates to WPF logical coordinates
             var source = PresentationSource.FromVisual(_overlayWindow);
             double dpiX = 1.0, dpiY = 1.0;
             if (source?.CompositionTarget != null)
@@ -110,23 +141,39 @@ public class FocusModeFeature
                 dpiY = source.CompositionTarget.TransformFromDevice.M22;
             }
 
-            double x = (rect.Left - SystemParameters.VirtualScreenLeft) * dpiX;
-            double y = (rect.Top - SystemParameters.VirtualScreenTop) * dpiY;
-            double w = (rect.Right - rect.Left) * dpiX;
-            double h = (rect.Bottom - rect.Top) * dpiY;
+            double targetX = (rect.Left - SystemParameters.VirtualScreenLeft) * dpiX;
+            double targetY = (rect.Top - SystemParameters.VirtualScreenTop) * dpiY;
+            double targetW = (rect.Right - rect.Left) * dpiX;
+            double targetH = (rect.Bottom - rect.Top) * dpiY;
 
-            // Animate or snap the hole.
-            var screenGeometry = new RectangleGeometry(new Rect(0, 0, _overlayWindow.Width, _overlayWindow.Height));
-            var holeGeometry = new RectangleGeometry(new Rect(x, y, w, h), 10, 10); // 10px rounded corners
-
-            var group = new GeometryGroup { FillRule = FillRule.EvenOdd };
-            group.Children.Add(screenGeometry);
-            group.Children.Add(holeGeometry);
-
-            if (_overlayWindow.Content is Path path)
+            if (snap || _currentW == 0)
             {
-                path.Data = group;
+                _currentX = targetX;
+                _currentY = targetY;
+                _currentW = targetW;
+                _currentH = targetH;
             }
+            else
+            {
+                // Cinematic physics trailing (Lerp)
+                double speed = 0.15;
+                _currentX += (targetX - _currentX) * speed;
+                _currentY += (targetY - _currentY) * speed;
+                _currentW += (targetW - _currentW) * speed;
+                _currentH += (targetH - _currentH) * speed;
+            }
+
+            // Define the spotlight based on the window center and size
+            double centerX = _currentX + (_currentW / 2);
+            double centerY = _currentY + (_currentH / 2);
+
+            _spotlightMask.Center = new System.Windows.Point(centerX, centerY);
+            _spotlightMask.GradientOrigin = new System.Windows.Point(centerX, centerY);
+            
+            // The radius should encircle the window entirely + some padding
+            double padding = 50;
+            _spotlightMask.RadiusX = (_currentW / 2) + padding;
+            _spotlightMask.RadiusY = (_currentH / 2) + padding;
         }
     }
 }

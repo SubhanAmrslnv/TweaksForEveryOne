@@ -4,11 +4,47 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Windows 11 tray utility written in **AutoHotkey v2** (magnetic window snapping, inertial "ice glide", window animations, ~40 power-user tweaks), plus a reversible HKCU tuning pass. Shipped two ways: a PowerShell installer and a single-file setup `.exe` compiled from C#.
+A Windows 11 tray utility — magnetic window snapping, inertial "ice glide", window animations, ~40 power-user tweaks, plus a reversible HKCU tuning pass.
 
-**This repository now holds two independent implementations.** Everything in this file describes the Windows one (`src/`, `scripts/`, `build/`, `docs/`). A separate C++20/Qt6/CMake port for Linux lives in **`linux/`** and has its own **`linux/CLAUDE.md`** — read that before touching anything under `linux/`. The two share **no code**, only design: the render-arbitration and animation-scheduler concepts were ported deliberately, so if you change an invariant on one side, check the other. The Linux port is an early scaffold that does not build; do not treat its docs as a description of working software.
+**Four independent trees now live here, sharing no code.** Work out which one a task targets before writing a line:
+
+| Tree | What it is | State | Governed by |
+|---|---|---|---|
+| `src\` | The **AutoHotkey v2** implementation. 52 modules, ~15,000 lines | Complete and shipping. Everything else in this file describes it | this file |
+| `csharp\` | A **.NET 10 / WPF** rewrite. 39 features, ~6,150 lines | Working but young: no settings persistence, mock settings GUI | **`## The C# / .NET tree` below** — read it before touching `csharp\` |
+| `native\` | A 42-line **C++ Win32** spike (`main.cpp`): `RegisterHotKey` + message loop, Shift+Alt+O always-on-top, Shift+Alt+Q quit, a MessageBox banner | Proof of concept. No build script | — |
+| `linux\` | A **C++20/Qt6/CMake** port for Linux | Early scaffold that **does not build**; do not read its docs as a description of working software | **`linux/CLAUDE.md`** |
+
+`src\` and `linux\` share design, not code: the render-arbitration and animation-scheduler concepts were ported deliberately, so if you change an invariant on one side, check the other.
+
+**`GEMINI.md` in the repo root bans AutoHotkey outright**, on the grounds that AV vendors (Bitdefender is named) flag it as a false positive, and directs all system-hook and window-manipulation work to C++ (preferred) or C# (acceptable where a WPF UI is needed). That constraint is why `csharp\` and `native\` exist. It disagrees with this file, which documents the AHK tree in detail — and that tree is still present, still runnable and still installable via `Install.ps1`.
+
+**How to resolve that in practice.** The evidence points at `csharp\` as the active target for *new* feature work: `GEMINI.md` is explicit, `Install.bat` was repointed at the C# build, and the recent commits are C#/C++. So treat `csharp\` as the default for a new feature and `src\` as maintained-not-extended — but when a request could plausibly mean either tree, **ask which one** rather than picking. Do not port a feature between trees, or rewrite an AHK feature in C#, unless asked.
 
 **There is no taskbar-height engine any more.** `TaskbarCore.ahk`, the `TB_*` globals, `TB_HEIGHTS`, `IsHeight()` and the `Win+Alt+Up/Down/0` hotkeys were removed. What remains taskbar-related is Smart Auto-Hide (`SHAppBarMessage`, `[taskbar] smart`) and taskbar volume scroll. `docs\TASKBAR-AND-INTERNALS.md` keeps the measured findings from that work because the Win32 research is still valuable — but treat it as history, not as a description of the code.
+
+## The C# / .NET tree (`csharp\`)
+
+`net10.0-windows`, `UseWPF` + `UseWindowsForms`, nullable enabled. One `WindowTweaks.csproj` and a `WindowTweaks.slnx`. Layout is `Core\` (5 files) + `Features\` (39 files) + `App.xaml.cs` + `MainWindow.xaml(.cs)`.
+
+**None of the AHK infrastructure was ported.** There is no `RenderCore`, no `AnimationScheduler`, no `TUNE_SPEC`, no settings store, no logging. Instead **each feature is a self-contained class** owning its own Win32 hooks, its own `DispatcherTimer`s, its own tuning constants and its own teardown. Nothing arbitrates between them. So most of the render-pipeline and animation rules below are *not* facts about this tree — they are the problems this tree has not solved yet, and the sections explaining *why* those rules exist are still the best available guide to what will break here.
+
+**Composition, wiring and startup all live in `App.OnStartup`.** Every feature is a field on `App`, constructed eagerly; `Core\HotkeyManager` registers each binding with `RegisterHotKey(IntPtr.Zero, id, ...)` and dispatches `WM_HOTKEY` off `ComponentDispatcher.ThreadPreprocessMessage`. The bindings mirror the AHK table — `Shift+Alt` is `MOD_ALT | MOD_SHIFT` — plus `Alt+F4`, `Ctrl+Alt+V` and `Ctrl+G`. A new feature is a class, a field, a `Register` call and a `Dispose` call.
+
+Six things to know before changing anything here, each of which reads as a bug if you don't:
+
+- **`Toggle()` is the name of every hotkey callback, including the one-shot commands.** `CenterWindowFeature.Toggle` and `UndoLayoutFeature.Toggle` do not toggle anything — they act once. Do not infer state from the name.
+- **Every feature defaults to OFF except `AltDragFeature`**, which `OnStartup` toggles on explicitly. A fresh run legitimately does almost nothing until a hotkey is pressed.
+- **The settings window is a mock.** `MainWindow.BuildPage` builds each page from hardcoded `CreateSetting(..., isChecked)` literals wired to *nothing*: ticking a box changes no feature, and no value is read back. It is a layout prototype. Real settings work starts by giving this tree a store, which it does not have.
+- **The only persisted state in the whole tree** is `PositionMemoryFeature` → `%APPDATA%\...\window-positions.json`. No ini, no registry writes, no log file. Nothing survives a restart except window positions.
+- **Alpha is written absolutely, by three separate features.** `BreathingFeature`, `ChangeTransparencyFeature` and `ProximityGhostFeature` each call `SetLayeredWindowAttributes` directly with a final value. That is precisely the last-writer-wins defect `RS_AlphaState` composition exists to fix on the AHK side — read **The render pipeline** below for the user-visible symptom before adding a fourth writer. One deliberate divergence: `BreathingFeature.SetWindowAlpha` keeps `WS_EX_LAYERED` when restoring to 255 (its comment cites black flicker in apps that rely on it), where the AHK side strips it via `"Off"`.
+- **`App.OnExit` disposes 19 of the 24 `IDisposable` features.** `BreathingFeature`, `ChangeTransparencyFeature`, `MagneticSnappingFeature`, `PositionMemoryFeature` and `TrayMinimizeFeature` are never disposed — so exiting can leave foreign windows dimmed or transparent, and `TrayMinimizeFeature` can leave a window hidden with no tray icon left to restore it. Add every new feature to **both** the field list and `OnExit`.
+
+**Seven features install their own low-level `SetWindowsHookEx`** independently — `AltDrag`, `ChangeTransparency`, `DoubleAltTrigger`, `DoubleCtrlTrigger`, `GrabPan`, `SmartCaps`, `StealthPanicTrigger`. There is no shared hook, so the process's global hook count grows with each enabled feature.
+
+**`MagneticSnappingFeature` is the one deep port**, and the model to copy for fidelity: `EVENT_SYSTEM_MOVESIZESTART`/`END` plus `EVENT_OBJECT_LOCATIONCHANGE` for velocity, the same EMA with the same time constant (`k = 1 - Exp(-dtMs / 30.0)`) in the same unit (**px per second**), the same `DWMWA_EXTENDED_FRAME_BOUNDS` ↔ `GetWindowRect` conversion, and the same quintic ease-out glide. Two divergences that matter: its tuning values are `const` fields (`BASE_SNAP_DISTANCE`, `CORNER_BOOST`, `NEIGHBOUR_PROX`, `HYST`) rather than settings, and the glide is a per-feature `async` loop over `Task.Delay(15)` rather than one shared scheduler — so two features animating the same window will fight, with no equivalent of `Anim_Claim`.
+
+`Core\NativeMethods.cs` is the single P/Invoke surface (54 `DllImport`s). Keep new interop there rather than declaring it inside a feature.
 
 ## Features and hotkeys
 
@@ -247,9 +283,19 @@ Before adding a hotkey: everything global is `Shift+Alt+<key>`, so the free lett
 
 ## Commands
 
-There is **no build system, no test runner, and no CI**. No `.sln`, no `.csproj`, no Pester, no npm/make. Every command below is typed by hand.
+There is **no test runner and no CI**, and nothing here runs automatically. Every command below is typed by hand. The AHK tree has no build step at all; the C# tree has `dotnet`, and that is the only real build system in the repo.
 
 ```powershell
+# --- C# tree (csharp\) ---
+dotnet build   .\csharp\WindowTweaks.csproj                     # or open WindowTweaks.slnx
+dotnet run --project .\csharp\WindowTweaks.csproj               # tray app; Shift+Alt+W for settings
+dotnet publish .\csharp\WindowTweaks.csproj -c Release -r win-x64 --self-contained false -o .\csharp\publish
+
+# Build + install the C# app to %ProgramFiles%\WindowTweaks (SELF-ELEVATES to admin)
+.\Install.bat            # -> Install-Tweaks.ps1
+.\Install-Tweaks.ps1 [-Uninstall]
+
+# --- AHK tree (src\) ---
 # Run from source
 & "$env:LOCALAPPDATA\Programs\AutoHotkey\v2\AutoHotkey64.exe" src\WindowTweaks.ahk
 
@@ -258,7 +304,7 @@ There is **no build system, no test runner, and no CI**. No `.sln`, no `.csproj`
 .\build\Build-Installer.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build\Build-Installer.ps1   # if policy is Restricted
 
-# Install / uninstall (no admin required anywhere in this project)
+# Install / uninstall the AHK app (no admin, into %LOCALAPPDATA%)
 .\Install.ps1 [-Silent] [-Tuning] [-NoAutoStart]
 .\Uninstall.ps1 [-Silent]
 
@@ -916,6 +962,10 @@ first place.
 
 ## Packaging
 
+**There are now three install paths, and only two of them are what this section is about.** `Install.bat` → `Install-Tweaks.ps1` installs the **C# app**: it self-elevates with `-Verb RunAs`, runs `dotnet publish -c Release -r win-x64 --self-contained false`, copies to `%ProgramFiles%\WindowTweaks` and drops a Startup shortcut. It requires admin and writes outside the user profile — both of which the AHK path deliberately never did, so the project-wide "no admin, nothing outside `%LOCALAPPDATA%`" claim now holds only for `Install.ps1`. `Install-Tweaks.ps1 -Uninstall` is its reversal, and it shares no code with `Uninstall.ps1`.
+
+The two below are the **AHK** installers.
+
 Two independent installers that must be kept in sync: `Install.ps1` (6 steps) and `build\Setup.cs` (5 steps, WinForms). They already diverge — `Setup.cs` `StopRunning()` kills *every* process named `AutoHotkey*`, while `Install.ps1` filters by command line matching `*WindowTweaks.ahk*`. Change install behaviour in both.
 
 `build\Setup.cs` is compiled by the `csc.exe` that ships with the .NET Framework, i.e. a **C# 5 compiler**: no string interpolation, no expression-bodied members, no null-conditional. Keep it plain (the constraint is stated at `Setup.cs:6-8`).
@@ -958,7 +1008,7 @@ When adding new features or modifying the code, AI agents must strictly adhere t
 
 ## Constraints
 
-- **AutoHotkey v2 only.** v1 cannot run this. Tested against 2.0.26.
+- **Two toolchains, one repo.** The AHK tree needs **AutoHotkey v2 only** (v1 cannot run it; tested against 2.0.26) and has no build step. The C# tree needs the **.NET 10 SDK** and targets `net10.0-windows`. Neither is a dependency of the other, and the constraints in the rest of this list are about the AHK tree unless they name Windows itself.
 - Windows 11, developed and tested on 25H2 build 26200. All taskbar findings are build-specific; `docs\TASKBAR-AND-INTERNALS.md` documents four dead ends (`TaskbarSi`, `TaskbarSmallIcons`, two feature flags) so nobody retries them.
 - Hotkeys are inert against elevated windows unless the app itself is elevated.
 - **Windows' own Snap Assist wins at screen edges, by design** — the app skips windows Windows has maximised. Judge snapping by **window-to-window** magnetism, not screen edges.
@@ -972,6 +1022,8 @@ When adding new features or modifying the code, AI agents must strictly adhere t
 `docs\MODULARIZATION.md` is the live plan for splitting `WindowTweaks.ahk` — phase order, module boundaries, the `FEATURE_SPEC` / `TEARDOWN_SPEC` designs, and the AHK v2 traps the split hits. It is a working document, not user-facing, and is **not** shipped by the installer. Keep it current as phases land.
 
 **`docs\HOTKEYS.md` is the single source of truth for key bindings.** It is the only document that was updated for the `Ctrl+Alt` / `Shift+Alt` migration in commit `3dadac4`. When a hotkey changes, change it there and in the `; ====== Hotkeys ======` block, and make every other document defer rather than re-listing — three near-identical copies of the feature list already exist across `README.md`, this file and `docs\GUIDE.md`, and they drift.
+
+**Agent-facing config in the repo root**, none of it shipped: `GEMINI.md` (the AHK ban — see **What this is**), `.agents\rules\defensive_programming.md` (already mirrored into **Defensive Programming & Quality Guidelines** above) and `.agents\rules\professional_engineering.md` (asks for architecture-first analysis — trace the flow and name the trade-offs before implementing). `.claude\` carries a local hook/command harness, and `.mcp.json` declares filesystem, git and playwright MCP servers.
 
 Two strays: `docs\FUTURE-ANIMATIONS.md` is a roadmap written mostly in Azerbaijani whose contents have largely shipped, and `docs\claude.md` is a one-line note (lowercase filename, distinct from this file on a case-sensitive host).
 

@@ -135,6 +135,7 @@ internal static class NativeMethods
 
     public const int GWL_EXSTYLE = -20;
     public const uint WS_EX_LAYERED = 0x00080000;
+    public const uint WS_EX_TRANSPARENT = 0x00000020;
 
     [DllImport("user32.dll")]
     public static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
@@ -249,4 +250,109 @@ internal static class NativeMethods
     
     [DllImport("user32.dll")]
     public static extern bool LockWorkStation();
+
+    // --- Added for AlwaysOnBottom (Desktop Widget) ---
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    public static extern IntPtr FindWindowEx(IntPtr parentHandle, IntPtr childAfter, string lclassName, string windowTitle);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
+
+    [DllImport("user32.dll")]
+    public static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
+
+    // --- Added for Live PiP ---
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmRegisterThumbnail(IntPtr hwndDestination, IntPtr hwndSource, out IntPtr pThumbnailId);
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmUnregisterThumbnail(IntPtr thumbnailId);
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmUpdateThumbnailProperties(IntPtr hThumbnailId, ref DWM_THUMBNAIL_PROPERTIES ptnProperties);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct DWM_THUMBNAIL_PROPERTIES
+    {
+        public int dwFlags;
+        public RECT rcDestination;
+        public RECT rcSource;
+        public byte opacity;
+        public bool fVisible;
+        public bool fSourceClientAreaOnly;
+    }
+
+    public const int DWM_TNP_RECTDESTINATION = 0x00000001;
+    public const int DWM_TNP_RECTSOURCE = 0x00000002;
+    public const int DWM_TNP_OPACITY = 0x00000004;
+    public const int DWM_TNP_VISIBLE = 0x00000008;
+    public const int DWM_TNP_SOURCECLIENTAREAONLY = 0x00000010;
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+    public const uint WM_CLOSE = 0x0010;
+    public const uint WM_SYSCOMMAND = 0x0112;
+    public const int SC_CLOSE = 0xF060;
+    
+    public const uint WM_NCHITTEST = 0x0084;
+
+    public const int INPUT_KEYBOARD = 1;
+    public const uint KEYEVENTF_KEYUP = 0x0002;
+    public const ushort VK_CONTROL = 0x11;
+    public const ushort VK_V = 0x56;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct INPUT
+    {
+        public int type;
+        public InputUnion u;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    public struct InputUnion
+    {
+        [FieldOffset(0)]
+        public MOUSEINPUT mi;
+        [FieldOffset(0)]
+        public KEYBDINPUT ki;
+        [FieldOffset(0)]
+        public HARDWAREINPUT hi;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct KEYBDINPUT
+    {
+        public ushort wVk;
+        public ushort wScan;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct HARDWAREINPUT
+    {
+        public uint uMsg;
+        public ushort wParamL;
+        public ushort wParamH;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 }
