@@ -31,8 +31,7 @@ namespace WindowTweaks.Features;
 /// </summary>
 public class RippleClickFeature : IDisposable
 {
-    private const int MaxRadius = 44;
-    private const int DurationMs = 420;
+    // Read when a ripple is spawned, so a change to either slider shows on the very next click.
 
     private readonly NativeMethods.LowLevelMouseProc _proc;
     private IntPtr _hookId = IntPtr.Zero;
@@ -100,6 +99,9 @@ public class RippleClickFeature : IDisposable
     {
         try
         {
+            int maxRadius = TuningRegistry.Int(TuningRegistry.RippleRadius);
+            int durationMs = TuningRegistry.Int(TuningRegistry.RippleDurationMs);
+
             Ellipse ring = new()
             {
                 Width = 8,
@@ -122,10 +124,10 @@ public class RippleClickFeature : IDisposable
                 Topmost = true,
                 ResizeMode = ResizeMode.NoResize,
                 IsHitTestVisible = false,
-                Width = MaxRadius * 2,
-                Height = MaxRadius * 2,
-                Left = screenX - MaxRadius,
-                Top = screenY - MaxRadius,
+                Width = maxRadius * 2,
+                Height = maxRadius * 2,
+                Left = screenX - maxRadius,
+                Top = screenY - maxRadius,
                 Content = ring,
                 // Opacity is set before Show() - showing first would put one fully opaque frame on
                 // screen before the animation's first tick.
@@ -150,10 +152,10 @@ public class RippleClickFeature : IDisposable
                 }
             };
 
-            Duration duration = new(TimeSpan.FromMilliseconds(DurationMs));
+            Duration duration = new(TimeSpan.FromMilliseconds(durationMs));
             IEasingFunction ease = new CubicEase { EasingMode = EasingMode.EaseOut };
 
-            DoubleAnimation grow = new(8, MaxRadius * 2, duration) { EasingFunction = ease };
+            DoubleAnimation grow = new(8, maxRadius * 2, duration) { EasingFunction = ease };
             DoubleAnimation fade = new(0.85, 0.0, duration) { EasingFunction = ease };
 
             // Closing is driven by the animation that shows it, but the window is not left to the

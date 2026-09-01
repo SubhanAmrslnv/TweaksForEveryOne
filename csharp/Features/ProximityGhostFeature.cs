@@ -30,9 +30,11 @@ public class ProximityGhostFeature : IDisposable
     private bool _isMonitoring;
     private CancellationTokenSource? _cancellationTokenSource;
 
-    private const int MaxDist = 400;
-    private const double MinFactor = 0.2; // 80% transparent at the far end
-    private const int ClickDist = 50;
+    // Read once per loop pass rather than per ghosted window: the loop runs every 25 ms and a
+    // settings read takes the store's lock.
+    private int _maxDist;
+    private double _minFactor;
+    private int _clickDist;
 
     public bool IsEnabled => _ghostWindows.Count > 0;
 
@@ -112,6 +114,10 @@ public class ProximityGhostFeature : IDisposable
                     break;
                 }
 
+                _maxDist = TuningRegistry.Int(TuningRegistry.GhostMaxDistance);
+                _minFactor = TuningRegistry.Fraction(TuningRegistry.GhostMinOpacity);
+                _clickDist = TuningRegistry.Int(TuningRegistry.GhostClickDistance);
+
                 NativeMethods.GetCursorPos(out NativeMethods.POINT pt);
 
                 List<IntPtr> dead = new();
@@ -134,11 +140,11 @@ public class ProximityGhostFeature : IDisposable
 
                     double factor;
                     if (dist == 0) factor = 1.0;
-                    else if (dist >= MaxDist) factor = MinFactor;
+                    else if (dist >= _maxDist) factor = _minFactor;
                     else
                     {
-                        double ratio = 1.0 - (double)dist / MaxDist;
-                        factor = MinFactor + ratio * (1.0 - MinFactor);
+                        double ratio = 1.0 - (double)dist / _maxDist;
+                        factor = _minFactor + ratio * (1.0 - _minFactor);
                     }
 
                     // Always SetLayer, never ClearLayer: see the class comment.
@@ -147,13 +153,13 @@ public class ProximityGhostFeature : IDisposable
                     uint exStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
                     bool isClickThrough = (exStyle & NativeMethods.WS_EX_TRANSPARENT) != 0;
 
-                    if (dist < ClickDist)
+                    if (dist < _clickDist)
                     {
                         if (isClickThrough)
                             NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE,
                                 exStyle & ~NativeMethods.WS_EX_TRANSPARENT);
                     }
-                    else if (dist > ClickDist + 12)
+                    else if (dist > _clickDist + 12)
                     {
                         if (!isClickThrough)
                             NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE,

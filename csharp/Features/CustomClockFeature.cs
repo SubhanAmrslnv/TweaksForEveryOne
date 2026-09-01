@@ -40,17 +40,6 @@ namespace WindowTweaks.Features;
 /// </summary>
 public class CustomClockFeature : IDisposable
 {
-    // Settings
-    private const string TimeFormatKey = "clock.timeFormat";
-    private const string DateFormatKey = "clock.dateFormat";
-    private const string AnchorKey = "clock.anchor"; // "TrayEdge" or "Clock"
-    private const string GapKey = "clock.gap";
-
-    /// <summary>24-hour, because the block has no room for an AM/PM marker.</summary>
-    private const string DefaultTimeFormat = "HH:mm:ss";
-
-    private const string DefaultDateFormat = "dd.MM.yyyy";
-
     private Window? _clockWindow;
     private TextBlock? _glyphText;
     private TextBlock? _infoText;
@@ -286,8 +275,8 @@ public class CustomClockFeature : IDisposable
         if (_timeText == null || _dateText == null || _glyphText == null || _infoText == null) return;
 
         DateTime now = DateTime.Now;
-        _timeText.Text = SafeFormat(now, SettingsStore.GetString(TimeFormatKey, DefaultTimeFormat), DefaultTimeFormat);
-        _dateText.Text = SafeFormat(now, SettingsStore.GetString(DateFormatKey, DefaultDateFormat), DefaultDateFormat);
+        _timeText.Text = SafeFormat(now, TuningRegistry.Text(TuningRegistry.ClockTimeFormat), "HH:mm:ss");
+        _dateText.Text = SafeFormat(now, TuningRegistry.Text(TuningRegistry.ClockDateFormat), "dd.MM.yyyy");
 
         if (!WeatherEnabled)
         {
@@ -309,12 +298,9 @@ public class CustomClockFeature : IDisposable
             return;
         }
 
-        _glyphText.Text = r.Glyph;
+        _glyphText.Text = $"{r.Glyph} {r.TemperatureText}";
 
-        string condition = r.Condition;
-        _infoText.Text = condition.Length > 0
-            ? $"{r.TemperatureText}  {condition}  {r.WindText}"
-            : $"{r.TemperatureText}  {r.WindText}";
+        _infoText.Text = r.WindText;
     }
 
     /// <summary>
@@ -375,7 +361,7 @@ public class CustomClockFeature : IDisposable
         double height = _clockWindow.ActualHeight;
         if (width <= 0 || height <= 0) return;
 
-        int gap = SettingsStore.GetInt(GapKey, 12, 0, 400);
+        int gap = TuningRegistry.Int(TuningRegistry.ClockGap);
 
         double left = anchorLeft * scaleX - gap - width;
         double barTop = bar.Top * scaleY;
@@ -423,7 +409,7 @@ public class CustomClockFeature : IDisposable
     /// </summary>
     private static IntPtr ResolveAnchor(IntPtr taskbar)
     {
-        string preference = SettingsStore.GetString(AnchorKey, "TrayEdge");
+        string preference = TuningRegistry.Choice(TuningRegistry.ClockAnchor);
 
         IntPtr tray = NativeMethods.FindWindowEx(taskbar, IntPtr.Zero, "TrayNotifyWnd", null);
 

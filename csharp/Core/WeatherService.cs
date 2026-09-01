@@ -27,9 +27,6 @@ namespace WindowTweaks.Core;
 /// </summary>
 internal static class WeatherService
 {
-    public const string LocationKey = "clock.location";
-    public const string UnitsKey = "clock.units"; // "metric" or "imperial"
-
     private const int NormalIntervalMinutes = 15;
     private const int MaxBackoffMinutes = 15;
 
@@ -77,10 +74,10 @@ internal static class WeatherService
     /// <summary>True once a reading has ever arrived, so the UI can show a placeholder until then.</summary>
     public static bool HasReading => Current != null;
 
-    public static string Location => SettingsStore.GetString(LocationKey, string.Empty).Trim();
+    public static string Location => TuningRegistry.Text(TuningRegistry.ClockLocation).Trim();
 
     public static bool Metric =>
-        !string.Equals(SettingsStore.GetString(UnitsKey, "metric"), "imperial", StringComparison.OrdinalIgnoreCase);
+        !string.Equals(TuningRegistry.Choice(TuningRegistry.ClockUnits), "imperial", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Fetch if it is time to. Returns immediately - and makes no request whatsoever - when weather

@@ -16,7 +16,6 @@ namespace WindowTweaks.Features;
 public class StealthPanicTrigger : IDisposable
 {
     private const string HookOwner = nameof(StealthPanicTrigger);
-    private const int TimeoutMs = 600;
     private const int VK_ESCAPE = 0x1B;
 
     private readonly Action _onTripleEsc;
@@ -54,8 +53,10 @@ public class StealthPanicTrigger : IDisposable
     {
         if (!e.IsKeyDown || e.VirtualKey != VK_ESCAPE) return false;
 
+        int timeoutMs = TuningRegistry.Int(TuningRegistry.StealthTimeoutMs);
+
         // A tap outside the window starts a fresh sequence rather than extending a stale one.
-        if (_escCount == 0 || _timer.ElapsedMilliseconds > TimeoutMs)
+        if (_escCount == 0 || _timer.ElapsedMilliseconds > timeoutMs)
         {
             _escCount = 1;
             _timer.Restart();

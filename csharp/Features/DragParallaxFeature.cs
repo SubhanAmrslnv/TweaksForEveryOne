@@ -19,10 +19,6 @@ namespace WindowTweaks.Features;
 /// </summary>
 public class DragParallaxFeature : IDisposable
 {
-    private const string FromKey = "parallax.fromSpeed";
-    private const string FullKey = "parallax.fullSpeed";
-    private const string MinKey = "parallax.minOpacity";
-
     private IntPtr _hookStartEnd = IntPtr.Zero;
     private IntPtr _hookLocation = IntPtr.Zero;
 
@@ -34,14 +30,13 @@ public class DragParallaxFeature : IDisposable
 
     public bool IsEnabled { get; private set; }
 
-    /// <summary>Below this speed (px/s) nothing fades at all.</summary>
-    public static int FromSpeed => SettingsStore.GetInt(FromKey, 250, 0, 5000);
-
-    /// <summary>At this speed (px/s) the window is at MinOpacity.</summary>
-    public static int FullSpeed => SettingsStore.GetInt(FullKey, 2200, 100, 20000);
-
-    /// <summary>Percent. The most transparent the window gets while moving.</summary>
-    public static int MinOpacity => SettingsStore.GetInt(MinKey, 55, 10, 100);
+    // Captured when the drag STARTS, not per frame. EVENT_OBJECT_LOCATIONCHANGE fires around sixty
+    // times a second while a window is moving, and reading three settings there meant three lock
+    // acquisitions and three string parses per frame on the one path that has to stay cheap. The
+    // values therefore apply from the next drag, which is indistinguishable in use.
+    private int _fromSpeed;
+    private int _fullSpeed;
+    private double _minFactor;
 
     public DragParallaxFeature()
     {
@@ -88,6 +83,10 @@ public class DragParallaxFeature : IDisposable
             {
                 if (!NativeMethods.IsWindow(hwnd)) return;
 
+                _fromSpeed = TuningRegistry.Int(TuningRegistry.ParallaxFromSpeed);
+                _fullSpeed = TuningRegistry.Int(TuningRegistry.ParallaxFullSpeed);
+                _minFactor = TuningRegistry.Fraction(TuningRegistry.ParallaxMinOpacity);
+
                 _dragHwnd = hwnd;
                 if (NativeMethods.GetWindowRect(hwnd, out NativeMethods.RECT r))
                     _sampler.Reset(r.Left, r.Top);
@@ -125,18 +124,19 @@ public class DragParallaxFeature : IDisposable
 
             _sampler.Sample(r.Left, r.Top);
             AlphaCompositor.SetLayer(hwnd, AlphaCompositor.LayerDrag, FactorForSpeed(_sampler.Speed));
+
         }
         catch
         {
         }
     }
 
-    /// <summary>1.0 at or below FromSpeed, MinOpacity at or above FullSpeed, linear between.</summary>
-    private static double FactorForSpeed(double speed)
+    /// <summary>1.0 at or below the start speed, the minimum at or above the full speed, linear between.</summary>
+    private double FactorForSpeed(double speed)
     {
-        int from = FromSpeed;
-        int full = FullSpeed;
-        double min = MinOpacity / 100.0;
+        int from = _fromSpeed;
+        int full = _fullSpeed;
+        double min = _minFactor;
 
         if (full <= from) return speed > from ? min : 1.0;
         if (speed <= from) return 1.0;

@@ -22,10 +22,13 @@ namespace WindowTweaks.Features;
 /// </summary>
 public class BreathingFeature : IDisposable
 {
-    private const int IdleMs = 5000;
-
-    /// <summary>Matches the previous absolute dim of 120/255, so the effect looks unchanged.</summary>
-    private const double DimFactor = 120.0 / 255.0;
+    /// <summary>
+    /// Read once per tick, not per window: TickCore loops over every top-level window and a settings
+    /// read takes a lock and parses a string. The default 47% matches the previous absolute dim of
+    /// 120/255, so the effect looks unchanged until the user moves it.
+    /// </summary>
+    private int _idleMs;
+    private double _dimFactor;
 
     private readonly DispatcherTimer _timer;
     private readonly Dictionary<IntPtr, DateTime> _lastActive = new();
@@ -75,6 +78,8 @@ public class BreathingFeature : IDisposable
 
         try
         {
+            _idleMs = TuningRegistry.Int(TuningRegistry.BreathingIdleSeconds) * 1000;
+            _dimFactor = TuningRegistry.Fraction(TuningRegistry.BreathingDimPercent);
             TickCore();
         }
         catch (Exception ex)
@@ -115,8 +120,8 @@ public class BreathingFeature : IDisposable
 
             if (!_lastActive.ContainsKey(hwnd)) _lastActive[hwnd] = now;
 
-            if ((now - _lastActive[hwnd]).TotalMilliseconds > IdleMs && _dimmed.Add(hwnd))
-                AlphaCompositor.SetLayer(hwnd, AlphaCompositor.LayerBreathe, DimFactor);
+            if ((now - _lastActive[hwnd]).TotalMilliseconds > _idleMs && _dimmed.Add(hwnd))
+                AlphaCompositor.SetLayer(hwnd, AlphaCompositor.LayerBreathe, _dimFactor);
 
             return true;
         }, IntPtr.Zero);

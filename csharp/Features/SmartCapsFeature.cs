@@ -25,7 +25,6 @@ public class SmartCapsFeature : IDisposable
 
     private const int VK_CAPITAL = 0x14;
     private const int VK_ESCAPE = 0x1B;
-    private const int HoldMs = 400;
     private const uint KEYEVENTF_KEYUP = 0x0002;
 
     private readonly Stopwatch _timer = new();
@@ -35,6 +34,9 @@ public class SmartCapsFeature : IDisposable
     // loop's continuation, and a tap could be misread as a hold (or vice versa) at random.
     private volatile bool _capsDown;
     private volatile bool _toggled;
+
+    /// <summary>The hold threshold for the press currently in flight. See OnKey.</summary>
+    private volatile int _holdMs = 400;
 
     public bool IsEnabled { get; private set; }
 
@@ -71,10 +73,15 @@ public class SmartCapsFeature : IDisposable
                 _toggled = false;
                 _timer.Restart();
 
+                // Captured before the wait so the whole gesture is judged against one value, even
+                // if the user moves the slider mid-press.
+                int holdMs = TuningRegistry.Int(TuningRegistry.SmartCapsHoldMs);
+                _holdMs = holdMs;
+
                 // Held long enough: let it be a real Caps Lock after all.
                 Task.Run(() =>
                 {
-                    Thread.Sleep(HoldMs);
+                    Thread.Sleep(holdMs);
                     if (_capsDown && !_toggled)
                     {
                         _toggled = true;
@@ -91,7 +98,7 @@ public class SmartCapsFeature : IDisposable
             _capsDown = false;
             _timer.Stop();
 
-            if (!_toggled && _timer.ElapsedMilliseconds < HoldMs)
+            if (!_toggled && _timer.ElapsedMilliseconds < _holdMs)
             {
                 SimulateKeyPress(VK_ESCAPE);
             }

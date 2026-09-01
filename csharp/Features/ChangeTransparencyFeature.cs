@@ -18,8 +18,6 @@ namespace WindowTweaks.Features;
 /// </summary>
 public class ChangeTransparencyFeature : IDisposable
 {
-    private const int StepAlpha = 25;
-
     private readonly NativeMethods.LowLevelMouseProc _proc;
     private IntPtr _hookId = IntPtr.Zero;
 
@@ -98,8 +96,10 @@ public class ChangeTransparencyFeature : IDisposable
         string cls = sb.ToString();
         if (cls is "Shell_TrayWnd" or "Progman" or "WorkerW" or "Shell_SecondaryTrayWnd") return;
 
+        int step = TuningRegistry.Int(TuningRegistry.TransparencyStep);
+
         int current = AlphaCompositor.GetBase(hwnd);
-        int next = current + (delta > 0 ? StepAlpha : -StepAlpha);
+        int next = current + (delta > 0 ? step : -step);
 
         if (next > 255) next = 255;
         if (next < AlphaCompositor.MinAlpha) next = AlphaCompositor.MinAlpha;

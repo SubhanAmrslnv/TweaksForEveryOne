@@ -1,50 +1,51 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using WindowTweaks.Core;
 // WPF and WinForms are both referenced, so these names need pinning under ImplicitUsings.
+using Brush = System.Windows.Media.Brush;
 using CheckBox = System.Windows.Controls.CheckBox;
+using ComboBox = System.Windows.Controls.ComboBox;
 using HorizontalAlignment = System.Windows.HorizontalAlignment;
-using Orientation = System.Windows.Controls.Orientation;
+using Panel = System.Windows.Controls.Panel;
 using TextBox = System.Windows.Controls.TextBox;
 
 namespace WindowTweaks;
 
 /// <summary>
-/// The settings window, built from FeatureRegistry.
+/// The settings window. Every row is GENERATED from a registry - FeatureRegistry for the switches,
+/// TuningRegistry for the numbers, strings and choices - so adding a setting is a one-line change
+/// there and no change at all here.
 ///
-/// It used to be a mock: every page was a list of hardcoded checkboxes with literal check states,
-/// wired to nothing. Ticking one changed no feature and no value was ever read back, and in places
-/// it offered switches for features that had no off switch at all.
-///
-/// Now every row IS its feature. There is no Save button, because there is nothing to save: a switch
-/// applies immediately through FeatureRegistry, which persists it. That also means the window has to
-/// listen for changes made elsewhere - a hotkey or Game Mode can flip a feature while this window is
-/// open, and the switch has to follow.
+/// It used to be a mock: hardcoded checkboxes with literal check states, wired to nothing. Now a
+/// switch applies immediately through FeatureRegistry, which persists it, so there is no Save button
+/// and nothing to save. That also means the window has to LISTEN for changes made elsewhere, because
+/// a hotkey or Game Mode can flip a feature while it is open.
 /// </summary>
 public partial class MainWindow : Window
 {
-    private const string TuningPage = "Tuning";
-
     private readonly Dictionary<string, CheckBox> _switches = new();
 
     /// <summary>
-    /// One commit action per editable field on the Tuning page, replayed when the window closes.
+    /// One commit action per editable text field, replayed when the page changes or the window
+    /// closes.
     ///
-    /// The fields deliberately write on LostFocus rather than per keystroke, but WPF does not
+    /// Text fields deliberately write on LostFocus rather than per keystroke, but WPF does not
     /// reliably raise LostFocus when a window is closed while a TextBox still has focus - so typing
-    /// a city and closing the window with Shift+Alt+W discarded the edit, silently, with the field
-    /// still showing it. Every commit is idempotent (SettingsStore ignores an unchanged value), so
-    /// replaying all of them costs nothing.
+    /// a city and closing the window discarded the edit, silently, with the field still showing it.
+    /// Every commit is idempotent (the store ignores an unchanged value), so replaying them all
+    /// costs nothing. The list is cleared as each page is torn down; keeping closures over TextBoxes
+    /// that no longer exist would write their stale values back over a newer edit.
     /// </summary>
     private readonly List<Action> _pendingCommits = new();
 
     /// <summary>
-    /// Set while we are writing a switch's state FROM the registry, so the Checked handler does not
-    /// turn a refresh into a user action and bounce it back.
+    /// Set while a control's state is being written FROM the model, so its change handler does not
+    /// mistake a refresh for a user action and bounce it back.
     /// </summary>
     private bool _suppressEvents;
 
@@ -52,6 +53,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        SubtitleText.Text = "Settings apply instantly";
         SettingsPathText.Text = SettingsStore.FilePath;
 
         BuildSidebar();
@@ -64,11 +66,17 @@ public partial class MainWindow : Window
 
     private void BuildSidebar()
     {
-        foreach (string page in FeatureRegistry.Pages())
+        // Pages come from the feature registry, plus any page that carries only tuning rows.
+        List<string> pages = FeatureRegistry.Pages().ToList();
+        foreach (TuningDescriptor d in TuningRegistry.Items)
+        {
+            if (!pages.Contains(d.Page, StringComparer.OrdinalIgnoreCase)) pages.Add(d.Page);
+        }
+
+        foreach (string page in pages)
         {
             SidebarList.Items.Add(new ListBoxItem { Content = page, Tag = page });
         }
-        SidebarList.Items.Add(new ListBoxItem { Content = TuningPage, Tag = TuningPage });
 
         if (SidebarList.Items.Count > 0) SidebarList.SelectedIndex = 0;
     }
@@ -79,86 +87,168 @@ public partial class MainWindow : Window
 
         string page = item.Tag?.ToString() ?? string.Empty;
 
-        // Commit and then DROP the outgoing page's field commits before building the new one.
-        // Committing covers navigating away with a field still focused; dropping is what keeps the
-        // list from accumulating closures over TextBoxes that no longer exist - replaying those on
-        // close would write their stale values back over a newer edit.
+        // Commit, then DROP, the outgoing page's field commits before building the new one.
         CommitPendingEdits();
         _pendingCommits.Clear();
+        _switches.Clear();
 
-        MainContent.Content = page == TuningPage ? BuildTuningPage() : BuildFeaturePage(page);
+        MainContent.Content = BuildPage(page);
+        AnimatePageIn();
+    }
+
+    /// <summary>A short fade and lift, so a page change reads as a transition rather than a flicker.</summary>
+    private void AnimatePageIn()
+    {
+        ContentScroll.ScrollToTop();
+
+        DoubleAnimation fade = new(0.0, 1.0, new Duration(TimeSpan.FromMilliseconds(220)))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        DoubleAnimation lift = new(10.0, 0.0, new Duration(TimeSpan.FromMilliseconds(260)))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+
+        MainContent.BeginAnimation(OpacityProperty, fade);
+        ContentShift.BeginAnimation(TranslateTransform.YProperty, lift);
     }
 
     // -----------------------------------------------------------------------------------------
-    // Feature pages
+    // Page construction
     // -----------------------------------------------------------------------------------------
 
-    private UIElement BuildFeaturePage(string page)
+    private UIElement BuildPage(string page)
     {
-        StackPanel panel = new();
+        StackPanel panel = new() { MaxWidth = 760, HorizontalAlignment = HorizontalAlignment.Left };
 
-        panel.Children.Add(new TextBlock { Text = page, Style = (Style)FindResource("HeaderStyle") });
+        panel.Children.Add(new TextBlock { Text = page, Style = (Style)FindResource("PageTitle") });
         panel.Children.Add(new TextBlock
         {
             Text = "Changes apply immediately and are remembered.",
-            Style = (Style)FindResource("DescriptionStyle")
+            Style = (Style)FindResource("PageSubtitle")
         });
 
-        string? lastGroup = null;
+        // Features first, then the numbers that tune them. Each group gets its own rounded card.
+        string? currentGroup = null;
+        StackPanel? card = null;
 
         foreach (FeatureDescriptor d in FeatureRegistry.ForPage(page))
         {
-            if (d.Group != null && d.Group != lastGroup)
+            string group = d.Group ?? "Features";
+            if (group != currentGroup)
             {
-                lastGroup = d.Group;
-                panel.Children.Add(new TextBlock
-                {
-                    Text = d.Group.ToUpperInvariant(),
-                    Style = (Style)FindResource("SubHeaderStyle")
-                });
+                currentGroup = group;
+                panel.Children.Add(GroupLabel(group));
+                card = NewCard(panel);
             }
+            card!.Children.Add(FeatureRow(d));
+        }
 
-            panel.Children.Add(BuildRow(d));
+        currentGroup = null;
+        card = null;
+
+        foreach (TuningDescriptor t in TuningRegistry.ForPage(page))
+        {
+            if (t.Group != currentGroup)
+            {
+                currentGroup = t.Group;
+                panel.Children.Add(GroupLabel(t.Group));
+                card = NewCard(panel);
+            }
+            card!.Children.Add(TuningRow(t));
         }
 
         return panel;
     }
 
-    private UIElement BuildRow(FeatureDescriptor d)
+    private TextBlock GroupLabel(string text)
     {
-        StackPanel row = new() { Margin = new Thickness(0, 0, 0, 14) };
+        return new TextBlock { Text = text.ToUpperInvariant(), Style = (Style)FindResource("GroupLabel") };
+    }
 
-        CheckBox toggle = new()
+    /// <summary>Adds a rounded card to the page and returns the stack its rows go into.</summary>
+    private StackPanel NewCard(Panel parent)
+    {
+        StackPanel inner = new();
+        parent.Children.Add(new Border { Style = (Style)FindResource("CardStyle"), Child = inner });
+        return inner;
+    }
+
+    /// <summary>The label-and-description block on the left of every row.</summary>
+    private StackPanel Caption(string title, string description)
+    {
+        StackPanel text = new() { VerticalAlignment = VerticalAlignment.Center };
+        text.Children.Add(new TextBlock { Text = title, Style = (Style)FindResource("RowTitle") });
+        if (description.Length > 0)
+            text.Children.Add(new TextBlock { Text = description, Style = (Style)FindResource("RowDescription") });
+        return text;
+    }
+
+    /// <summary>A two-column row: caption on the left, control on the right.</summary>
+    private static Grid NewRow(double controlWidth)
+    {
+        Grid row = new() { Margin = new Thickness(0, 14, 0, 14) };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition
         {
-            Content = d.Title,
-            Style = (Style)FindResource("ToggleSwitchStyle"),
-            IsChecked = FeatureRegistry.IsEnabled(d.Key),
-            Tag = d.Key
-        };
+            Width = controlWidth > 0 ? new GridLength(controlWidth) : GridLength.Auto
+        });
+        return row;
+    }
 
-        toggle.Checked += OnSwitchChanged;
-        toggle.Unchecked += OnSwitchChanged;
+    private static void Place(Grid row, UIElement left, UIElement right)
+    {
+        Grid.SetColumn(left, 0);
+        Grid.SetColumn(right, 1);
+        row.Children.Add(left);
+        row.Children.Add(right);
+    }
 
-        // A rebuilt page replaces its controls, so the map must not keep the old ones.
-        _switches[d.Key] = toggle;
+    // -----------------------------------------------------------------------------------------
+    // Feature rows
+    // -----------------------------------------------------------------------------------------
 
-        row.Children.Add(toggle);
-        row.Children.Add(new TextBlock { Text = d.Description, Style = (Style)FindResource("DescriptionStyle") });
+    private UIElement FeatureRow(FeatureDescriptor d)
+    {
+        Grid row = NewRow(0);
+        StackPanel text = Caption(d.Title, d.Description);
 
         if (!string.IsNullOrEmpty(d.Hotkey))
         {
-            row.Children.Add(new TextBlock { Text = d.Hotkey, Style = (Style)FindResource("HotkeyStyle") });
+            text.Children.Add(new Border
+            {
+                CornerRadius = new CornerRadius(6),
+                Background = (Brush)FindResource("AccentSoft"),
+                Padding = new Thickness(7, 3, 7, 3),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(0, 8, 0, 0),
+                Child = new TextBlock { Text = d.Hotkey, Style = (Style)FindResource("HotkeyChipText") }
+            });
         }
 
         if (d.HotkeyUnavailable)
         {
-            row.Children.Add(new TextBlock
+            text.Children.Add(new TextBlock
             {
                 Text = "Another program already owns this shortcut, so it will not fire.",
-                Style = (Style)FindResource("WarningStyle")
+                Style = (Style)FindResource("WarningText")
             });
         }
 
+        CheckBox toggle = new()
+        {
+            Style = (Style)FindResource("ToggleSwitchStyle"),
+            IsChecked = FeatureRegistry.IsEnabled(d.Key),
+            Tag = d.Key,
+            Margin = new Thickness(24, 2, 0, 0),
+            VerticalAlignment = VerticalAlignment.Top
+        };
+        toggle.Checked += OnSwitchChanged;
+        toggle.Unchecked += OnSwitchChanged;
+        _switches[d.Key] = toggle;
+
+        Place(row, text, toggle);
         return row;
     }
 
@@ -171,7 +261,150 @@ public partial class MainWindow : Window
         UpdateStatus();
     }
 
-    /// <summary>A feature changed somewhere else - a hotkey, or Game Mode. Follow it.</summary>
+    // -----------------------------------------------------------------------------------------
+    // Tuning rows
+    // -----------------------------------------------------------------------------------------
+
+    private UIElement TuningRow(TuningDescriptor d)
+    {
+        return d.Kind switch
+        {
+            TuningKind.Text => TextRow(d),
+            TuningKind.Choice => ChoiceRow(d),
+            _ => SliderRow(d)
+        };
+    }
+
+    /// <summary>
+    /// A slider with a live readout, rather than a text box, because every one of these has a real
+    /// known range: dragging it cannot produce an invalid value, so there is nothing to validate and
+    /// nothing to reject back at the user.
+    /// </summary>
+    private UIElement SliderRow(TuningDescriptor d)
+    {
+        Grid row = NewRow(220);
+        StackPanel text = Caption(d.Title, d.Description);
+
+        int current = TuningRegistry.Int(d.Key);
+
+        TextBlock readout = new()
+        {
+            Style = (Style)FindResource("ValueReadout"),
+            Text = TuningRegistry.Display(d, current)
+        };
+
+        int span = Math.Max(1, d.Max - d.Min);
+        Slider slider = new()
+        {
+            Style = (Style)FindResource("TuneSliderStyle"),
+            Minimum = d.Min,
+            Maximum = d.Max,
+            Value = current,
+            TickFrequency = Math.Max(1, span / 100),
+            SmallChange = Math.Max(1, span / 100),
+            LargeChange = Math.Max(1, span / 10),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 4, 0, 0)
+        };
+
+        // The readout follows the thumb continuously and the store is written on the same change.
+        // That is safe because SettingsStore debounces: dragging produces one file write when the
+        // hand stops, not one per pixel.
+        slider.ValueChanged += (_, _) =>
+        {
+            int value = (int)Math.Round(slider.Value);
+            readout.Text = TuningRegistry.Display(d, value);
+            if (_suppressEvents) return;
+            TuningRegistry.SetInt(d.Key, value);
+        };
+
+        StackPanel right = new()
+        {
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(24, 0, 0, 0)
+        };
+        right.Children.Add(readout);
+        right.Children.Add(slider);
+
+        Place(row, text, right);
+        return row;
+    }
+
+    private UIElement TextRow(TuningDescriptor d)
+    {
+        Grid row = NewRow(220);
+        StackPanel text = Caption(d.Title, d.Description);
+
+        TextBox box = new()
+        {
+            Style = (Style)FindResource("FieldStyle"),
+            Text = TuningRegistry.Text(d.Key),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(24, 0, 0, 0)
+        };
+
+        void Commit()
+        {
+            string value = box.Text.Trim();
+            if (value == TuningRegistry.Text(d.Key)) return;
+
+            TuningRegistry.SetText(d.Key, value);
+
+            // A changed city invalidates the cached coordinates, or the clock would keep showing the
+            // weather for wherever it looked up first.
+            if (d.Key == TuningRegistry.ClockLocation) WeatherService.InvalidateLocation();
+        }
+
+        // Committed on LostFocus, not per keystroke: a city is typed a letter at a time, and each
+        // letter would otherwise be a geocoding request.
+        box.LostFocus += (_, _) => Commit();
+        _pendingCommits.Add(Commit);
+
+        Place(row, text, box);
+        return row;
+    }
+
+    private UIElement ChoiceRow(TuningDescriptor d)
+    {
+        Grid row = NewRow(220);
+        StackPanel text = Caption(d.Title, d.Description);
+
+        ComboBox combo = new()
+        {
+            Style = (Style)FindResource("ChoiceStyle"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(24, 0, 0, 0)
+        };
+
+        string stored = TuningRegistry.Choice(d.Key);
+        for (int i = 0; i < d.Choices.Length; i++)
+        {
+            string label = i < d.ChoiceLabels.Length ? d.ChoiceLabels[i] : d.Choices[i];
+            combo.Items.Add(new ComboBoxItem { Content = label, Tag = d.Choices[i] });
+            if (string.Equals(d.Choices[i], stored, StringComparison.OrdinalIgnoreCase))
+                combo.SelectedIndex = i;
+        }
+
+        combo.SelectionChanged += (_, _) =>
+        {
+            if (_suppressEvents) return;
+            if (combo.SelectedItem is not ComboBoxItem chosen || chosen.Tag is not string value) return;
+
+            TuningRegistry.SetText(d.Key, value);
+
+            // Units are part of the weather request, so a change has to re-fetch rather than wait
+            // out the fifteen-minute interval still showing the old unit.
+            if (d.Key == TuningRegistry.ClockUnits) WeatherService.InvalidateLocation();
+        };
+
+        Place(row, text, combo);
+        return row;
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Following changes made elsewhere
+    // -----------------------------------------------------------------------------------------
+
     private void OnFeatureChanged(FeatureDescriptor d)
     {
         Dispatcher.Invoke(() =>
@@ -217,7 +450,7 @@ public partial class MainWindow : Window
     {
         int total = FeatureRegistry.Items.Count;
         int on = FeatureRegistry.Items.Count(d => FeatureRegistry.IsEnabled(d.Key));
-        EnabledCountText.Text = $"{on} of {total} features enabled.";
+        EnabledCountText.Text = $"{on} of {total} features on";
     }
 
     /// <summary>Called by App while Game Mode is on, so the window explains why switches moved.</summary>
@@ -229,178 +462,9 @@ public partial class MainWindow : Window
             : string.Empty;
     }
 
-    // -----------------------------------------------------------------------------------------
-    // Tuning page
-    // -----------------------------------------------------------------------------------------
-
-    private UIElement BuildTuningPage()
-    {
-        StackPanel panel = new();
-
-        panel.Children.Add(new TextBlock { Text = "Tuning", Style = (Style)FindResource("HeaderStyle") });
-        panel.Children.Add(new TextBlock
-        {
-            Text = "Numbers behind the effects. Each is checked when you leave the field, not while you type.",
-            Style = (Style)FindResource("DescriptionStyle")
-        });
-
-        panel.Children.Add(new TextBlock
-        {
-            Text = "PARALLAX DRAGGING",
-            Style = (Style)FindResource("SubHeaderStyle")
-        });
-
-        panel.Children.Add(NumberRow(
-            "Start fading at", "parallax.fromSpeed", 250, 0, 5000, "px/s",
-            "Below this drag speed nothing fades at all. A deliberate, slow drag stays solid."));
-
-        panel.Children.Add(NumberRow(
-            "Fully faded at", "parallax.fullSpeed", 2200, 100, 20000, "px/s",
-            "The speed at which the window reaches the minimum opacity below."));
-
-        panel.Children.Add(NumberRow(
-            "Minimum opacity", "parallax.minOpacity", 55, 10, 100, "%",
-            "How transparent a fast-moving window gets. The ramp is named by both ends so that " +
-            "\"invisible at a normal drag speed\" is a number you can see, not a hidden gain."));
-
-        panel.Children.Add(new TextBlock
-        {
-            Text = "TASKBAR CLOCK",
-            Style = (Style)FindResource("SubHeaderStyle")
-        });
-
-        panel.Children.Add(TextRow(
-            "City", WeatherService.LocationKey, "",
-            "The city the clock's weather is for, e.g. Baku. Leave this empty and the app makes no "
-            + "network request at all - weather is the only feature that connects to the internet. "
-            + "Switch \"Clock weather\" on under Screen & Shell as well."));
-
-        panel.Children.Add(TextRow(
-            "Time format", "clock.timeFormat", "HH:mm:ss",
-            "Standard .NET format string. HH is 24-hour, hh is 12-hour."));
-
-        panel.Children.Add(TextRow(
-            "Date format", "clock.dateFormat", "dd.MM.yyyy",
-            "Standard .NET format string. Use dd:MM:yyyy if you want colons as separators."));
-
-        panel.Children.Add(NumberRow(
-            "Gap from tray", "clock.gap", 12, 0, 400, "px",
-            "Distance between the block and the tray element it sits left of."));
-
-        return panel;
-    }
-
     /// <summary>
-    /// A free-text setting. Written on LostFocus for the same reason the numeric fields are: a city
-    /// name is typed a letter at a time, and saving (and geocoding) every keystroke would fire a
-    /// network request per character.
-    /// </summary>
-    private UIElement TextRow(string label, string key, string fallback, string help)
-    {
-        StackPanel row = new() { Margin = new Thickness(0, 10, 0, 16) };
-        StackPanel line = new() { Orientation = Orientation.Horizontal };
-
-        line.Children.Add(new TextBlock
-        {
-            Text = label,
-            FontSize = 14,
-            Width = 190,
-            VerticalAlignment = VerticalAlignment.Center
-        });
-
-        TextBox box = new()
-        {
-            Width = 220,
-            FontSize = 14,
-            Padding = new Thickness(6, 4, 6, 4),
-            Text = SettingsStore.GetString(key, fallback)
-        };
-
-        void Commit()
-        {
-            string value = box.Text.Trim();
-            string previous = SettingsStore.GetString(key, fallback);
-            if (value == previous) return;
-
-            SettingsStore.SetString(key, value);
-
-            // A changed city invalidates the cached coordinates, or the clock would keep showing
-            // the weather for wherever it looked up first.
-            if (key == WeatherService.LocationKey) WeatherService.InvalidateLocation();
-        }
-
-        box.LostFocus += (_, _) => Commit();
-        _pendingCommits.Add(Commit);
-
-        line.Children.Add(box);
-        row.Children.Add(line);
-        row.Children.Add(new TextBlock { Text = help, Style = (Style)FindResource("DescriptionStyle") });
-
-        return row;
-    }
-
-    private UIElement NumberRow(string label, string key, int fallback, int lo, int hi, string unit, string help)
-    {
-        StackPanel row = new() { Margin = new Thickness(0, 10, 0, 16) };
-
-        StackPanel line = new() { Orientation = Orientation.Horizontal };
-
-        line.Children.Add(new TextBlock
-        {
-            Text = label,
-            FontSize = 14,
-            Width = 190,
-            VerticalAlignment = VerticalAlignment.Center
-        });
-
-        TextBox box = new()
-        {
-            Width = 90,
-            FontSize = 14,
-            Padding = new Thickness(6, 4, 6, 4),
-            Text = SettingsStore.GetInt(key, fallback, lo, hi).ToString(CultureInfo.InvariantCulture),
-            Tag = key,
-            HorizontalContentAlignment = HorizontalAlignment.Right
-        };
-
-        // Validate on LostFocus, never on every keystroke: correcting 3 to 100 while somebody is
-        // halfway through typing 300 fights the user for control of the field.
-        void Commit()
-        {
-            int value = int.TryParse(box.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed)
-                ? Math.Clamp(parsed, lo, hi)
-                : fallback;
-
-            box.Text = value.ToString(CultureInfo.InvariantCulture);
-            SettingsStore.SetInt(key, value);
-        }
-
-        box.LostFocus += (_, _) => Commit();
-        _pendingCommits.Add(Commit);
-
-        line.Children.Add(box);
-        line.Children.Add(new TextBlock
-        {
-            Text = " " + unit,
-            FontSize = 13,
-            Foreground = System.Windows.Media.Brushes.Gray,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(6, 0, 0, 0)
-        });
-
-        row.Children.Add(line);
-        row.Children.Add(new TextBlock
-        {
-            Text = $"{help}  (allowed: {lo}-{hi})",
-            Style = (Style)FindResource("DescriptionStyle")
-        });
-
-        return row;
-    }
-
-    /// <summary>
-    /// Replay every Tuning field's commit. Called on close, because LostFocus is not guaranteed to
-    /// fire first. One bad field must not stop the others from being saved.
+    /// Replay every field's commit. Called on page change and on close, because LostFocus is not
+    /// guaranteed to fire first. One bad field must not stop the others from being saved.
     /// </summary>
     private void CommitPendingEdits()
     {
@@ -412,7 +476,7 @@ public partial class MainWindow : Window
             }
             catch
             {
-                // A field that cannot commit is not worth blocking the window from closing.
+                // A field that cannot commit is not worth blocking the page change or the close.
             }
         }
     }

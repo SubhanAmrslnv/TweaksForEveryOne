@@ -15,11 +15,9 @@ public class MagneticSnappingFeature : IDisposable
     private NativeMethods.WinEventDelegate _procStartEnd;
     private NativeMethods.WinEventDelegate _procLocation;
     
-    private const int BASE_SNAP_DISTANCE = 30;
-    private const double CORNER_BOOST = 2.2;
-    private const int NEIGHBOUR_PROX = 90;
-    private const int HYST = 5;
-    private const bool ADAPT = true;
+    // These four were consts. They are settings now (see TuningRegistry), read ONCE per drop into
+    // locals in SnapWindow - never inside the window enumeration or the per-line loops, which run
+    // for every candidate edge on screen.
 
     private IntPtr _dragHwnd = IntPtr.Zero;
     private int _lastX = 0;
@@ -130,6 +128,11 @@ public class MagneticSnappingFeature : IDisposable
         if (!NativeMethods.GetWindowRect(hwnd, out NativeMethods.RECT winRect))
             return;
 
+        int baseSnapDistance = TuningRegistry.Int(TuningRegistry.SnapDistance);
+        double cornerBoost = TuningRegistry.Fraction(TuningRegistry.SnapCornerBoost);
+        int neighbourProx = TuningRegistry.Int(TuningRegistry.SnapNeighbourProximity);
+        int hyst = TuningRegistry.Int(TuningRegistry.SnapHysteresis);
+
         // Get the visual frame bounds (without invisible DWM shadow borders)
         if (NativeMethods.DwmGetWindowAttribute(hwnd, NativeMethods.DWMWA_EXTENDED_FRAME_BOUNDS, out NativeMethods.RECT frameRect, Marshal.SizeOf(typeof(NativeMethods.RECT))) != 0)
         {
@@ -178,12 +181,12 @@ public class MagneticSnappingFeature : IDisposable
                 {
                     if (NativeMethods.DwmGetWindowAttribute(otherHwnd, NativeMethods.DWMWA_EXTENDED_FRAME_BOUNDS, out NativeMethods.RECT oFrame, Marshal.SizeOf(typeof(NativeMethods.RECT))) == 0)
                     {
-                        if (pT < oFrame.Bottom + NEIGHBOUR_PROX && pB > oFrame.Top - NEIGHBOUR_PROX)
+                        if (pT < oFrame.Bottom + neighbourProx && pB > oFrame.Top - neighbourProx)
                         {
                             vLines.Add(oFrame.Left);
                             vLines.Add(oFrame.Right);
                         }
-                        if (pL < oFrame.Right + NEIGHBOUR_PROX && pR > oFrame.Left - NEIGHBOUR_PROX)
+                        if (pL < oFrame.Right + neighbourProx && pR > oFrame.Left - neighbourProx)
                         {
                             hLines.Add(oFrame.Top);
                             hLines.Add(oFrame.Bottom);
@@ -223,8 +226,7 @@ public class MagneticSnappingFeature : IDisposable
 
         double spd = Math.Sqrt(vX * vX + vY * vY);
         double adapt = 0.55;
-        double reachD = BASE_SNAP_DISTANCE * (1 + adapt * (Math.Min(spd, 900) / 900.0 * 2 - 1));
-        if (!ADAPT) reachD = BASE_SNAP_DISTANCE;
+        double reachD = baseSnapDistance * (1 + adapt * (Math.Min(spd, 900) / 900.0 * 2 - 1));
         int reach = (int)Math.Max(1, Math.Round(reachD));
 
         int dirX = (vX > 0) ? 1 : ((vX < 0) ? -1 : 0);
@@ -232,7 +234,7 @@ public class MagneticSnappingFeature : IDisposable
 
         // 3. Compute Closest Snap
         int newL, newT;
-        bool snapped = ComputeSnap(pL, pT, pR, pB, vLines, hLines, reach, out newL, out newT, CORNER_BOOST, dirX, dirY, HYST);
+        bool snapped = ComputeSnap(pL, pT, pR, pB, vLines, hLines, reach, out newL, out newT, cornerBoost, dirX, dirY, hyst);
 
         if (!snapped)
         {

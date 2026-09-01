@@ -15,7 +15,6 @@ namespace WindowTweaks.Features;
 public class DoubleCtrlTrigger : IDisposable
 {
     private const string HookOwner = nameof(DoubleCtrlTrigger);
-    private const int TimeoutMs = 400;
 
     private const int VK_CONTROL = 0x11;
     private const int VK_LCONTROL = 0xA2;
@@ -61,6 +60,8 @@ public class DoubleCtrlTrigger : IDisposable
 
     private bool OnKey(KeyboardHook.KeyEvent e)
     {
+        int timeoutMs = TuningRegistry.Int(TuningRegistry.DoubleTapTimeoutMs);
+
         bool isCtrl = e.VirtualKey is VK_CONTROL or VK_LCONTROL or VK_RCONTROL;
 
         if (e.IsKeyDown)
@@ -72,7 +73,7 @@ public class DoubleCtrlTrigger : IDisposable
                 return false;
             }
 
-            if (_ctrlCount == 0 || _timer.ElapsedMilliseconds > TimeoutMs)
+            if (_ctrlCount == 0 || _timer.ElapsedMilliseconds > timeoutMs)
             {
                 _ctrlCount = 1;
                 _otherKeyPressed = false;

@@ -45,7 +45,8 @@ dotnet publish .\csharp\WindowTweaks.csproj -c Release -r win-x64 --self-contain
 |---|---|
 | `App.xaml.cs` | **The composition root.** Every feature is a field here; `OnStartup` wires and registers, `OnExit` disposes. There is no DI container and no config |
 | `Core\FeatureRegistry.cs` | **Owns whether each feature is on.** Every hotkey, tray item and settings switch goes through it. `FeatureDescriptor` carries the title, page, hotkey label and an optional `Apply` |
-| `Core\FeatureKeys.cs` | Every settings key, plus the Game Mode suspend list. These are a stored format - renaming one discards that setting for existing users |
+| `Core\FeatureKeys.cs` | Every feature TOGGLE key, plus the Game Mode suspend list. A stored format - renaming one discards that setting for existing users |
+| `Core\TuningRegistry.cs` | Every tunable NUMBER, string and choice: key, range, default and the UI copy, in one list. The settings window generates its controls from it, so adding a setting is one entry here and no UI change |
 | `Core\SettingsStore.cs` | `%APPDATA%\WindowTweaks\settings.json`. Debounced 700 ms, temp-file-then-move, never throws |
 | `Core\AlphaCompositor.cs` | **The only place allowed to write a foreign window's opacity.** `final = base * product(layers)` |
 | `Core\ShutdownListener.cs` | A message-only window, so the app can be asked to exit at all |
@@ -115,6 +116,38 @@ reachable from no hotkey table and no checkbox.
 says so: the chord belongs to other applications, so it is claimed only when the feature is already on.
 `Alt+F4` is the mirror case - it stays registered always and closes the window normally when the
 gravity animation is off, because it cannot simply stop working.
+
+### Settings, and where a new one goes
+
+Two registries, and nothing outside them decides what the settings window shows:
+
+- **`FeatureKeys` + `FeatureRegistry`** - the on/off switches. `App.RegisterFeatures()` describes each
+  one (title, page, group, hotkey label, default, and an optional `Apply`).
+- **`TuningRegistry`** - the numbers, strings and choices. One `TuningDescriptor` per value carries
+  its key, min/max, default, unit and the sentence the UI shows.
+
+**Adding a tunable value is one entry in `TuningRegistry` and nothing else.** The window builds a
+slider, a text field or a drop-down from `Kind`, groups it by `Group`, files it under `Page`, and
+persists it. There is no UI code to touch, which is the point: the tuning keys used to be private
+consts inside the feature that owned them while the settings window addressed the same values with
+duplicated string literals - so `"parallax.fromSpeed"` existed twice, in two files, with nothing
+keeping them in step, and its range and default were a third copy.
+
+**Read a tuning value once per operation, never per frame or per window.** Each read takes the
+settings lock and parses a string. The features that consume one on a hot path cache it at the start
+of the gesture instead, and say so in a comment:
+
+- `DragParallaxFeature` captures its three values on `MOVESIZESTART`, because
+  `EVENT_OBJECT_LOCATIONCHANGE` fires ~60 times a second while a window moves.
+- `MagneticSnappingFeature` reads its four at the top of `SnapWindow`, because `NEIGHBOUR_PROX` is
+  consumed inside the window enumeration.
+- `BreathingFeature` reads its two per tick, not per window, because the tick enumerates every
+  top-level window.
+
+Ranges are enforced in the registry, so a slider cannot produce an invalid value and there is nothing
+to validate. Only the free-text fields (city, date and time formats) can, which is why those commit
+on `LostFocus` and are replayed on page change and on close - WPF does not reliably raise `LostFocus`
+when a window closes with a field still focused.
 
 ### The taskbar clock
 

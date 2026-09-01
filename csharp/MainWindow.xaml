@@ -1,54 +1,202 @@
 <Window x:Class="WindowTweaks.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Window Tweaks Settings" Height="700" Width="880"
+        Title="Window Tweaks" Height="760" Width="1000"
+        MinHeight="560" MinWidth="820"
         WindowStartupLocation="CenterScreen"
-        Background="#F3F3F3"
-        FontFamily="Segoe UI">
+        Background="{DynamicResource Surface}"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="ClearType"
+        FontFamily="Segoe UI Variable Text, Segoe UI">
 
     <Window.Resources>
-        <!-- A real toggle switch. The old build used bare checkboxes, which read as a form to be
-             submitted; these apply the moment they are clicked, so they should look like switches. -->
-        <Style TargetType="CheckBox" x:Key="ToggleSwitchStyle">
-            <Setter Property="Margin" Value="0,10,0,0"/>
+        <!-- ===================================================================================
+             DESIGN TOKENS. Every colour, radius and duration is named here and referenced by the
+             styles below, so the whole window can be retuned from one block instead of hunting
+             literals through a hundred setters.
+             =================================================================================== -->
+        <SolidColorBrush x:Key="Surface"        Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="SurfaceSunken"  Color="#F5F6F8"/>
+        <SolidColorBrush x:Key="Card"           Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="CardBorder"     Color="#E7E8EE"/>
+        <SolidColorBrush x:Key="Divider"        Color="#EFF0F4"/>
+        <SolidColorBrush x:Key="TextPrimary"    Color="#15171C"/>
+        <SolidColorBrush x:Key="TextSecondary"  Color="#6B7280"/>
+        <SolidColorBrush x:Key="TextTertiary"   Color="#9AA0AC"/>
+        <SolidColorBrush x:Key="Accent"         Color="#2F6FED"/>
+        <SolidColorBrush x:Key="AccentSoft"     Color="#EEF3FE"/>
+        <SolidColorBrush x:Key="TrackOff"       Color="#D6D9E0"/>
+        <SolidColorBrush x:Key="Warning"        Color="#B45309"/>
+        <SolidColorBrush x:Key="Hover"          Color="#F0F1F5"/>
+
+        <!-- Rounded everywhere. One scale, so nothing looks accidentally sharper than its neighbour. -->
+        <CornerRadius x:Key="RadiusCard">16</CornerRadius>
+        <CornerRadius x:Key="RadiusControl">10</CornerRadius>
+        <CornerRadius x:Key="RadiusPill">12</CornerRadius>
+
+        <Duration x:Key="Fast">0:0:0.14</Duration>
+        <Duration x:Key="Normal">0:0:0.20</Duration>
+
+        <!-- ===================================================================================
+             TYPOGRAPHY
+             =================================================================================== -->
+        <Style TargetType="TextBlock" x:Key="PageTitle">
+            <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI"/>
+            <Setter Property="FontSize" Value="28"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
+        </Style>
+
+        <Style TargetType="TextBlock" x:Key="PageSubtitle">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+            <Setter Property="Margin" Value="0,0,0,22"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
+        <Style TargetType="TextBlock" x:Key="GroupLabel">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource TextTertiary}"/>
+            <Setter Property="Margin" Value="4,20,0,8"/>
+        </Style>
+
+        <Style TargetType="TextBlock" x:Key="RowTitle">
             <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Foreground" Value="#111111"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
+        <Style TargetType="TextBlock" x:Key="RowDescription">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+            <Setter Property="Margin" Value="0,3,0,0"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="LineHeight" Value="17"/>
+        </Style>
+
+        <Style TargetType="TextBlock" x:Key="HotkeyChipText">
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+        </Style>
+
+        <Style TargetType="TextBlock" x:Key="WarningText">
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Foreground" Value="{StaticResource Warning}"/>
+            <Setter Property="Margin" Value="0,6,0,0"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
+        <Style TargetType="TextBlock" x:Key="ValueReadout">
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+        </Style>
+
+        <!-- ===================================================================================
+             CARD - the rounded surface every group of settings sits on.
+             =================================================================================== -->
+        <Style TargetType="Border" x:Key="CardStyle">
+            <Setter Property="Background" Value="{StaticResource Card}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource CardBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusCard}"/>
+            <Setter Property="Padding" Value="20,6,20,14"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+        </Style>
+
+        <!-- ===================================================================================
+             TOGGLE SWITCH.
+
+             The on-state is a SECOND filled border stacked over the off-track with its Opacity
+             animated, rather than a ColorAnimation on one brush. Both are plain DoubleAnimations,
+             which cannot be defeated by a frozen brush - the failure mode where a templated
+             Background is shared and sealed, and the colour animation silently does nothing.
+             =================================================================================== -->
+        <Style TargetType="CheckBox" x:Key="ToggleSwitchStyle">
             <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Focusable" Value="True"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="CheckBox">
-                        <Grid Background="Transparent">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
+                        <Grid Width="46" Height="26" Background="Transparent" SnapsToDevicePixels="True">
+                            <Border CornerRadius="13" Background="{StaticResource TrackOff}"/>
 
-                            <ContentPresenter Grid.Column="0"
-                                              VerticalAlignment="Center"
-                                              TextBlock.Foreground="{TemplateBinding Foreground}"
-                                              TextBlock.FontSize="{TemplateBinding FontSize}"/>
+                            <Border x:Name="OnTrack" CornerRadius="13" Opacity="0"
+                                    Background="{StaticResource Accent}"/>
 
-                            <Border x:Name="Track" Grid.Column="1"
-                                    Width="42" Height="22" CornerRadius="11"
-                                    Background="#C8C8C8" VerticalAlignment="Center"
-                                    Margin="16,0,0,0">
-                                <Ellipse x:Name="Knob" Width="16" Height="16" Fill="White"
-                                         HorizontalAlignment="Left" Margin="3,0,0,0"/>
+                            <Border x:Name="Knob" Width="20" Height="20" CornerRadius="10"
+                                    Background="White" HorizontalAlignment="Left"
+                                    Margin="3,0,0,0" RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <TranslateTransform x:Name="KnobShift" X="0"/>
+                                </Border.RenderTransform>
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#20000000" BlurRadius="4"
+                                                      ShadowDepth="1" Direction="270"/>
+                                </Border.Effect>
                             </Border>
+
+                            <!-- Focus ring, for keyboard users. -->
+                            <Border x:Name="FocusRing" CornerRadius="15" Margin="-3"
+                                    BorderThickness="2" BorderBrush="{StaticResource Accent}"
+                                    Opacity="0"/>
                         </Grid>
 
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Track" Property="Background" Value="#0F7B0F"/>
-                                <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right"/>
-                                <Setter TargetName="Knob" Property="Margin" Value="0,0,3,0"/>
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="KnobShift"
+                                                             Storyboard.TargetProperty="X"
+                                                             To="20" Duration="{StaticResource Normal}">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="OnTrack"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="1" Duration="{StaticResource Fast}"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="KnobShift"
+                                                             Storyboard.TargetProperty="X"
+                                                             To="0" Duration="{StaticResource Normal}">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="OnTrack"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0" Duration="{StaticResource Fast}"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
                             </Trigger>
+
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="FocusRing" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Track" Property="Opacity" Value="0.85"/>
+                                <Setter TargetName="Knob" Property="Width" Value="21"/>
                             </Trigger>
+
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.45"/>
+                                <Setter Property="Opacity" Value="0.4"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -56,110 +204,388 @@
             </Setter>
         </Style>
 
-        <Style TargetType="TextBlock" x:Key="HeaderStyle">
-            <Setter Property="FontSize" Value="24"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Margin" Value="0,0,0,4"/>
-            <Setter Property="Foreground" Value="#111111"/>
-        </Style>
-
-        <Style TargetType="TextBlock" x:Key="SubHeaderStyle">
+        <!-- ===================================================================================
+             TEXT BOX
+             =================================================================================== -->
+        <Style TargetType="TextBox" x:Key="FieldStyle">
             <Setter Property="FontSize" Value="13"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin" Value="0,26,0,2"/>
-            <Setter Property="Foreground" Value="#5A5A5A"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="CaretBrush" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="Bd" CornerRadius="{StaticResource RadiusControl}"
+                                Background="{StaticResource SurfaceSunken}"
+                                BorderBrush="{StaticResource CardBorder}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource TextTertiary}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource Surface}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
-        <Style TargetType="TextBlock" x:Key="DescriptionStyle">
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Foreground" Value="#666666"/>
-            <Setter Property="Margin" Value="0,2,58,0"/>
-            <Setter Property="TextWrapping" Value="Wrap"/>
+        <!-- ===================================================================================
+             COMBO BOX. Templated by hand because the stock one cannot be rounded.
+             =================================================================================== -->
+        <Style TargetType="ToggleButton" x:Key="ComboToggle">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="ClickMode" Value="Press"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" CornerRadius="{StaticResource RadiusControl}"
+                                Background="{StaticResource SurfaceSunken}"
+                                BorderBrush="{StaticResource CardBorder}"
+                                BorderThickness="1" SnapsToDevicePixels="True">
+                            <Grid>
+                                <ContentPresenter Margin="10,7,30,7" VerticalAlignment="Center"/>
+                                <Path x:Name="Arrow" Data="M 0 0 L 4 4 L 8 0" Stroke="{StaticResource TextSecondary}"
+                                      StrokeThickness="1.6" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                      Margin="0,2,12,0" RenderTransformOrigin="0.5,0.5">
+                                    <Path.RenderTransform>
+                                        <RotateTransform x:Name="ArrowSpin" Angle="0"/>
+                                    </Path.RenderTransform>
+                                </Path>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource TextTertiary}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="ArrowSpin"
+                                                             Storyboard.TargetProperty="Angle"
+                                                             To="180" Duration="{StaticResource Fast}"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="ArrowSpin"
+                                                             Storyboard.TargetProperty="Angle"
+                                                             To="0" Duration="{StaticResource Fast}"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
-        <Style TargetType="TextBlock" x:Key="HotkeyStyle">
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="FontFamily" Value="Consolas"/>
-            <Setter Property="Foreground" Value="#3A6EA5"/>
-            <Setter Property="Margin" Value="0,4,0,0"/>
+        <Style TargetType="ComboBoxItem" x:Key="ComboItem">
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Bd" CornerRadius="8" Margin="4,2"
+                                Background="Transparent" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentSoft}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentSoft}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
-        <Style TargetType="TextBlock" x:Key="WarningStyle">
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Foreground" Value="#B34A00"/>
-            <Setter Property="Margin" Value="0,4,0,0"/>
-            <Setter Property="TextWrapping" Value="Wrap"/>
+        <Style TargetType="ComboBox" x:Key="ChoiceStyle">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource ComboItem}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="PART_Toggle" Style="{StaticResource ComboToggle}"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay,
+                                                      RelativeSource={RelativeSource TemplatedParent}}">
+                                <ContentPresenter Content="{TemplateBinding SelectionBoxItem}"
+                                                  ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"/>
+                            </ToggleButton>
+
+                            <Popup x:Name="PART_Popup" AllowsTransparency="True" Placement="Bottom"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   PopupAnimation="Fade" VerticalOffset="4"
+                                   MinWidth="{TemplateBinding ActualWidth}">
+                                <Border Background="{StaticResource Surface}"
+                                        BorderBrush="{StaticResource CardBorder}" BorderThickness="1"
+                                        CornerRadius="{StaticResource RadiusControl}" Padding="0,4">
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="#28000000" BlurRadius="16"
+                                                          ShadowDepth="3" Direction="270"/>
+                                    </Border.Effect>
+                                    <ItemsPresenter/>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ===================================================================================
+             SLIDER - rounded track, filled portion, round thumb that grows on hover.
+             =================================================================================== -->
+        <Style TargetType="Thumb" x:Key="SliderThumb">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Grid Width="20" Height="20" Background="Transparent">
+                            <Border x:Name="Dot" Width="16" Height="16" CornerRadius="8"
+                                    Background="White" BorderBrush="{StaticResource Accent}"
+                                    BorderThickness="4">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#25000000" BlurRadius="5"
+                                                      ShadowDepth="1" Direction="270"/>
+                                </Border.Effect>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Dot" Property="Width" Value="20"/>
+                                <Setter TargetName="Dot" Property="Height" Value="20"/>
+                                <Setter TargetName="Dot" Property="CornerRadius" Value="10"/>
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="Dot" Property="Width" Value="20"/>
+                                <Setter TargetName="Dot" Property="Height" Value="20"/>
+                                <Setter TargetName="Dot" Property="CornerRadius" Value="10"/>
+                                <Setter TargetName="Dot" Property="BorderThickness" Value="6"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="Slider" x:Key="TuneSliderStyle">
+            <Setter Property="IsSnapToTickEnabled" Value="True"/>
+            <Setter Property="Focusable" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid Height="24" Background="Transparent" VerticalAlignment="Center">
+                            <Border Height="5" CornerRadius="3" VerticalAlignment="Center"
+                                    Background="{StaticResource TrackOff}"/>
+                            <Track x:Name="PART_Track">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="Slider.DecreaseLarge" Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Grid Background="Transparent">
+                                                    <Border Height="5" CornerRadius="3" VerticalAlignment="Center"
+                                                            Background="{StaticResource Accent}"/>
+                                                </Grid>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource SliderThumb}"/>
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="Slider.IncreaseLarge" Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Grid Background="Transparent"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ===================================================================================
+             SCROLLBAR - slim and rounded, so it does not undo the rest.
+             =================================================================================== -->
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="10"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="Transparent">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageUpCommand" Opacity="0" Focusable="False"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb>
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border x:Name="Bar" Width="6" CornerRadius="3"
+                                                        Background="#C7CAD2" HorizontalAlignment="Center"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageDownCommand" Opacity="0" Focusable="False"/>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ===================================================================================
+             SIDEBAR ITEM - rounded pill with an accent bar that slides in.
+             =================================================================================== -->
+        <Style TargetType="ListBoxItem" x:Key="NavItemStyle">
+            <Setter Property="Padding" Value="14,11"/>
+            <Setter Property="Margin" Value="10,2"/>
+            <Setter Property="FontSize" Value="13.5"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Grid>
+                            <Border x:Name="Bd" CornerRadius="{StaticResource RadiusPill}"
+                                    Background="Transparent" Padding="{TemplateBinding Padding}"
+                                    SnapsToDevicePixels="True">
+                                <ContentPresenter VerticalAlignment="Center"/>
+                            </Border>
+                            <Border x:Name="Bar" Width="3" Height="18" CornerRadius="2"
+                                    Background="{StaticResource Accent}"
+                                    HorizontalAlignment="Left" VerticalAlignment="Center"
+                                    Margin="-2,0,0,0" RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <ScaleTransform x:Name="BarScale" ScaleY="0"/>
+                                </Border.RenderTransform>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                    <Condition Property="IsSelected" Value="False"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource Hover}"/>
+                            </MultiTrigger>
+
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentSoft}"/>
+                                <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="BarScale"
+                                                             Storyboard.TargetProperty="ScaleY"
+                                                             To="1" Duration="{StaticResource Normal}">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="BarScale"
+                                                             Storyboard.TargetProperty="ScaleY"
+                                                             To="0" Duration="{StaticResource Fast}"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="230"/>
+            <ColumnDefinition Width="252"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- Sidebar -->
-        <Border Background="#E6E6E6" Grid.Column="0">
+        <!-- ============================== SIDEBAR ============================== -->
+        <Border Grid.Column="0" Background="{StaticResource SurfaceSunken}">
             <DockPanel>
-                <StackPanel DockPanel.Dock="Top">
-                    <TextBlock Text="Window Tweaks" FontSize="20" FontWeight="Bold" Margin="20,20,20,2"/>
-                    <TextBlock x:Name="SubtitleText" Text="settings" FontSize="12"
-                               Foreground="#666666" Margin="20,0,20,24"/>
+                <StackPanel DockPanel.Dock="Top" Margin="24,26,20,20">
+                    <TextBlock Text="Window Tweaks"
+                               FontFamily="Segoe UI Variable Display, Segoe UI"
+                               FontSize="19" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextPrimary}"/>
+                    <TextBlock x:Name="SubtitleText" FontSize="11.5"
+                               Foreground="{StaticResource TextTertiary}" Margin="0,2,0,0"/>
                 </StackPanel>
 
-                <!-- Status sits at the bottom so it is visible from every page. -->
-                <Border DockPanel.Dock="Bottom" Padding="20,12" Background="#DCDCDC">
+                <!-- Status footer, visible from every page. -->
+                <Border DockPanel.Dock="Bottom" Margin="14,10,14,14" Padding="14,12"
+                        CornerRadius="{StaticResource RadiusControl}"
+                        Background="{StaticResource Surface}"
+                        BorderBrush="{StaticResource CardBorder}" BorderThickness="1">
                     <StackPanel>
-                        <TextBlock x:Name="EnabledCountText" FontSize="11" Foreground="#444444"
-                                   TextWrapping="Wrap"/>
-                        <TextBlock x:Name="GameModeText" FontSize="11" Foreground="#B34A00"
+                        <TextBlock x:Name="EnabledCountText" FontSize="11.5" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="GameModeText" FontSize="11" Foreground="{StaticResource Warning}"
                                    TextWrapping="Wrap" Margin="0,6,0,0" Visibility="Collapsed"/>
-                        <TextBlock x:Name="SettingsPathText" FontSize="10" Foreground="#777777"
+                        <TextBlock x:Name="SettingsPathText" FontSize="10"
+                                   Foreground="{StaticResource TextTertiary}"
                                    TextWrapping="Wrap" Margin="0,6,0,0"/>
                     </StackPanel>
                 </Border>
 
                 <ListBox x:Name="SidebarList" Background="Transparent" BorderThickness="0"
-                         SelectionChanged="SidebarList_SelectionChanged">
-                    <ListBox.ItemContainerStyle>
-                        <Style TargetType="ListBoxItem">
-                            <Setter Property="Padding" Value="20,12"/>
-                            <Setter Property="FontSize" Value="14"/>
-                            <Setter Property="Foreground" Value="#222222"/>
-                            <Setter Property="Cursor" Value="Hand"/>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="ListBoxItem">
-                                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
-                                            <ContentPresenter/>
-                                        </Border>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Triggers>
-                                <Trigger Property="IsSelected" Value="True">
-                                    <Setter Property="Background" Value="#FFFFFF"/>
-                                    <Setter Property="Foreground" Value="#000000"/>
-                                    <Setter Property="FontWeight" Value="SemiBold"/>
-                                </Trigger>
-                                <MultiTrigger>
-                                    <MultiTrigger.Conditions>
-                                        <Condition Property="IsMouseOver" Value="True"/>
-                                        <Condition Property="IsSelected" Value="False"/>
-                                    </MultiTrigger.Conditions>
-                                    <Setter Property="Background" Value="#D8D8D8"/>
-                                </MultiTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ListBox.ItemContainerStyle>
-                </ListBox>
+                         ItemContainerStyle="{StaticResource NavItemStyle}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         SelectionChanged="SidebarList_SelectionChanged"/>
             </DockPanel>
         </Border>
 
-        <!-- Main content -->
-        <Border Grid.Column="1" Background="#FFFFFF">
-            <ScrollViewer Margin="40,30,30,30" VerticalScrollBarVisibility="Auto">
-                <ContentControl x:Name="MainContent"/>
+        <!-- ============================== CONTENT ============================== -->
+        <Border Grid.Column="1" Background="{StaticResource Surface}">
+            <ScrollViewer x:Name="ContentScroll" Margin="0" Padding="38,30,26,30"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <ContentControl x:Name="MainContent" RenderTransformOrigin="0.5,0.5">
+                    <ContentControl.RenderTransform>
+                        <TranslateTransform x:Name="ContentShift" Y="0"/>
+                    </ContentControl.RenderTransform>
+                </ContentControl>
             </ScrollViewer>
         </Border>
     </Grid>

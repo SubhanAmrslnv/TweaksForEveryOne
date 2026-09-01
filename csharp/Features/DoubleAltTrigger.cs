@@ -16,7 +16,6 @@ namespace WindowTweaks.Features;
 public class DoubleAltTrigger : IDisposable
 {
     private const string HookOwner = nameof(DoubleAltTrigger);
-    private const int TimeoutMs = 400;
 
     private const int VK_MENU = 0x12;
     private const int VK_LMENU = 0xA4;
@@ -62,6 +61,8 @@ public class DoubleAltTrigger : IDisposable
 
     private bool OnKey(KeyboardHook.KeyEvent e)
     {
+        int timeoutMs = TuningRegistry.Int(TuningRegistry.DoubleTapTimeoutMs);
+
         bool isAlt = e.VirtualKey is VK_MENU or VK_LMENU or VK_RMENU;
 
         if (e.IsKeyDown)
@@ -73,7 +74,7 @@ public class DoubleAltTrigger : IDisposable
                 return false;
             }
 
-            if (_altCount == 0 || _timer.ElapsedMilliseconds > TimeoutMs)
+            if (_altCount == 0 || _timer.ElapsedMilliseconds > timeoutMs)
             {
                 _altCount = 1;
                 _otherKeyPressed = false;
