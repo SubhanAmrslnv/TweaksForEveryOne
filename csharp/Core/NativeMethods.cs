@@ -378,7 +378,6 @@ internal static class NativeMethods
     /// <summary>WM_NCHITTEST result meaning "the title bar".</summary>
     public const int HTCAPTION = 2;
 
-    public const uint WS_EX_TRANSPARENT_STYLE = 0x00000020;
     public const uint WS_EX_NOACTIVATE = 0x08000000;
     public const uint WS_EX_TOOLWINDOW = 0x00000080;
 

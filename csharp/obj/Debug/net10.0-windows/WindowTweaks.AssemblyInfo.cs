@@ -17,7 +17,7 @@ using System.Reflection;
     "ng, per-window transparency and desktop animations. No network access, no teleme" +
     "try."))]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f1e58787c595dc2b2651b0c7bd47ed4f32850a0e")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+953fb884371638a08fb7e1aa79a0e5f44ee51639")]
 [assembly: System.Reflection.AssemblyProductAttribute("Window Tweaks")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Window Tweaks")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

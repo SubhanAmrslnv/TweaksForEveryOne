@@ -120,6 +120,13 @@ public partial class App : System.Windows.Application
         // hotkeys so that a feature's Apply cannot race a half-built hotkey table.
         FeatureRegistry.ApplyStoredState();
 
+        // For this one feature the filesystem is the truth, not settings.json: the installer and
+        // the uninstaller both write the shortcut, so the stored value can disagree with reality.
+        // ApplyStoredState never calls Apply(false), so a stored "off" against an existing shortcut
+        // would otherwise leave it in place while the settings window showed the switch as off.
+        // Set() no-ops when the two already agree, which is the normal case.
+        FeatureRegistry.Set(FeatureKeys.StartWithWindows, StartupManager.IsEnabled());
+
         EnsureDragFullWindowsIfNeeded();
         ReportFailedHotkeys();
 
@@ -473,6 +480,12 @@ public partial class App : System.Windows.Application
     private void ReloadApp()
     {
         SettingsStore.Flush();
+
+        // Release the global hotkeys before the replacement starts, not in OnExit afterwards.
+        // RegisterHotKey is exclusive per chord, so while this process still owned them the new
+        // instance's registrations all failed - it came up with every hotkey dead and a balloon
+        // blaming "another program". Dispose is idempotent, so OnExit calling it again is fine.
+        _hotkeyManager?.Dispose();
 
         string? exePath = Environment.ProcessPath;
         if (exePath != null)

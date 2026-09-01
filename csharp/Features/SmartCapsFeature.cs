@@ -29,8 +29,12 @@ public class SmartCapsFeature : IDisposable
     private const uint KEYEVENTF_KEYUP = 0x0002;
 
     private readonly Stopwatch _timer = new();
-    private bool _capsDown;
-    private bool _toggled;
+
+    // Volatile because these are written on the keyboard-hook thread and read on the thread-pool
+    // thread that waits out the hold. Without it the JIT is free to hoist the reads in that wait
+    // loop's continuation, and a tap could be misread as a hold (or vice versa) at random.
+    private volatile bool _capsDown;
+    private volatile bool _toggled;
 
     public bool IsEnabled { get; private set; }
 

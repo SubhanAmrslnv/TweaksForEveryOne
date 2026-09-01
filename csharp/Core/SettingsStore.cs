@@ -28,12 +28,40 @@ internal static class SettingsStore
     private static bool _dirty;
     private static bool _loaded;
 
+    private static bool _suppressPersistence;
+
     /// <summary>
-    /// While true, Set() updates memory but never marks the store dirty. Game Mode switches ~40
-    /// features off in memory; persisting that overlay would write the user's whole configuration
-    /// as "off" and there would be nothing left to restore it from on the next launch.
+    /// While true, no write is SCHEDULED. Game Mode switches ~18 features off in memory, and
+    /// persisting that overlay would write the user's whole configuration as "off" with nothing
+    /// left to restore it from on the next launch.
+    ///
+    /// Note what this does NOT do: it does not discard the value. Game Mode's overlay never reaches
+    /// this dictionary at all - FeatureRegistry.Set(..., persist: false) does not call in here - so
+    /// anything that DOES arrive while suppression is on is a real user change, such as a city or a
+    /// tuning value typed in the settings window. Dropping those lost the edit silently while the
+    /// UI went on showing it as applied. The write is deferred to the moment suppression lifts.
     /// </summary>
-    public static bool SuppressPersistence { get; set; }
+    public static bool SuppressPersistence
+    {
+        get
+        {
+            lock (Gate) return _suppressPersistence;
+        }
+        set
+        {
+            lock (Gate)
+            {
+                if (_suppressPersistence == value) return;
+                _suppressPersistence = value;
+
+                // Lifting suppression with a pending change: schedule the debounced write rather
+                // than writing here. This setter runs on the UI thread from Game Mode's exit path,
+                // and a synchronous file write there is exactly the input-path disk touch the
+                // debounce exists to avoid.
+                if (!value && _dirty) ScheduleWrite();
+            }
+        }
+    }
 
     public static string FilePath
     {
@@ -142,12 +170,20 @@ internal static class SettingsStore
             if (Values.TryGetValue(key, out string? existing) && existing == value) return;
             Values[key] = value;
 
-            if (SuppressPersistence) return;
-
+            // Dirty regardless, so a change made while suppressed is not lost - only the
+            // SCHEDULING waits. See SuppressPersistence.
             _dirty = true;
-            _debounce ??= new System.Threading.Timer(_ => Flush(), null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
-            _debounce.Change(DebounceMs, System.Threading.Timeout.Infinite);
+            if (_suppressPersistence) return;
+
+            ScheduleWrite();
         }
+    }
+
+    /// <summary>Caller must hold Gate.</summary>
+    private static void ScheduleWrite()
+    {
+        _debounce ??= new System.Threading.Timer(_ => Flush(), null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+        _debounce.Change(DebounceMs, System.Threading.Timeout.Infinite);
     }
 
     /// <summary>Write now if anything is pending. Safe to call from any thread, and from exit.</summary>

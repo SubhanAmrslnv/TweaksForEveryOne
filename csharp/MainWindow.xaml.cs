@@ -32,6 +32,17 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, CheckBox> _switches = new();
 
     /// <summary>
+    /// One commit action per editable field on the Tuning page, replayed when the window closes.
+    ///
+    /// The fields deliberately write on LostFocus rather than per keystroke, but WPF does not
+    /// reliably raise LostFocus when a window is closed while a TextBox still has focus - so typing
+    /// a city and closing the window with Shift+Alt+W discarded the edit, silently, with the field
+    /// still showing it. Every commit is idempotent (SettingsStore ignores an unchanged value), so
+    /// replaying all of them costs nothing.
+    /// </summary>
+    private readonly List<Action> _pendingCommits = new();
+
+    /// <summary>
     /// Set while we are writing a switch's state FROM the registry, so the Checked handler does not
     /// turn a refresh into a user action and bounce it back.
     /// </summary>
@@ -46,6 +57,7 @@ public partial class MainWindow : Window
         BuildSidebar();
         FeatureRegistry.Changed += OnFeatureChanged;
         Closed += (_, _) => FeatureRegistry.Changed -= OnFeatureChanged;
+        Closing += (_, _) => CommitPendingEdits();
 
         UpdateStatus();
     }
@@ -66,6 +78,14 @@ public partial class MainWindow : Window
         if (SidebarList.SelectedItem is not ListBoxItem item) return;
 
         string page = item.Tag?.ToString() ?? string.Empty;
+
+        // Commit and then DROP the outgoing page's field commits before building the new one.
+        // Committing covers navigating away with a field still focused; dropping is what keeps the
+        // list from accumulating closures over TextBoxes that no longer exist - replaying those on
+        // close would write their stale values back over a newer edit.
+        CommitPendingEdits();
+        _pendingCommits.Clear();
+
         MainContent.Content = page == TuningPage ? BuildTuningPage() : BuildFeaturePage(page);
     }
 
@@ -296,7 +316,7 @@ public partial class MainWindow : Window
             Text = SettingsStore.GetString(key, fallback)
         };
 
-        box.LostFocus += (_, _) =>
+        void Commit()
         {
             string value = box.Text.Trim();
             string previous = SettingsStore.GetString(key, fallback);
@@ -307,7 +327,10 @@ public partial class MainWindow : Window
             // A changed city invalidates the cached coordinates, or the clock would keep showing
             // the weather for wherever it looked up first.
             if (key == WeatherService.LocationKey) WeatherService.InvalidateLocation();
-        };
+        }
+
+        box.LostFocus += (_, _) => Commit();
+        _pendingCommits.Add(Commit);
 
         line.Children.Add(box);
         row.Children.Add(line);
@@ -342,7 +365,7 @@ public partial class MainWindow : Window
 
         // Validate on LostFocus, never on every keystroke: correcting 3 to 100 while somebody is
         // halfway through typing 300 fights the user for control of the field.
-        box.LostFocus += (_, _) =>
+        void Commit()
         {
             int value = int.TryParse(box.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed)
                 ? Math.Clamp(parsed, lo, hi)
@@ -350,7 +373,10 @@ public partial class MainWindow : Window
 
             box.Text = value.ToString(CultureInfo.InvariantCulture);
             SettingsStore.SetInt(key, value);
-        };
+        }
+
+        box.LostFocus += (_, _) => Commit();
+        _pendingCommits.Add(Commit);
 
         line.Children.Add(box);
         line.Children.Add(new TextBlock
@@ -370,5 +396,24 @@ public partial class MainWindow : Window
         });
 
         return row;
+    }
+
+    /// <summary>
+    /// Replay every Tuning field's commit. Called on close, because LostFocus is not guaranteed to
+    /// fire first. One bad field must not stop the others from being saved.
+    /// </summary>
+    private void CommitPendingEdits()
+    {
+        foreach (Action commit in _pendingCommits)
+        {
+            try
+            {
+                commit();
+            }
+            catch
+            {
+                // A field that cannot commit is not worth blocking the window from closing.
+            }
+        }
     }
 }

@@ -127,6 +127,11 @@ public class CustomClockFeature : IDisposable
 
     private void Enable()
     {
+        // The panel below is rebuilt with the hardcoded fallback colour, so the cached sample has
+        // to be dropped too. Keeping it made SampleTaskbarColour short-circuit on "unchanged" and
+        // the block stayed dark grey for the rest of the session after a toggle off and on.
+        _lastSampledColour = uint.MaxValue;
+
         _glyphText = new TextBlock
         {
             FontSize = 15,
@@ -225,9 +230,14 @@ public class CustomClockFeature : IDisposable
             // Tool window so the block can never show up in Alt-Tab.
             try
             {
+                // WS_EX_TRANSPARENT is what actually makes the block click-through. WPF's
+                // IsHitTestVisible only stops hit-testing INSIDE the WPF tree; Win32 still returns
+                // this window from WindowFromPoint, so without this style the block sat on the
+                // taskbar as an invisible dead zone and swallowed clicks meant for the shell.
                 uint ex = NativeMethods.GetWindowLong(handle, NativeMethods.GWL_EXSTYLE);
                 NativeMethods.SetWindowLong(handle, NativeMethods.GWL_EXSTYLE,
-                    ex | NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE);
+                    ex | NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE
+                       | NativeMethods.WS_EX_TRANSPARENT);
             }
             catch
             {

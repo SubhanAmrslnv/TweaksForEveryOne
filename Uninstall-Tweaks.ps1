@@ -137,7 +137,17 @@ foreach ($lnk in @($ShortcutPath, (Join-Path ([Environment]::GetFolderPath('Comm
 if (-not $removedShortcut) { Write-Host "No startup shortcut found." }
 
 # --- 4. Install directory ---------------------------------------------------------------------
-if (Test-Path $InstallDir) {
+# This is an ELEVATED recursive force-delete, so it verifies the target is actually our install
+# before touching it. $env:ProgramFiles is inherited from the environment; if it were empty or
+# pointed somewhere else, an unguarded Remove-Item -Recurse -Force here would take out whatever
+# tree it happened to name. Requiring our own executable in the directory makes that impossible.
+$looksLikeOurs = (Test-Path $InstallDir) -and (Test-Path (Join-Path $InstallDir 'WindowTweaks.exe'))
+
+if ((Test-Path $InstallDir) -and -not $looksLikeOurs) {
+    Write-Host "Refusing to delete $InstallDir - it does not contain WindowTweaks.exe." -ForegroundColor Red
+    Write-Host "Remove it by hand if you are sure it is ours." -ForegroundColor Yellow
+}
+elseif ($looksLikeOurs) {
     Write-Host "Removing $InstallDir..."
     Remove-Item $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
 
@@ -146,7 +156,8 @@ if (Test-Path $InstallDir) {
     } else {
         Write-Host "  removed." -ForegroundColor Green
     }
-} else {
+}
+else {
     Write-Host "$InstallDir does not exist."
 }
 

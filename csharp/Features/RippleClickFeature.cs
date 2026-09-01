@@ -141,7 +141,7 @@ public class RippleClickFeature : IDisposable
 
                     uint ex = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
                     NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE,
-                        ex | NativeMethods.WS_EX_TRANSPARENT_STYLE
+                        ex | NativeMethods.WS_EX_TRANSPARENT
                            | NativeMethods.WS_EX_NOACTIVATE
                            | NativeMethods.WS_EX_TOOLWINDOW);
                 }
