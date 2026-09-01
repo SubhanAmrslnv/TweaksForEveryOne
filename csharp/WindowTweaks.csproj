@@ -7,6 +7,78 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <!--
+    ============================================================================================
+    ASSEMBLY IDENTITY - this block is what stops the binary being anonymous.
+
+    An unsigned executable with NO company, product, description or version, which installs a
+    low-level input hook and adds itself to Startup, is close to the worst possible shape for an
+    antivirus heuristic. Filling this in does not make the app trustworthy on its own, but every
+    field here is one the scanner (and the user, in the file's Properties dialog) can read.
+
+    The decisive fix is an Authenticode signature. See docs/ANTIVIRUS.md - metadata and manifest
+    are steps 1-2 of that document, and signing is step 3.
+    ============================================================================================
+  -->
+  <PropertyGroup>
+    <AssemblyName>WindowTweaks</AssemblyName>
+    <RootNamespace>WindowTweaks</RootNamespace>
+
+    <Product>Window Tweaks</Product>
+    <AssemblyTitle>Window Tweaks</AssemblyTitle>
+
+    <!-- TODO: replace with your own name or company as it should appear to users, and as it will
+         appear on a code-signing certificate. These two must match the certificate subject once
+         you sign, or the signature and the metadata will disagree about who made this. -->
+    <Company>Window Tweaks</Company>
+    <Authors>Window Tweaks</Authors>
+    <Copyright>Copyright (c) 2026</Copyright>
+
+    <Description>Window management utility for Windows 11: magnetic window snapping, keyboard tiling, per-window transparency and desktop animations. No network access, no telemetry.</Description>
+
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+
+    <!-- A stable, resolvable project URL is a real reputation signal for a false-positive review.
+         TODO: point this at your repository. -->
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl></PackageProjectUrl>
+
+    <NeutralLanguage>en</NeutralLanguage>
+  </PropertyGroup>
+
+  <!--
+    ============================================================================================
+    WHAT THIS PROJECT DELIBERATELY DOES NOT DO, because each of these CAUSES false positives:
+
+      - No packer, no obfuscator, no protector. Packed and obfuscated code is the single largest
+        source of antivirus false positives, because hiding the code is what malware does. Never
+        add one to "protect" this app - it will get the binary blacklisted.
+      - No PublishSingleFile. A single-file bundle self-extracts at runtime, which looks like
+        unpacking; the plain multi-file layout scans cleanly.
+      - No PublishTrimmed / no IL linking. Trimmed assemblies have unusual section layouts that
+        some engines score against.
+      - No self-contained publish. Framework-dependent keeps the payload small and means the
+        runtime itself is Microsoft-signed rather than copied in by us.
+      - No ReadyToRun. Precompiled native images in a managed binary is another odd-shape signal.
+
+    The installer publishes framework-dependent Release/win-x64; see Install-Tweaks.ps1.
+    ============================================================================================
+  -->
+  <PropertyGroup>
+    <PublishSingleFile>false</PublishSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <SelfContained>false</SelfContained>
+
+    <!-- Deterministic builds: the same source produces a byte-identical binary, so a vendor (or a
+         user) can rebuild and confirm the shipped exe matches this source. That is a genuinely
+         useful thing to be able to say in a false-positive report. -->
+    <Deterministic>true</Deterministic>
   </PropertyGroup>
 
 </Project>

@@ -7,15 +7,31 @@ using WindowTweaks.Core;
 
 namespace WindowTweaks.Features;
 
+/// <summary>
+/// Breathing windows: a background window slowly fades once it has been idle, and wakes instantly
+/// when it is focused or the cursor lands on it.
+///
+/// Opacity goes through AlphaCompositor as the "breathe" layer rather than being written directly.
+/// That is what makes this effect compose with the transparency wheel: a window the user set to 50%
+/// by hand now breathes between 50% and 50%*DimFactor, instead of being dragged to an absolute
+/// value and then reset to fully opaque - which silently discarded the user's setting.
+///
+/// The old direct write also deliberately kept WS_EX_LAYERED on restore, because removing it caused
+/// black flicker in apps that set it themselves. That knowledge now lives in AlphaCompositor, which
+/// strips the style only when it was the one that added it.
+/// </summary>
 public class BreathingFeature : IDisposable
 {
-    private bool _isEnabled = false;
-    private DispatcherTimer _timer;
-    private Dictionary<IntPtr, DateTime> _lastActive = new();
-    private const int IDLE_MS = 5000;
-    private const byte DIM_ALPHA = 120;
-    
-    public bool IsEnabled => _isEnabled;
+    private const int IdleMs = 5000;
+
+    /// <summary>Matches the previous absolute dim of 120/255, so the effect looks unchanged.</summary>
+    private const double DimFactor = 120.0 / 255.0;
+
+    private readonly DispatcherTimer _timer;
+    private readonly Dictionary<IntPtr, DateTime> _lastActive = new();
+    private readonly HashSet<IntPtr> _dimmed = new();
+
+    public bool IsEnabled { get; private set; }
 
     public BreathingFeature()
     {
@@ -23,12 +39,15 @@ public class BreathingFeature : IDisposable
         _timer.Tick += Timer_Tick;
     }
 
-    public void Toggle()
+    public void SetEnabled(bool enabled)
     {
-        _isEnabled = !_isEnabled;
-        if (_isEnabled)
+        if (enabled == IsEnabled) return;
+        IsEnabled = enabled;
+
+        if (enabled)
         {
             _lastActive.Clear();
+            _dimmed.Clear();
             _timer.Start();
             Debug.WriteLine("Breathing Windows: Enabled");
         }
@@ -41,100 +60,99 @@ public class BreathingFeature : IDisposable
         }
     }
 
+    public void Toggle() => SetEnabled(!IsEnabled);
+
     private void Timer_Tick(object? sender, EventArgs e)
+    {
+        // The flag is tested inside the tick, not only at the call site: a feature that owns state
+        // on other people's windows has to be able to clean up even if it is being switched off.
+        if (!IsEnabled)
+        {
+            _timer.Stop();
+            RestoreAllWindows();
+            return;
+        }
+
+        try
+        {
+            TickCore();
+        }
+        catch (Exception ex)
+        {
+            // An exception escaping a timer callback kills the timer, and the feature would be dead
+            // for the rest of the session with no visible cause.
+            Debug.WriteLine("Breathing tick failed: " + ex.Message);
+        }
+    }
+
+    private void TickCore()
     {
         IntPtr fgHwnd = NativeMethods.GetForegroundWindow();
         NativeMethods.GetCursorPos(out NativeMethods.POINT pt);
-        IntPtr mouseHwnd = NativeMethods.WindowFromPoint(pt);
-
-        // Get the root window from a point (WindowFromPoint often returns a child control)
-        mouseHwnd = NativeMethods.GetAncestor(mouseHwnd, NativeMethods.GA_ROOT);
+        IntPtr mouseHwnd = NativeMethods.GetAncestor(NativeMethods.WindowFromPoint(pt), NativeMethods.GA_ROOT);
 
         DateTime now = DateTime.Now;
-        List<IntPtr> activeThisTick = new List<IntPtr>();
+        HashSet<IntPtr> aliveThisTick = new();
 
-        NativeMethods.EnumWindows((IntPtr hwnd, IntPtr lParam) =>
+        NativeMethods.EnumWindows((hwnd, _) =>
         {
             if (!NativeMethods.IsWindowVisible(hwnd)) return true;
-            
-            // Basic filtering
-            StringBuilder sb = new StringBuilder(256);
+
+            StringBuilder sb = new(256);
             NativeMethods.GetClassName(hwnd, sb, sb.Capacity);
             string cls = sb.ToString();
-            if (cls == "Shell_TrayWnd" || cls == "Progman" || cls == "WorkerW") return true;
+            if (cls is "Shell_TrayWnd" or "Progman" or "WorkerW" or "Shell_SecondaryTrayWnd") return true;
 
-            activeThisTick.Add(hwnd);
+            aliveThisTick.Add(hwnd);
 
             if (hwnd == fgHwnd || hwnd == mouseHwnd)
             {
                 _lastActive[hwnd] = now;
-                SetWindowAlpha(hwnd, 255);
+                if (_dimmed.Remove(hwnd))
+                    AlphaCompositor.ClearLayer(hwnd, AlphaCompositor.LayerBreathe);
+                return true;
             }
-            else
-            {
-                if (!_lastActive.ContainsKey(hwnd))
-                {
-                    _lastActive[hwnd] = now;
-                }
-                
-                if ((now - _lastActive[hwnd]).TotalMilliseconds > IDLE_MS)
-                {
-                    SetWindowAlpha(hwnd, DIM_ALPHA);
-                }
-            }
+
+            if (!_lastActive.ContainsKey(hwnd)) _lastActive[hwnd] = now;
+
+            if ((now - _lastActive[hwnd]).TotalMilliseconds > IdleMs && _dimmed.Add(hwnd))
+                AlphaCompositor.SetLayer(hwnd, AlphaCompositor.LayerBreathe, DimFactor);
 
             return true;
         }, IntPtr.Zero);
 
-        // Cleanup closed windows from tracking
-        List<IntPtr> toRemove = new List<IntPtr>();
-        foreach (var key in _lastActive.Keys)
+        // Collect then delete: removing entries while enumerating shifts the remainder under the
+        // enumerator and silently skips the next one.
+        List<IntPtr>? gone = null;
+        foreach (IntPtr key in _lastActive.Keys)
         {
-            if (!activeThisTick.Contains(key))
-            {
-                toRemove.Add(key);
-            }
+            if (!aliveThisTick.Contains(key)) (gone ??= new List<IntPtr>()).Add(key);
         }
-        foreach (var key in toRemove)
+
+        if (gone == null) return;
+        foreach (IntPtr key in gone)
         {
             _lastActive.Remove(key);
+            _dimmed.Remove(key);
+            // The window is gone, so there is nothing to restore - just drop its record so we do
+            // not hold state against a handle Windows may reissue.
+            AlphaCompositor.Forget(key);
         }
-    }
-
-    private void SetWindowAlpha(IntPtr hwnd, byte alpha)
-    {
-        if (!NativeMethods.IsWindow(hwnd)) return;
-
-        uint style = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
-        
-        if (alpha == 255)
-        {
-            // Just set alpha to 255, removing the WS_EX_LAYERED flag can cause black flickering
-            // in some WPF/WinForms apps if they natively rely on it.
-            if ((style & NativeMethods.WS_EX_LAYERED) != 0)
-                NativeMethods.SetLayeredWindowAttributes(hwnd, 0, 255, NativeMethods.LWA_ALPHA);
-            return;
-        }
-
-        if ((style & NativeMethods.WS_EX_LAYERED) == 0)
-        {
-            NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, style | NativeMethods.WS_EX_LAYERED);
-        }
-
-        NativeMethods.SetLayeredWindowAttributes(hwnd, 0, alpha, NativeMethods.LWA_ALPHA);
     }
 
     private void RestoreAllWindows()
     {
-        foreach (var hwnd in _lastActive.Keys)
+        foreach (IntPtr hwnd in new List<IntPtr>(_dimmed))
         {
-            SetWindowAlpha(hwnd, 255);
+            AlphaCompositor.ClearLayer(hwnd, AlphaCompositor.LayerBreathe);
         }
+        _dimmed.Clear();
     }
 
     public void Dispose()
     {
         _timer.Stop();
+        IsEnabled = false;
         RestoreAllWindows();
     }
 }

@@ -1,59 +1,132 @@
 <Window x:Class="WindowTweaks.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Window Tweaks Settings" Height="700" Width="850"
+        Title="Window Tweaks Settings" Height="700" Width="880"
         WindowStartupLocation="CenterScreen"
         Background="#F3F3F3"
         FontFamily="Segoe UI">
-    
+
     <Window.Resources>
-        <!-- Style for Toggle Switches / Checkboxes -->
+        <!-- A real toggle switch. The old build used bare checkboxes, which read as a form to be
+             submitted; these apply the moment they are clicked, so they should look like switches. -->
         <Style TargetType="CheckBox" x:Key="ToggleSwitchStyle">
-            <Setter Property="Margin" Value="0,12"/>
+            <Setter Property="Margin" Value="0,10,0,0"/>
             <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Foreground" Value="#111111"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid Background="Transparent">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <ContentPresenter Grid.Column="0"
+                                              VerticalAlignment="Center"
+                                              TextBlock.Foreground="{TemplateBinding Foreground}"
+                                              TextBlock.FontSize="{TemplateBinding FontSize}"/>
+
+                            <Border x:Name="Track" Grid.Column="1"
+                                    Width="42" Height="22" CornerRadius="11"
+                                    Background="#C8C8C8" VerticalAlignment="Center"
+                                    Margin="16,0,0,0">
+                                <Ellipse x:Name="Knob" Width="16" Height="16" Fill="White"
+                                         HorizontalAlignment="Left" Margin="3,0,0,0"/>
+                            </Border>
+                        </Grid>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="#0F7B0F"/>
+                                <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right"/>
+                                <Setter TargetName="Knob" Property="Margin" Value="0,0,3,0"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Track" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
-        
+
         <Style TargetType="TextBlock" x:Key="HeaderStyle">
             <Setter Property="FontSize" Value="24"/>
             <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Margin" Value="0,0,0,20"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
             <Setter Property="Foreground" Value="#111111"/>
         </Style>
 
         <Style TargetType="TextBlock" x:Key="SubHeaderStyle">
-            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin" Value="0,15,0,10"/>
-            <Setter Property="Foreground" Value="#333333"/>
+            <Setter Property="Margin" Value="0,26,0,2"/>
+            <Setter Property="Foreground" Value="#5A5A5A"/>
         </Style>
 
         <Style TargetType="TextBlock" x:Key="DescriptionStyle">
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Foreground" Value="#666666"/>
-            <Setter Property="Margin" Value="20,-8,0,12"/>
+            <Setter Property="Margin" Value="0,2,58,0"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
+        <Style TargetType="TextBlock" x:Key="HotkeyStyle">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="Foreground" Value="#3A6EA5"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
+        </Style>
+
+        <Style TargetType="TextBlock" x:Key="WarningStyle">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="#B34A00"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
     </Window.Resources>
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="220"/>
+            <ColumnDefinition Width="230"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
-        
+
         <!-- Sidebar -->
         <Border Background="#E6E6E6" Grid.Column="0">
-            <StackPanel>
-                <TextBlock Text="Window Tweaks" FontSize="20" FontWeight="Bold" Margin="20,20,20,2"/>
-                <TextBlock Text="version 1.0.0" FontSize="12" Foreground="#666666" Margin="20,0,20,30"/>
-                
-                <ListBox x:Name="SidebarList" Background="Transparent" BorderThickness="0" SelectionChanged="SidebarList_SelectionChanged" SelectedIndex="0">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top">
+                    <TextBlock Text="Window Tweaks" FontSize="20" FontWeight="Bold" Margin="20,20,20,2"/>
+                    <TextBlock x:Name="SubtitleText" Text="settings" FontSize="12"
+                               Foreground="#666666" Margin="20,0,20,24"/>
+                </StackPanel>
+
+                <!-- Status sits at the bottom so it is visible from every page. -->
+                <Border DockPanel.Dock="Bottom" Padding="20,12" Background="#DCDCDC">
+                    <StackPanel>
+                        <TextBlock x:Name="EnabledCountText" FontSize="11" Foreground="#444444"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock x:Name="GameModeText" FontSize="11" Foreground="#B34A00"
+                                   TextWrapping="Wrap" Margin="0,6,0,0" Visibility="Collapsed"/>
+                        <TextBlock x:Name="SettingsPathText" FontSize="10" Foreground="#777777"
+                                   TextWrapping="Wrap" Margin="0,6,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <ListBox x:Name="SidebarList" Background="Transparent" BorderThickness="0"
+                         SelectionChanged="SidebarList_SelectionChanged">
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
                             <Setter Property="Padding" Value="20,12"/>
                             <Setter Property="FontSize" Value="14"/>
                             <Setter Property="Foreground" Value="#222222"/>
+                            <Setter Property="Cursor" Value="Hand"/>
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ListBoxItem">
@@ -79,18 +152,13 @@
                             </Style.Triggers>
                         </Style>
                     </ListBox.ItemContainerStyle>
-                    <ListBoxItem Content="🪟  Window Management" Tag="WindowManagement"/>
-                    <ListBoxItem Content="⚡  Power Features" Tag="PowerFeatures"/>
-                    <ListBoxItem Content="✨  Animation" Tag="Animation"/>
-                    <ListBoxItem Content="📐  Hot Corners" Tag="HotCorners"/>
-                    <ListBoxItem Content="⚙️  General" Tag="General"/>
                 </ListBox>
-            </StackPanel>
+            </DockPanel>
         </Border>
 
-        <!-- Main Content -->
+        <!-- Main content -->
         <Border Grid.Column="1" Background="#FFFFFF">
-            <ScrollViewer Margin="40,30,40,30" VerticalScrollBarVisibility="Auto">
+            <ScrollViewer Margin="40,30,30,30" VerticalScrollBarVisibility="Auto">
                 <ContentControl x:Name="MainContent"/>
             </ScrollViewer>
         </Border>

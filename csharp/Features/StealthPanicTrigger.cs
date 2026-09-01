@@ -1,73 +1,81 @@
 using System;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using WindowTweaks.Core;
 
 namespace WindowTweaks.Features;
 
+/// <summary>
+/// Triple-tap Escape to fire the boss key.
+///
+/// Shares the process's single keyboard hook through KeyboardHook. Holds a tap count and a stopwatch
+/// and nothing else - no key is stored or logged. See docs/ANTIVIRUS.md.
+///
+/// PASS-THROUGH: Escape is never swallowed, so it still reaches whatever has focus. A dialog must not
+/// stop being cancellable because this feature is on.
+/// </summary>
 public class StealthPanicTrigger : IDisposable
 {
-    private bool _enabled = true;
-    private IntPtr _hook = IntPtr.Zero;
-    private NativeMethods.LowLevelMouseProc _procDelegate;
-    private Action _onTripleEsc;
-    
-    private int _escCount = 0;
-    private Stopwatch _timer = new Stopwatch();
-    private const int TIMEOUT_MS = 600;
+    private const string HookOwner = nameof(StealthPanicTrigger);
+    private const int TimeoutMs = 600;
+    private const int VK_ESCAPE = 0x1B;
+
+    private readonly Action _onTripleEsc;
+    private readonly Stopwatch _timer = new();
+
+    private int _escCount;
+
+    public bool IsEnabled { get; private set; }
 
     public StealthPanicTrigger(Action onTripleEsc)
     {
         _onTripleEsc = onTripleEsc;
-        _procDelegate = new NativeMethods.LowLevelMouseProc(HookCallback);
-        
-        using (var curProcess = Process.GetCurrentProcess())
-        using (var curModule = curProcess.MainModule)
+    }
+
+    public void SetEnabled(bool enabled)
+    {
+        if (enabled == IsEnabled) return;
+        IsEnabled = enabled;
+
+        if (enabled)
         {
-            _hook = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, _procDelegate, NativeMethods.GetModuleHandle(curModule.ModuleName), 0);
+            KeyboardHook.Subscribe(HookOwner, OnKey);
+        }
+        else
+        {
+            KeyboardHook.Unsubscribe(HookOwner);
+            _escCount = 0;
+            _timer.Reset();
         }
     }
 
-    private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    public void Toggle() => SetEnabled(!IsEnabled);
+
+    private bool OnKey(KeyboardHook.KeyEvent e)
     {
-        if (nCode >= 0 && _enabled)
+        if (!e.IsKeyDown || e.VirtualKey != VK_ESCAPE) return false;
+
+        // A tap outside the window starts a fresh sequence rather than extending a stale one.
+        if (_escCount == 0 || _timer.ElapsedMilliseconds > TimeoutMs)
         {
-            int msg = wParam.ToInt32();
-            if (msg == NativeMethods.WM_KEYDOWN || msg == NativeMethods.WM_SYSKEYDOWN)
-            {
-                int vkCode = Marshal.ReadInt32(lParam);
-                if (vkCode == NativeMethods.VK_ESCAPE)
-                {
-                    if (_escCount == 0 || _timer.ElapsedMilliseconds > TIMEOUT_MS)
-                    {
-                        _escCount = 1;
-                        _timer.Restart();
-                    }
-                    else
-                    {
-                        _escCount++;
-                        if (_escCount >= 3)
-                        {
-                            _escCount = 0;
-                            _timer.Stop();
-                            
-                            // Trigger the panic action asynchronously so we don't block the hook chain
-                            System.Threading.Tasks.Task.Run(() => _onTripleEsc?.Invoke());
-                        }
-                    }
-                }
-            }
+            _escCount = 1;
+            _timer.Restart();
+            return false;
         }
 
-        return NativeMethods.CallNextHookEx(_hook, nCode, wParam, lParam);
+        _escCount++;
+
+        if (_escCount >= 3)
+        {
+            _escCount = 0;
+            _timer.Reset();
+            _onTripleEsc?.Invoke();
+        }
+
+        return false;
     }
 
     public void Dispose()
     {
-        if (_hook != IntPtr.Zero)
-        {
-            NativeMethods.UnhookWindowsHookEx(_hook);
-            _hook = IntPtr.Zero;
-        }
+        SetEnabled(false);
     }
 }

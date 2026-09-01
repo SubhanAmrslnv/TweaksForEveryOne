@@ -1,105 +1,114 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 using WindowTweaks.Core;
 
 namespace WindowTweaks.Features;
 
+/// <summary>
+/// Shift+Alt+Wheel sets the opacity of the window under the cursor.
+///
+/// The step is applied to the COMPOSITOR'S BASE, not to whatever the window currently shows. The
+/// previous version read the value back with GetLayeredWindowAttributes, which returns whatever
+/// breathing or ghosting last wrote - so scrolling on a dimmed window jumped to that effect's value
+/// and then fought it for control. The base is the user's own choice and nothing else touches it.
+///
+/// This is the only feature allowed to call AlphaCompositor.SetBase.
+/// </summary>
 public class ChangeTransparencyFeature : IDisposable
 {
-    private NativeMethods.LowLevelMouseProc _proc;
-    private IntPtr _hookID = IntPtr.Zero;
+    private const int StepAlpha = 25;
 
-    // We don't have an On/Off toggle for this feature, it's always running 
-    // waiting for Shift+Alt+Wheel.
+    private readonly NativeMethods.LowLevelMouseProc _proc;
+    private IntPtr _hookId = IntPtr.Zero;
+
+    public bool IsEnabled { get; private set; }
+
     public ChangeTransparencyFeature()
     {
         _proc = HookCallback;
-        using (Process curProcess = Process.GetCurrentProcess())
-        using (ProcessModule curModule = curProcess.MainModule)
+    }
+
+    public void SetEnabled(bool enabled)
+    {
+        if (enabled == IsEnabled) return;
+        IsEnabled = enabled;
+
+        if (enabled)
         {
-            _hookID = NativeMethods.SetWindowsHookEx(NativeMethods.WH_MOUSE_LL, _proc,
-                NativeMethods.GetModuleHandle(curModule.ModuleName), 0);
+            using Process curProcess = Process.GetCurrentProcess();
+            using ProcessModule? curModule = curProcess.MainModule;
+            if (curModule != null)
+            {
+                _hookId = NativeMethods.SetWindowsHookEx(NativeMethods.WH_MOUSE_LL, _proc,
+                    NativeMethods.GetModuleHandle(curModule.ModuleName), 0);
+            }
+        }
+        else
+        {
+            if (_hookId != IntPtr.Zero)
+            {
+                NativeMethods.UnhookWindowsHookEx(_hookId);
+                _hookId = IntPtr.Zero;
+            }
         }
     }
+
+    public void Toggle() => SetEnabled(!IsEnabled);
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && wParam == (IntPtr)NativeMethods.WM_MOUSEWHEEL)
+        try
         {
-            bool isShift = (NativeMethods.GetAsyncKeyState(0x10) & 0x8000) != 0; // VK_SHIFT
-            bool isAlt = (NativeMethods.GetAsyncKeyState(0x12) & 0x8000) != 0;   // VK_MENU (Alt)
-
-            if (isShift && isAlt)
+            if (nCode >= 0 && wParam == (IntPtr)NativeMethods.WM_MOUSEWHEEL)
             {
-                NativeMethods.MSLLHOOKSTRUCT hookStruct = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
-                int delta = (short)(hookStruct.mouseData >> 16);
-                
-                // Positive delta = Wheel Up (more opaque)
-                // Negative delta = Wheel Down (more transparent)
-                ChangeTransparency(delta);
+                bool isShift = (NativeMethods.GetAsyncKeyState(0x10) & 0x8000) != 0; // VK_SHIFT
+                bool isAlt = (NativeMethods.GetAsyncKeyState(0x12) & 0x8000) != 0;   // VK_MENU
 
-                // Return 1 to swallow the scroll so the window doesn't scroll
-                return (IntPtr)1;
+                if (isShift && isAlt)
+                {
+                    NativeMethods.MSLLHOOKSTRUCT hookStruct =
+                        Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
+                    int delta = (short)(hookStruct.mouseData >> 16);
+
+                    ChangeTransparency(delta);
+
+                    // Swallow the scroll so the window underneath does not also scroll.
+                    return (IntPtr)1;
+                }
             }
         }
-        return NativeMethods.CallNextHookEx(_hookID, nCode, wParam, lParam);
+        catch
+        {
+        }
+
+        return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
     }
 
-    private void ChangeTransparency(int delta)
+    private static void ChangeTransparency(int delta)
     {
         NativeMethods.GetCursorPos(out NativeMethods.POINT pt);
-        IntPtr hwnd = NativeMethods.WindowFromPoint(pt);
-        hwnd = NativeMethods.GetAncestor(hwnd, NativeMethods.GA_ROOT);
+        IntPtr hwnd = NativeMethods.GetAncestor(NativeMethods.WindowFromPoint(pt), NativeMethods.GA_ROOT);
 
         if (hwnd == IntPtr.Zero || !NativeMethods.IsWindow(hwnd)) return;
 
-        // Ignore Desktop and Taskbar
-        System.Text.StringBuilder sb = new System.Text.StringBuilder(256);
+        StringBuilder sb = new(256);
         NativeMethods.GetClassName(hwnd, sb, sb.Capacity);
         string cls = sb.ToString();
-        if (cls == "Shell_TrayWnd" || cls == "Progman" || cls == "WorkerW") return;
+        if (cls is "Shell_TrayWnd" or "Progman" or "WorkerW" or "Shell_SecondaryTrayWnd") return;
 
-        uint style = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
-        
-        byte currentAlpha = 255;
-        if ((style & NativeMethods.WS_EX_LAYERED) != 0)
-        {
-            // We should theoretically read the existing alpha, but Windows GetLayeredWindowAttributes 
-            // is notoriously finicky if the window is layered but hasn't had alpha set yet.
-            // Let's assume a default logic or keep an internal map.
-            // For simplicity, we just jump down/up from a baseline.
-        }
+        int current = AlphaCompositor.GetBase(hwnd);
+        int next = current + (delta > 0 ? StepAlpha : -StepAlpha);
 
-        // To make it rock solid, we will track it ourselves or increment/decrement
-        // In AHK, WheelDown drops it by ~10% (25.5 alpha).
-        // I will implement a quick internal tracking or rely on a property.
-        
-        // Actually, we can use GetLayeredWindowAttributes!
-        byte alpha = 255;
-        if ((style & NativeMethods.WS_EX_LAYERED) != 0)
-        {
-            NativeMethods.GetLayeredWindowAttributes(hwnd, out uint crKey, out alpha, out uint dwFlags);
-        }
+        if (next > 255) next = 255;
+        if (next < AlphaCompositor.MinAlpha) next = AlphaCompositor.MinAlpha;
 
-        int newAlpha = alpha + (delta > 0 ? 25 : -25);
-        if (newAlpha > 255) newAlpha = 255;
-        if (newAlpha < 25) newAlpha = 25; // Don't let it become completely invisible
-
-        if ((style & NativeMethods.WS_EX_LAYERED) == 0 && newAlpha < 255)
-        {
-            NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, style | NativeMethods.WS_EX_LAYERED);
-        }
-
-        NativeMethods.SetLayeredWindowAttributes(hwnd, 0, (byte)newAlpha, NativeMethods.LWA_ALPHA);
+        AlphaCompositor.SetBase(hwnd, (byte)next);
     }
 
     public void Dispose()
     {
-        if (_hookID != IntPtr.Zero)
-        {
-            NativeMethods.UnhookWindowsHookEx(_hookID);
-            _hookID = IntPtr.Zero;
-        }
+        SetEnabled(false);
     }
 }

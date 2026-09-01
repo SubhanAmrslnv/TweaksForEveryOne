@@ -1,7 +1,12 @@
 <Application x:Class="WindowTweaks.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:WindowTweaks">
+             xmlns:local="clr-namespace:WindowTweaks"
+             ShutdownMode="OnExplicitShutdown">
+    <!-- OnExplicitShutdown is REQUIRED, not a preference. This is a tray app that shows no
+         window at startup, and the WPF default (OnLastWindowClose) would quit the whole app
+         the first time a window closed: closing the settings window would exit, and so would
+         a ripple-click overlay finishing its 420 ms fade. Only Shutdown() ends the process. -->
     <Application.Resources>
          
     </Application.Resources>

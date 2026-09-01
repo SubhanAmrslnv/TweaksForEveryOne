@@ -18,3 +18,5 @@ C:\Users\subhan.amiraslanov\Desktop\TweaksForEveryOne\csharp\obj\Debug\net10.0-w
 C:\Users\subhan.amiraslanov\Desktop\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\WindowTweaks.pdb
 C:\Users\subhan.amiraslanov\Desktop\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\WindowTweaks.genruntimeconfig.cache
 C:\Users\subhan.amiraslanov\Desktop\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\ref\WindowTweaks.dll
+C:\Users\subhan.amiraslanov\Desktop\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\WindowTweaks_MarkupCompile.lref
+C:\Users\subhan.amiraslanov\Desktop\TweaksForEveryOne\csharp\obj\Debug\net10.0-windows\App.baml

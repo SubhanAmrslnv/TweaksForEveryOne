@@ -7,116 +7,118 @@ using WindowTweaks.Core;
 
 namespace WindowTweaks.Features;
 
+/// <summary>
+/// Smart Caps Lock: tap it for Escape, hold it to actually toggle Caps Lock.
+///
+/// Shares the process's single keyboard hook through KeyboardHook. It watches exactly one key -
+/// VK_CAPITAL - and ignores every other key it is shown; no key is stored or logged.
+/// See docs/ANTIVIRUS.md.
+///
+/// This is the ONE subscriber that suppresses, because remapping Caps Lock is impossible otherwise:
+/// the hardware press has to be swallowed so the OS never toggles the state, and the replacement key
+/// is synthesised instead. Injected events are ignored, or the hook would see its own output and
+/// recurse.
+/// </summary>
 public class SmartCapsFeature : IDisposable
 {
-    private IntPtr _hook = IntPtr.Zero;
-    private NativeMethods.LowLevelMouseProc _procDelegate;
-    
+    private const string HookOwner = nameof(SmartCapsFeature);
+
     private const int VK_CAPITAL = 0x14;
     private const int VK_ESCAPE = 0x1B;
-    private const int WM_KEYDOWN = 0x0100;
-    private const int WM_SYSKEYDOWN = 0x0104;
-    private const int WM_KEYUP = 0x0101;
-    private const int WM_SYSKEYUP = 0x0105;
-    private const int KEYEVENTF_KEYUP = 0x0002;
+    private const int HoldMs = 400;
+    private const uint KEYEVENTF_KEYUP = 0x0002;
 
-    private Stopwatch _timer = new Stopwatch();
-    private bool _capsDown = false;
-    private bool _toggled = false;
-    
-    public SmartCapsFeature()
+    private readonly Stopwatch _timer = new();
+    private bool _capsDown;
+    private bool _toggled;
+
+    public bool IsEnabled { get; private set; }
+
+    public void SetEnabled(bool enabled)
     {
-        _procDelegate = new NativeMethods.LowLevelMouseProc(HookCallback);
-        
-        using (var curProcess = Process.GetCurrentProcess())
-        using (var curModule = curProcess.MainModule)
+        if (enabled == IsEnabled) return;
+        IsEnabled = enabled;
+
+        if (enabled)
         {
-            _hook = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, _procDelegate, NativeMethods.GetModuleHandle(curModule.ModuleName), 0);
+            KeyboardHook.Subscribe(HookOwner, OnKey);
+        }
+        else
+        {
+            KeyboardHook.Unsubscribe(HookOwner);
+            _capsDown = false;
+            _toggled = false;
+            _timer.Reset();
         }
     }
 
-    private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    public void Toggle() => SetEnabled(!IsEnabled);
+
+    private bool OnKey(KeyboardHook.KeyEvent e)
     {
-        if (nCode >= 0)
+        // Only Caps Lock is of any interest, and only from real hardware.
+        if (e.VirtualKey != VK_CAPITAL || e.IsInjected) return false;
+
+        if (e.IsKeyDown)
         {
-            int msg = wParam.ToInt32();
-            int vkCode = Marshal.ReadInt32(lParam);
-
-            if (vkCode == VK_CAPITAL)
+            if (!_capsDown)
             {
-                // KBDLLHOOKSTRUCT has flags at offset 8. We must check if it's injected 
-                // by our own SendInput to prevent an infinite hook loop.
-                int flags = Marshal.ReadInt32(lParam, 8);
-                bool isInjected = (flags & 0x10) != 0; // LLKHF_INJECTED
+                _capsDown = true;
+                _toggled = false;
+                _timer.Restart();
 
-                if (!isInjected)
+                // Held long enough: let it be a real Caps Lock after all.
+                Task.Run(() =>
                 {
-                    if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN)
+                    Thread.Sleep(HoldMs);
+                    if (_capsDown && !_toggled)
                     {
-                        if (!_capsDown)
-                        {
-                            _capsDown = true;
-                            _toggled = false;
-                            _timer.Restart();
-                            
-                            // Task to toggle caps lock if held for 400ms
-                            Task.Run(() =>
-                            {
-                                Thread.Sleep(400);
-                                if (_capsDown && !_toggled)
-                                {
-                                    _toggled = true;
-                                    SimulateKeyPress(VK_CAPITAL);
-                                }
-                            });
-                        }
-                        // Swallow the original hardware press
-                        return new IntPtr(1);
+                        _toggled = true;
+                        SimulateKeyPress(VK_CAPITAL);
                     }
-                    else if (msg == WM_KEYUP || msg == WM_SYSKEYUP)
-                    {
-                        if (_capsDown)
-                        {
-                            _capsDown = false;
-                            _timer.Stop();
-                            
-                            if (!_toggled && _timer.ElapsedMilliseconds < 400)
-                            {
-                                // Short press -> Send Escape
-                                SimulateKeyPress(VK_ESCAPE);
-                            }
-                        }
-                        // Swallow the original hardware release
-                        return new IntPtr(1);
-                    }
-                }
+                });
+            }
+
+            return true; // Swallow the hardware press.
+        }
+
+        if (_capsDown)
+        {
+            _capsDown = false;
+            _timer.Stop();
+
+            if (!_toggled && _timer.ElapsedMilliseconds < HoldMs)
+            {
+                SimulateKeyPress(VK_ESCAPE);
             }
         }
 
-        return NativeMethods.CallNextHookEx(_hook, nCode, wParam, lParam);
+        return true; // Swallow the hardware release.
     }
 
-    private void SimulateKeyPress(ushort vk)
+    private static void SimulateKeyPress(ushort vk)
     {
-        NativeMethods.INPUT[] inputs = new NativeMethods.INPUT[2];
-        
-        inputs[0].type = NativeMethods.INPUT_KEYBOARD;
-        inputs[0].u.ki.wVk = vk;
-        inputs[0].u.ki.dwFlags = 0; // keydown
+        try
+        {
+            NativeMethods.INPUT[] inputs = new NativeMethods.INPUT[2];
 
-        inputs[1].type = NativeMethods.INPUT_KEYBOARD;
-        inputs[1].u.ki.wVk = vk;
-        inputs[1].u.ki.dwFlags = KEYEVENTF_KEYUP;
+            inputs[0].type = NativeMethods.INPUT_KEYBOARD;
+            inputs[0].u.ki.wVk = vk;
+            inputs[0].u.ki.dwFlags = 0;
 
-        NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(NativeMethods.INPUT)));
+            inputs[1].type = NativeMethods.INPUT_KEYBOARD;
+            inputs[1].u.ki.wVk = vk;
+            inputs[1].u.ki.dwFlags = KEYEVENTF_KEYUP;
+
+            NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(NativeMethods.INPUT)));
+        }
+        catch
+        {
+        }
     }
 
     public void Dispose()
     {
-        if (_hook != IntPtr.Zero)
-        {
-            NativeMethods.UnhookWindowsHookEx(_hook);
-            _hook = IntPtr.Zero;
-        }
+        SetEnabled(false);
     }
 }

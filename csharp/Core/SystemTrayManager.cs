@@ -36,6 +36,25 @@ public class SystemTrayManager : IDisposable
         _notifyIcon.ContextMenuStrip = contextMenu;
     }
 
+    /// <summary>
+    /// A transient tray notification. This is the app's only channel for telling the user something
+    /// went wrong - there is no log file - so it is used for the two failures a user cannot
+    /// otherwise diagnose: a hotkey another program already owns, and DragFullWindows being off.
+    /// </summary>
+    public void ShowBalloon(string title, string message, int timeoutMs = 8000)
+    {
+        try
+        {
+            _notifyIcon.BalloonTipTitle = title;
+            _notifyIcon.BalloonTipText = message;
+            _notifyIcon.ShowBalloonTip(timeoutMs);
+        }
+        catch
+        {
+            // Notifications can be suppressed by policy or Focus Assist. Never escalate.
+        }
+    }
+
     public void Dispose()
     {
         _notifyIcon.Visible = false;

@@ -1,0 +1,3 @@
+@echo off
+echo Starting Window Tweaks Uninstaller...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Uninstall-Tweaks.ps1" %*

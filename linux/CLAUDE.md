@@ -4,6 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 in `linux/`. The root `..\CLAUDE.md` covers the Windows implementation; the two share **no
 code**, only design.
 
+**The AutoHotkey tree this port was designed against has been DELETED.** The Windows
+implementation is now `..\csharp\` (.NET 10 / WPF), and every `src/*.ahk` path referenced
+below — `RenderCore.ahk`, `AnimationScheduler.ahk`, `SnapCore.ahk`, `DropPlacement.ahk`,
+`DragPipeline.ahk` — is a **historical** reference, recoverable from git history at commit
+`3a6fa68` and its parents. The design lessons those rows carry are still the reason this port
+is shaped the way it is, so they are kept rather than stripped; just do not expect the files to
+exist in the working tree, and do not compare line counts against a tree that is gone. AHK is
+banned for new work (see `..\GEMINI.md`).
+
 ## Read this first
 
 **This is an early scaffold. It does not manage windows.**

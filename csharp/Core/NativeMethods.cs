@@ -195,6 +195,11 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
 
+    // Overload so a keyboard hook can be installed with a keyboard-typed delegate. Same entry point;
+    // the delegate types differ only in name, but the call site then says which input it intercepts.
+    [DllImport("user32.dll", EntryPoint = "SetWindowsHookExW", SetLastError = true)]
+    public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
+
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool UnhookWindowsHookEx(IntPtr hhk);
@@ -203,6 +208,13 @@ internal static class NativeMethods
     public static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
 
     public delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+    /// <summary>
+    /// Same signature as LowLevelMouseProc, but named for what it is. The keyboard hooks used to
+    /// declare themselves with the mouse delegate, which made the code read as though it did not
+    /// know which input it was intercepting.
+    /// </summary>
+    public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     public const int WH_KEYBOARD_LL = 13;
     public const int WM_KEYDOWN = 0x0100;
@@ -355,4 +367,53 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+
+    // ---------------------------------------------------------------------------------------
+    // Added for drag parallax, ripple click, middle-click-to-close and the DragFullWindows check.
+    // ---------------------------------------------------------------------------------------
+
+    public const int WM_LBUTTONDOWN = 0x0201;
+    public const int WM_NCLBUTTONDOWN = 0x00A1;
+
+    /// <summary>WM_NCHITTEST result meaning "the title bar".</summary>
+    public const int HTCAPTION = 2;
+
+    public const uint WS_EX_TRANSPARENT_STYLE = 0x00000020;
+    public const uint WS_EX_NOACTIVATE = 0x08000000;
+    public const uint WS_EX_TOOLWINDOW = 0x00000080;
+
+    public const uint SPI_GETDRAGFULLWINDOWS = 0x0026;
+    public const uint SPI_SETDRAGFULLWINDOWS = 0x0025;
+    public const uint SPIF_UPDATEINIFILE = 0x01;
+    public const uint SPIF_SENDCHANGE = 0x02;
+
+    // Two overloads because SystemParametersInfo's third parameter is polymorphic: a by-ref int
+    // for the GET, an untyped pointer for the SET. One signature cannot serve both safely.
+    [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SystemParametersInfoGet(uint uiAction, uint uiParam, ref int pvParam, uint fWinIni);
+
+    // ---------------------------------------------------------------------------------------
+    // Taskbar colour sampling for the custom clock. The block is painted in the taskbar's own
+    // colour rather than colour-keyed: a keyed background needs every background pixel to equal
+    // the key exactly, but antialiased and ClearType glyph edges BLEND with it, so those pixels
+    // survive the keying and halo every character. Painting the bar's own colour makes the panel
+    // disappear instead, with no edge artefacts.
+    // ---------------------------------------------------------------------------------------
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetDC(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+
+    [DllImport("gdi32.dll")]
+    public static extern uint GetPixel(IntPtr hdc, int nXPos, int nYPos);
+
+    /// <summary>GetPixel failure sentinel.</summary>
+    public const uint CLR_INVALID = 0xFFFFFFFF;
+
+    [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SystemParametersInfoSet(uint uiAction, uint uiParam, IntPtr pvParam, uint fWinIni);
 }
