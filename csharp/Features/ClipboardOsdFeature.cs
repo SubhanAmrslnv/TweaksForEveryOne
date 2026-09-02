@@ -118,11 +118,18 @@ public class ClipboardOsdFeature : IDisposable
     /// </summary>
     internal void Announce(string label, SoundId sound, Color colour)
     {
+        // The switch is honoured here rather than only at the hook, because the camelCase formatter
+        // calls in from outside. Without this the sound still played while this feature was off - so
+        // switching "copy and paste feedback" off silenced three of the four confirmations and left
+        // camelCase making a noise with nothing on screen to explain it. A feature that is off does
+        // nothing at all.
+        if (!IsEnabled) return;
+
         SoundEngine.Play(sound,
             TuningRegistry.Choice(TuningRegistry.KeyboardSoundProfile),
             TuningRegistry.Int(TuningRegistry.ClipboardSoundVolume));
 
-        if (!ShowLabelEnabled()) return;
+        if (!TuningRegistry.Is(TuningRegistry.ClipboardShowOsd, "on")) return;
 
         // The cursor position is read on the dispatcher rather than passed in from the hook: by the
         // time the pulse is drawn the hand has already moved, and the pulse belongs where the
@@ -239,17 +246,6 @@ public class ClipboardOsdFeature : IDisposable
         catch
         {
         }
-    }
-
-    /// <summary>
-    /// Read from a two-option Choice tuning. TuningRegistry has no boolean kind, and adding one would
-    /// mean a new control in the settings window; a two-option choice already renders as a drop-down
-    /// that reads correctly.
-    /// </summary>
-    private static bool ShowLabelEnabled()
-    {
-        return !string.Equals(TuningRegistry.Choice(TuningRegistry.ClipboardShowOsd), "off",
-            StringComparison.OrdinalIgnoreCase);
     }
 
     public void Dispose()

@@ -83,7 +83,7 @@ public class TaskbarVolumeFeature : IDisposable
 
         if (e.Message == NativeMethods.WM_MBUTTONDOWN)
         {
-            if (!MiddleClickMuteEnabled()) return false;
+            if (!TuningRegistry.Is(TuningRegistry.VolumeMiddleClickMute, "on")) return false;
 
             // Same arbitration as middle-click-to-close: grab and pan owns the physical press while
             // it is on and replays a tagged click if the gesture turned out to be a click, so act on
@@ -191,13 +191,6 @@ public class TaskbarVolumeFeature : IDisposable
         catch
         {
         }
-    }
-
-    /// <summary>Read from a two-option Choice tuning; see ClipboardOsdFeature.ShowLabelEnabled.</summary>
-    private static bool MiddleClickMuteEnabled()
-    {
-        return !string.Equals(TuningRegistry.Choice(TuningRegistry.VolumeMiddleClickMute), "off",
-            StringComparison.OrdinalIgnoreCase);
     }
 
     public void Dispose()

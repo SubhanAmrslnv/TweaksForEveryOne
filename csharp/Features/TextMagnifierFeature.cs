@@ -43,7 +43,7 @@ public class TextMagnifierFeature : IDisposable
 {
     private const string HookOwner = nameof(TextMagnifierFeature);
 
-    /// <summary>The lens diameter in physical pixels, and the source box it magnifies.</summary>
+    /// <summary>The lens size in physical pixels. The source box it magnifies is this over the zoom.</summary>
     private const int LensPx = 220;
 
     private bool _pressed;
@@ -172,6 +172,12 @@ public class TextMagnifierFeature : IDisposable
     {
         if (_window != null) return;
 
+        // Build() is reached again if a previous attempt threw partway - Start() swallows the
+        // exception and the next drag calls in here with _window still null. Releasing whatever the
+        // failed attempt managed to create first is what stops that leaking a GDI bitmap and device
+        // context per drag.
+        ReleaseCaptureBuffers();
+
         int zoom = Math.Max(2, TuningRegistry.Int(TuningRegistry.MagnifierZoom));
         _sourcePx = Math.Max(16, LensPx / zoom);
 
@@ -191,7 +197,12 @@ public class TextMagnifierFeature : IDisposable
 
         Border frame = new()
         {
-            CornerRadius = new CornerRadius(LensPx),
+            // A modest radius, NOT a circle. A large CornerRadius rounds the border's own stroke but
+            // does not clip the child - ClipToBounds clips to the rectangle, not to the radius - so
+            // asking for a circle produced a square image inside a round outline. Clipping to an
+            // ellipse would need a geometry rebuilt on every DPI change, for no gain: what the lens
+            // is for is reading the text, and a rectangle shows more of the line than a circle does.
+            CornerRadius = new CornerRadius(10),
             BorderThickness = new Thickness(2),
             BorderBrush = new SolidColorBrush(Color.FromArgb(0xB0, 0xFF, 0xFF, 0xFF)),
             Background = Brushes.Black,
@@ -271,9 +282,18 @@ public class TextMagnifierFeature : IDisposable
 
         if (!NativeMethods.GetCursorPos(out NativeMethods.POINT pt)) return;
 
+        // Only assigned when it actually changes - which is when the lens crosses onto a monitor with
+        // a different scale factor. Writing Width and Height invalidates WPF layout, so assigning
+        // the same value 25 times a second bought a full measure-and-arrange pass per frame for a
+        // window whose size had not moved.
         double scale = OverlayPlacement.ScaleAt(pt.X, pt.Y);
-        _window.Width = LensPx / scale;
-        _window.Height = LensPx / scale;
+        double logical = LensPx / scale;
+
+        if (_window.Width != logical)
+        {
+            _window.Width = logical;
+            _window.Height = logical;
+        }
 
         // Above the cursor, clear of the line being selected. The lens is excluded from capture, so
         // the only reason for the offset is to not cover the text the user is reading.
@@ -315,17 +335,39 @@ public class TextMagnifierFeature : IDisposable
             _window?.Close();
             _window = null;
             _image = null;
-            _surface = null;
-
-            _captureGraphics?.Dispose();
-            _captureGraphics = null;
-
-            _capture?.Dispose();
-            _capture = null;
         }
         catch
         {
         }
+
+        ReleaseCaptureBuffers();
+    }
+
+    /// <summary>
+    /// Releases the reused GDI capture bitmap and its device context. Separate from TearDown because
+    /// Build() also needs it, to clean up after an attempt that failed halfway.
+    /// </summary>
+    private void ReleaseCaptureBuffers()
+    {
+        try
+        {
+            _captureGraphics?.Dispose();
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            _capture?.Dispose();
+        }
+        catch
+        {
+        }
+
+        _captureGraphics = null;
+        _capture = null;
+        _surface = null;
     }
 
     public void Dispose()

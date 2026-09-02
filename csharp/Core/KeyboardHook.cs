@@ -80,23 +80,6 @@ internal static class KeyboardHook
     // to collect it and the callback becomes a dangling pointer - a crash that appears at random.
     private static NativeMethods.LowLevelKeyboardProc? _proc;
 
-    public static int SubscriberCount
-    {
-        get
-        {
-            lock (Gate) return Subscribers.Count;
-        }
-    }
-
-    /// <summary>True when a hook is actually installed right now.</summary>
-    public static bool IsInstalled
-    {
-        get
-        {
-            lock (Gate) return _hook != IntPtr.Zero;
-        }
-    }
-
     public static void Subscribe(string owner, Handler handler)
     {
         lock (Gate)
@@ -143,6 +126,11 @@ internal static class KeyboardHook
     /// </summary>
     private static void EnsureInstalled()
     {
+        // See MouseHook.EnsureInstalled: the early return saves a round trip to the hook thread for
+        // every subscriber after the first. The check is repeated inside because only the hook
+        // thread may act on the answer.
+        if (_hook != IntPtr.Zero) return;
+
         HookThread.Invoke(() =>
         {
             if (_hook != IntPtr.Zero) return;

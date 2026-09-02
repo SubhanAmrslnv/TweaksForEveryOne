@@ -102,11 +102,20 @@ public class TextFormatFeature : IDisposable
 
     private async Task Run()
     {
+        string? saved = null;
+
+        // Set the moment the synthetic Ctrl+C succeeds. From then on the user's own clipboard has
+        // been overwritten with the selection, so EVERY exit path owes them a restore - including
+        // the ones that decide there is nothing to do. Returning early without restoring silently
+        // cost the user whatever they had copied, which is a worse outcome than the feature simply
+        // not working.
+        bool clipboardTaken = false;
+
         try
         {
             uint before = NativeMethods.GetClipboardSequenceNumber();
 
-            string? saved = await ReadClipboard().ConfigureAwait(false);
+            saved = await ReadClipboard().ConfigureAwait(false);
 
             // Ctrl+C into the focused application. Modifiers are already released, so this is a
             // clean two-key chord.
@@ -118,9 +127,12 @@ public class TextFormatFeature : IDisposable
             if (!await WaitForClipboardChange(before, 600).ConfigureAwait(false))
             {
                 // Nothing was selected, or the application does not support copying. Do nothing at
-                // all rather than pasting the previous clipboard over the cursor.
+                // all rather than pasting the previous clipboard over the cursor - and nothing was
+                // taken, so there is nothing to put back either.
                 return;
             }
+
+            clipboardTaken = true;
 
             string? selected = await ReadClipboard().ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(selected)) return;
@@ -138,11 +150,8 @@ public class TextFormatFeature : IDisposable
 
             _osd.Announce("camelCase", SoundId.Transform, Color.FromRgb(0xB8, 0xE9, 0xD0));
 
-            // Put back whatever the user had copied. A formatting command should not cost them their
-            // clipboard - and the paste has to have happened first, hence the wait.
+            // The paste has to have happened before the clipboard is put back, hence the wait.
             await Task.Delay(140).ConfigureAwait(false);
-
-            if (saved != null) await WriteClipboard(saved).ConfigureAwait(false);
         }
         catch
         {
@@ -151,6 +160,14 @@ public class TextFormatFeature : IDisposable
         }
         finally
         {
+            try
+            {
+                if (clipboardTaken && saved != null) await WriteClipboard(saved).ConfigureAwait(false);
+            }
+            catch
+            {
+            }
+
             _running = false;
         }
     }
@@ -219,43 +236,66 @@ public class TextFormatFeature : IDisposable
     /// Splits on anything that is not a letter or a digit, lower-cases the first word and
     /// capitalises the rest. "user first name", "user_first_name" and "User-First-Name" all become
     /// "userFirstName".
+    ///
+    /// A WORD'S TAIL IS LOWER-CASED ONLY IF THE WHOLE WORD IS UPPER-CASE. That distinction is the
+    /// difference between two wrong answers. Lower-casing every tail turns the deliberate acronym in
+    /// "userID" into "userId"; keeping every tail as typed turns "USER NAME" - which is exactly the
+    /// shape of text someone reaches for this command with - into "uSERNAME". Judging it per word
+    /// gives "userName" and "userID" from the same rule.
     /// </summary>
     internal static string ToCamelCase(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
 
         StringBuilder result = new(text.Length);
-        bool started = false;
-        bool startOfWord = true;
+        StringBuilder word = new(16);
+        bool anyWordEmitted = false;
+
+        void FlushWord()
+        {
+            if (word.Length == 0) return;
+
+            bool allUpper = true;
+            for (int i = 0; i < word.Length; i++)
+            {
+                if (char.IsLower(word[i]))
+                {
+                    allUpper = false;
+                    break;
+                }
+            }
+
+            for (int i = 0; i < word.Length; i++)
+            {
+                char c = word[i];
+
+                if (i == 0)
+                {
+                    // The very first word of the whole string is lower, every later one is capital.
+                    result.Append(anyWordEmitted ? char.ToUpperInvariant(c) : char.ToLowerInvariant(c));
+                    continue;
+                }
+
+                result.Append(allUpper ? char.ToLowerInvariant(c) : c);
+            }
+
+            anyWordEmitted = true;
+            word.Clear();
+        }
 
         foreach (char c in text)
         {
-            if (!char.IsLetterOrDigit(c))
+            if (char.IsLetterOrDigit(c))
             {
-                // The separator itself is dropped, and the next letter starts a new word.
-                startOfWord = true;
+                word.Append(c);
                 continue;
             }
 
-            if (!started)
-            {
-                result.Append(char.ToLowerInvariant(c));
-                started = true;
-                startOfWord = false;
-                continue;
-            }
-
-            if (startOfWord)
-            {
-                result.Append(char.ToUpperInvariant(c));
-                startOfWord = false;
-                continue;
-            }
-
-            // Inside a word the original case is kept, so an acronym the user typed on purpose - the
-            // ID in "userID" - survives. Lower-casing everything destroyed those.
-            result.Append(c);
+            // The separator itself is dropped, and it ends the current word.
+            FlushWord();
         }
+
+        FlushWord();
 
         return result.ToString();
     }

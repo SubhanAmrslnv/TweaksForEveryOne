@@ -27,7 +27,13 @@ namespace WindowTweaks.Features;
 /// than the code that answered it: IS THE TASKBAR COVERED? WindowFromPoint just above each bar
 /// answers exactly that, in about three microseconds, and it is self-correcting - while the bar is
 /// hidden the point is over whatever covered it, and when that window closes the point comes back as
-/// the desktop.
+/// the desktop. The taskbar handles themselves are cached, because they only change when the display
+/// layout does or when Explorer restarts.
+///
+/// THE PROBE HAS THREE ANSWERS, NOT TWO. Hovering the bottom edge reveals a hidden bar, and the probe
+/// then finds the BAR - which establishes nothing about what is behind it. Reading that as "not
+/// covered" switched auto-hide off for one tick and back on at the next, so the bar flickered for as
+/// long as the pointer rested there. See <see cref="Coverage.Unknown"/>.
 /// </summary>
 public class SmartTaskbarFeature : IDisposable
 {
@@ -41,10 +47,22 @@ public class SmartTaskbarFeature : IDisposable
     /// </summary>
     private const int PollMs = 400;
 
+    /// <summary>How long the discovered taskbar handles are trusted. See Taskbars().</summary>
+    private const int TaskbarCacheMs = 5000;
+
+    /// <summary>Below this a taskbar rectangle is a hidden sliver, not a bar. See Probe().</summary>
+    private const int MinRealBarHeightPx = 16;
+
     private DispatcherTimer? _timer;
 
     /// <summary>-1 until the first decision, so the first tick always applies its result.</summary>
     private int _appliedState = -1;
+
+    private readonly List<IntPtr> _taskbars = new(2);
+    private long _taskbarsFoundAt;
+
+    /// <summary>The height the bar has when it is actually shown. Seeded with the Windows 11 default.</summary>
+    private int _lastBarHeight = 48;
 
     public bool IsEnabled { get; private set; }
 
@@ -105,12 +123,16 @@ public class SmartTaskbarFeature : IDisposable
 
         try
         {
-            bool hide = ShouldHide();
+            bool? hide = ShouldHide();
 
-            int wanted = hide ? 1 : 0;
+            // Nothing could be established this tick - the pointer is resting on a revealed bar.
+            // Keep the current state rather than guessing, or the bar flickers.
+            if (hide == null) return;
+
+            int wanted = hide.Value ? 1 : 0;
             if (wanted == _appliedState) return;
 
-            Apply(hide);
+            Apply(hide.Value);
             _appliedState = wanted;
         }
         catch
@@ -120,54 +142,102 @@ public class SmartTaskbarFeature : IDisposable
         }
     }
 
-    private static bool ShouldHide()
+    /// <summary>What one probe of one taskbar could establish.</summary>
+    private enum Coverage
     {
-        List<IntPtr> bars = FindTaskbars();
+        /// <summary>A normal window sits over the bar.</summary>
+        Covered,
+
+        /// <summary>The desktop, or the shell, or one of this app's own overlays.</summary>
+        Clear,
+
+        /// <summary>
+        /// The probe found the taskbar itself, which answers nothing. This is not a rare corner: it
+        /// is what happens every time the user hovers the bottom edge to reveal a hidden bar. Treating
+        /// it as "clear" made the feature switch auto-hide OFF on that tick and back ON at the next
+        /// one, so the bar visibly flickered for as long as the pointer rested there.
+        /// </summary>
+        Unknown
+    }
+
+    /// <summary>Null when nothing could be established this tick, so the caller keeps its decision.</summary>
+    private bool? ShouldHide()
+    {
+        IReadOnlyList<IntPtr> bars = Taskbars();
         if (bars.Count == 0) return false;
 
-        bool primaryScope = string.Equals(
-            TuningRegistry.Choice(TuningRegistry.TaskbarHideScope), "primary",
-            StringComparison.OrdinalIgnoreCase);
+        bool primaryOnly = TuningRegistry.Is(TuningRegistry.TaskbarHideScope, "primary");
 
-        bool anyCovered = false;
+        bool sawAnswer = false;
+        bool allCovered = true;
 
         foreach (IntPtr bar in bars)
         {
-            bool covered = IsCovered(bar);
+            Coverage coverage = Probe(bar);
 
-            if (primaryScope)
-            {
-                // FindTaskbars puts the primary bar first, so the first answer is the only one that
-                // matters in this scope.
-                return covered;
-            }
+            // Taskbars() puts the primary bar first, so in this scope the first real answer is the
+            // only one that matters.
+            if (primaryOnly) return coverage == Coverage.Unknown ? null : coverage == Coverage.Covered;
 
-            if (!covered) return false;
-            anyCovered = true;
+            if (coverage == Coverage.Unknown) continue;
+
+            sawAnswer = true;
+            if (coverage != Coverage.Covered) allCovered = false;
         }
 
-        return anyCovered;
+        if (!sawAnswer) return null;
+        return allCovered;
     }
 
     /// <summary>
     /// The primary taskbar first, then every secondary one. Secondary bars all share the class
     /// Shell_SecondaryTrayWnd, so they are found by enumerating rather than by FindWindow.
+    ///
+    /// THE RESULT IS CACHED, because the answer only changes when the display layout does. This used
+    /// to enumerate every top-level window in the system on every tick - two and a half times a
+    /// second, allocating a StringBuilder per window - to rediscover two handles that had not moved.
+    /// A time-based refresh rather than a WM_DISPLAYCHANGE hook: this feature owns no window to
+    /// receive that message on, and re-enumerating every few seconds also recovers from an Explorer
+    /// restart, which invalidates the handles without changing the display layout at all.
     /// </summary>
-    private static List<IntPtr> FindTaskbars()
+    private IReadOnlyList<IntPtr> Taskbars()
     {
-        List<IntPtr> bars = new(2);
+        long now = Environment.TickCount64;
+
+        bool stale = _taskbars.Count == 0 || now - _taskbarsFoundAt > TaskbarCacheMs;
+
+        if (!stale)
+        {
+            // Cheap validity check: an Explorer restart replaces every bar, and a stale handle would
+            // silently report "clear" for the rest of the cache window.
+            foreach (IntPtr bar in _taskbars)
+            {
+                if (NativeMethods.IsWindow(bar)) continue;
+                stale = true;
+                break;
+            }
+        }
+
+        if (!stale) return _taskbars;
+
+        _taskbars.Clear();
+        _taskbarsFoundAt = now;
 
         IntPtr primary = NativeMethods.FindWindow("Shell_TrayWnd", null);
-        if (primary != IntPtr.Zero) bars.Add(primary);
+        if (primary != IntPtr.Zero) _taskbars.Add(primary);
 
         try
         {
+            StringBuilder sb = new(48);
+
             NativeMethods.EnumWindows((hwnd, _) =>
             {
-                StringBuilder sb = new(48);
+                // One StringBuilder for the whole enumeration. A fresh one per window is a couple of
+                // hundred allocations per sweep for nothing.
+                sb.Clear();
                 NativeMethods.GetClassName(hwnd, sb, sb.Capacity);
 
-                if (sb.ToString() == "Shell_SecondaryTrayWnd") bars.Add(hwnd);
+                if (sb.ToString() == "Shell_SecondaryTrayWnd") _taskbars.Add(hwnd);
                 return true;
             }, IntPtr.Zero);
         }
@@ -177,63 +247,69 @@ public class SmartTaskbarFeature : IDisposable
             // still better than doing nothing.
         }
 
-        return bars;
+        return _taskbars;
     }
 
     /// <summary>
-    /// True when something that is not the shell sits over this taskbar.
-    ///
-    /// The probe point is the centre of the bar, two pixels above its top edge - which is inside the
-    /// window that covers it, not inside the bar. Probing the bar itself would only ever find the
-    /// bar.
+    /// Asks what sits over one taskbar, by looking just above where that bar would be if it were
+    /// visible. Probing the bar's own rectangle would only ever find the bar.
     /// </summary>
-    private static bool IsCovered(IntPtr bar)
+    private Coverage Probe(IntPtr bar)
     {
-        if (!NativeMethods.GetWindowRect(bar, out NativeMethods.RECT r)) return false;
+        if (!NativeMethods.GetWindowRect(bar, out NativeMethods.RECT r)) return Coverage.Unknown;
 
-        int height = r.Bottom - r.Top;
-        if (height <= 0) return false;
-
-        // A hidden auto-hide bar sits almost entirely off screen, so its own rect cannot be used to
-        // find "just above it". The monitor's bottom edge can.
-        NativeMethods.POINT centre = new() { X = (r.Left + r.Right) / 2, Y = r.Top + height / 2 };
+        NativeMethods.POINT centre = new() { X = (r.Left + r.Right) / 2, Y = (r.Top + r.Bottom) / 2 };
         IntPtr monitor = NativeMethods.MonitorFromPoint(centre, NativeMethods.MONITOR_DEFAULTTONEAREST);
-        if (monitor == IntPtr.Zero) return false;
+        if (monitor == IntPtr.Zero) return Coverage.Unknown;
 
         NativeMethods.MONITORINFO info = new();
         info.cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.MONITORINFO));
-        if (!NativeMethods.GetMonitorInfo(monitor, ref info)) return false;
+        if (!NativeMethods.GetMonitorInfo(monitor, ref info)) return Coverage.Unknown;
+
+        // The bar's CURRENT height is not usable: a hidden auto-hide bar is a two-pixel sliver, so a
+        // probe derived from it lands inside the band the bar occupies when it comes back. The last
+        // height seen while the bar was a real bar is remembered instead.
+        int height = r.Bottom - r.Top;
+        if (height >= MinRealBarHeightPx) _lastBarHeight = height;
 
         NativeMethods.POINT probe = new()
         {
             X = (info.rcMonitor.Left + info.rcMonitor.Right) / 2,
-            Y = info.rcMonitor.Bottom - height - 2
+            Y = info.rcMonitor.Bottom - _lastBarHeight - 2
         };
 
         IntPtr hwnd = NativeMethods.WindowFromPoint(probe);
-        if (hwnd == IntPtr.Zero) return false;
+        if (hwnd == IntPtr.Zero) return Coverage.Clear;
 
         IntPtr root = NativeMethods.GetAncestor(hwnd, NativeMethods.GA_ROOT);
-        if (root == IntPtr.Zero) return false;
+        if (root == IntPtr.Zero) return Coverage.Clear;
 
         StringBuilder sb = new(64);
         NativeMethods.GetClassName(root, sb, sb.Capacity);
         string cls = sb.ToString();
 
-        // The desktop and the shell's own surfaces are not "covering" anything, and neither are this
+        // A revealed taskbar answers nothing at all - see Coverage.Unknown.
+        if (cls is "Shell_TrayWnd" or "Shell_SecondaryTrayWnd") return Coverage.Unknown;
+
+        // The desktop and the shell's other surfaces are not covering anything, and neither are this
         // app's own overlays - the taskbar clock sits ON the bar by design, and letting it count as
         // coverage would hide the bar the clock is drawn on.
-        if (IsShellSurface(cls)) return false;
+        if (IsShellSurface(cls)) return Coverage.Clear;
 
         NativeMethods.GetWindowThreadProcessId(root, out uint pid);
-        if (pid == (uint)Environment.ProcessId) return false;
+        if (pid == (uint)Environment.ProcessId) return Coverage.Clear;
 
-        return true;
+        return Coverage.Covered;
     }
 
+    /// <summary>
+    /// Shell surfaces that are not "covering" the taskbar: the desktop, and the shell's own small
+    /// windows. The taskbar classes themselves are deliberately absent - Probe tests for those first
+    /// and answers Unknown, because finding the bar establishes nothing about what is behind it.
+    /// </summary>
     private static bool IsShellSurface(string cls)
     {
-        return cls is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd"
+        return cls is "Progman" or "WorkerW"
             or "Windows.UI.Core.CoreWindow" or "TopLevelWindowForOverflowXamlIsland"
             or "Shell_InputSwitchTopLevelWindow" or "NotifyIconOverflowWindow";
     }

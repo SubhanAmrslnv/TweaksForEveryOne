@@ -335,8 +335,7 @@ public class CustomClockFeature : IDisposable
         double sizeTime = TuningRegistry.Int(TuningRegistry.ClockFontSizeTime);
         double sizeDate = TuningRegistry.Int(TuningRegistry.ClockFontSizeDate);
 
-        bool fit = string.Equals(TuningRegistry.Choice(TuningRegistry.ClockFitToTaskbar), "on",
-            StringComparison.OrdinalIgnoreCase);
+        bool fit = TuningRegistry.Is(TuningRegistry.ClockFitToTaskbar, "on");
 
         if (fit)
         {

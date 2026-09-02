@@ -37,8 +37,14 @@ internal static class FeatureKeys
     public const string QuickLook = "power.quickLook";
     public const string Spotlight = "power.spotlight";
     public const string MicMute = "power.micMute";
+    // THESE TWO CARRY A "hotkey." PREFIX AND EVERY OTHER POWER FEATURE CARRIES "power.". Leave them
+    // alone. The prefix is wrong, they were shipped that way, and they are already in users'
+    // settings.json - so renaming them to match would silently discard whatever the user had chosen
+    // for both features. The prefixes are a stored format, not a taxonomy; the page a feature
+    // appears on comes from its FeatureDescriptor, not from its key.
     public const string AcousticKeyboard = "hotkey.acousticKeyboard";
     public const string TaskbarVolume = "hotkey.taskbarVolume";
+
     public const string ClipboardOsd = "power.clipboardOsd";
     public const string TextFormat = "power.textFormat";
     public const string CursorLocator = "power.cursorLocator";

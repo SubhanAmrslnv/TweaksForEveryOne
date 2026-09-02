@@ -91,7 +91,11 @@ internal static class HookThread
 
         EnsureStarted();
 
-        using ManualResetEventSlim done = new(false);
+        // Deliberately NOT disposed. If the wait below times out, the work item is still queued and
+        // will still call Set() on this event when it eventually runs - and disposing an event that
+        // another thread is about to signal is documented as unsafe. The alternative cost is one
+        // lazily-allocated handle on a path that runs a few dozen times in a session.
+        ManualResetEventSlim done = new(false);
         Exception? failure = null;
 
         Post(() =>

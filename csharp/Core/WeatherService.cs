@@ -77,7 +77,7 @@ internal static class WeatherService
     public static string Location => TuningRegistry.Text(TuningRegistry.ClockLocation).Trim();
 
     public static bool Metric =>
-        !string.Equals(TuningRegistry.Choice(TuningRegistry.ClockUnits), "imperial", StringComparison.OrdinalIgnoreCase);
+        !TuningRegistry.Is(TuningRegistry.ClockUnits, "imperial");
 
     /// <summary>
     /// Fetch if it is time to. Returns immediately - and makes no request whatsoever - when weather

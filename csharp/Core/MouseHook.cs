@@ -176,6 +176,12 @@ internal static class MouseHook
 
     private static void EnsureInstalled()
     {
+        // Checked here as well as inside the Invoke: every feature that subscribes calls this, and
+        // without the early return each one paid a full round trip to the hook thread only to find
+        // the hook already installed. The check is repeated inside because only the hook thread may
+        // act on the answer.
+        if (_hook != IntPtr.Zero) return;
+
         HookThread.Invoke(() =>
         {
             if (_hook != IntPtr.Zero) return;

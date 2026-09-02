@@ -142,6 +142,10 @@ public class MagneticSnappingFeature : IDisposable
         {
             await System.Threading.Tasks.Task.Delay(SettleMs);
 
+            // The feature can be switched off during the settle - by the settings window, by
+            // Shift+Alt+S, or by Game Mode. A feature that is off must not still act.
+            if (!_isEnabled) return;
+
             if (!NativeMethods.IsWindow(hwnd)) return;
             if (WasArrangedByWindows(hwnd, startW, startH)) return;
 
@@ -489,15 +493,9 @@ public class MagneticSnappingFeature : IDisposable
 
     public void Dispose()
     {
-        if (_hookStartEnd != IntPtr.Zero)
-        {
-            NativeMethods.UnhookWinEvent(_hookStartEnd);
-            _hookStartEnd = IntPtr.Zero;
-        }
-        if (_hookLocation != IntPtr.Zero)
-        {
-            NativeMethods.UnhookWinEvent(_hookLocation);
-            _hookLocation = IntPtr.Zero;
-        }
+        // Through SetEnabled rather than unhooking directly, so the flag ends up agreeing with
+        // reality. Unhooking behind its back left _isEnabled true, which would make a later
+        // SetEnabled(true) a no-op that never reinstalled the hooks.
+        SetEnabled(false);
     }
 }

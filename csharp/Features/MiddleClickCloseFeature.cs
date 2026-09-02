@@ -98,7 +98,7 @@ public class MiddleClickCloseFeature : IDisposable
             // The shell is never a candidate. Closing Progman or a tray window does nothing good.
             if (IsShellSurface(cls)) return false;
 
-            if (IsBrowser(cls) && SkipBrowsers()) return false;
+            if (IsBrowser(cls) && TuningRegistry.Is(TuningRegistry.MiddleClickSkipBrowsers, "skip")) return false;
 
             // The free pre-filter, before the cross-process call. See the class comment.
             if (!NativeMethods.GetWindowRect(hwnd, out NativeMethods.RECT r)) return false;
@@ -127,13 +127,6 @@ public class MiddleClickCloseFeature : IDisposable
         {
             return false;
         }
-    }
-
-    private static bool SkipBrowsers()
-    {
-        return string.Equals(
-            TuningRegistry.Choice(TuningRegistry.MiddleClickSkipBrowsers), "skip",
-            StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

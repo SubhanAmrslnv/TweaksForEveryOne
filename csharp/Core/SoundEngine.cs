@@ -196,7 +196,14 @@ internal static class SoundEngine
 
         // Unmanaged, and never freed. SND_MEMORY with SND_ASYNC means winmm reads this buffer AFTER
         // PlaySound returns, so it has to stay put and stay valid - a managed array could be moved
-        // by a collection mid-playback. There are at most a couple of dozen of these.
+        // by a collection mid-playback.
+        //
+        // NOT FREED, AND NOT EVICTED, DELIBERATELY. An eviction scheme has to free a block that the
+        // player thread may have taken from the slot but not yet handed to PlaySound, which is a
+        // use-after-free inside the audio driver - and the leak it would be protecting against is
+        // small and hard-bounded: ten sounds times three profiles times twenty volume buckets, about
+        // five kilobytes each, so under three megabytes even if a user sweeps every slider through
+        // every position. Real sessions hold four or five entries.
         IntPtr block = Marshal.AllocHGlobal(wav.Length);
         Marshal.Copy(wav, 0, block, wav.Length);
 

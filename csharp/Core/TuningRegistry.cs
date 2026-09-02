@@ -532,6 +532,18 @@ internal static class TuningRegistry
         return SettingsStore.GetString(key, d.DefaultText);
     }
 
+    /// <summary>
+    /// True when a Choice tuning currently holds <paramref name="option"/>.
+    ///
+    /// Most of the Choice settings in this app have exactly two options and are read as flags, and
+    /// the comparison was open-coded at five call sites - each supplying its own literal and its own
+    /// StringComparison, which is how one of them ends up case-sensitive by accident.
+    /// </summary>
+    public static bool Is(string key, string option)
+    {
+        return string.Equals(Choice(key), option, StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>A Choice value, guaranteed to be one of the descriptor's options.</summary>
     public static string Choice(string key)
     {
