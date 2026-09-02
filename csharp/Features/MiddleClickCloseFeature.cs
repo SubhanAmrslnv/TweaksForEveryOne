@@ -1,6 +1,4 @@
 using System;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Text;
 using WindowTweaks.Core;
 
@@ -9,110 +7,148 @@ namespace WindowTweaks.Features;
 /// <summary>
 /// Middle-click a window's title bar to close it, the way a browser tab closes.
 ///
-/// The title-bar test is a WM_NCHITTEST probe, and it MUST go through SendMessageTimeout with
-/// SMTO_ABORTIFHUNG. A plain SendMessage to a window whose thread is not pumping messages ("Not
-/// Responding") never returns, and it would freeze this entire process - every timer, every hook,
-/// every hotkey - waiting on an app that is already hung. A hung window is exactly the kind a user
-/// reaches for the close button on, so this is the common case, not the edge case.
+/// TWO THINGS ARE DELIBERATE AND SHOULD NOT BE "SIMPLIFIED":
 ///
-/// Close is a PostMessage(WM_CLOSE), never a TerminateProcess: the app still gets to prompt about
-/// unsaved work.
+/// 1. BROWSERS ARE SKIPPED BY DEFAULT. A browser's tab strip IS its title bar - Chrome, Edge and
+///    Firefox all answer HTCAPTION for the empty space beside the tabs - so treating them like any
+///    other window means a middle click near the tabs closes the entire browser instead of a tab.
+///    That was the reported "middle click breaks opening and closing tabs". It is a setting rather
+///    than a hard rule, because someone who never middle-clicks near a tab strip may want it.
+///
+/// 2. THE EXPENSIVE TEST IS BEHIND A CHEAP ONE. Deciding whether a point is on a title bar means
+///    asking the target window, with SendMessage - a CROSS-PROCESS call, on the input path, inside a
+///    low-level hook. Windows removes a hook that takes longer than LowLevelHooksTimeout (300 ms by
+///    default), and it removes it silently: the feature stops working and so does every other hook
+///    in the process. So the probe only runs when the click is inside the top band of the window's
+///    own rectangle, which is free to check, and it runs with a 40 ms timeout and SMTO_ABORTIFHUNG
+///    so a hung window cannot take the hook down with it.
 /// </summary>
 public class MiddleClickCloseFeature : IDisposable
 {
-    private const uint ProbeTimeoutMs = 120;
+    private const string HookOwner = nameof(MiddleClickCloseFeature);
 
-    private readonly NativeMethods.LowLevelMouseProc _proc;
-    private IntPtr _hookId = IntPtr.Zero;
+    /// <summary>
+    /// Cheap pre-filter: how far down from the top of a window a title bar can possibly be. Generous
+    /// - a scaled display with a tall custom caption needs the room - but still rejects the whole
+    /// client area, which is where almost every middle click actually lands.
+    /// </summary>
+    private const int CaptionBandPx = 120;
+
+    /// <summary>
+    /// Short enough that four of these back to back stay inside the hook budget. The old value was
+    /// 120 ms, which on its own is a third of that budget.
+    /// </summary>
+    private const uint ProbeTimeoutMs = 40;
 
     public bool IsEnabled { get; private set; }
-
-    public MiddleClickCloseFeature()
-    {
-        _proc = HookCallback;
-    }
 
     public void SetEnabled(bool enabled)
     {
         if (enabled == IsEnabled) return;
         IsEnabled = enabled;
 
-        if (enabled)
-        {
-            using Process curProcess = Process.GetCurrentProcess();
-            using ProcessModule? curModule = curProcess.MainModule;
-            if (curModule != null)
-            {
-                _hookId = NativeMethods.SetWindowsHookEx(NativeMethods.WH_MOUSE_LL, _proc,
-                    NativeMethods.GetModuleHandle(curModule.ModuleName), 0);
-            }
-        }
-        else
-        {
-            if (_hookId != IntPtr.Zero)
-            {
-                NativeMethods.UnhookWindowsHookEx(_hookId);
-                _hookId = IntPtr.Zero;
-            }
-        }
+        // Buttons only. This handler does a cross-process probe, and calling it for every mouse
+        // move would be the single most expensive thing in the process.
+        if (enabled) MouseHook.Subscribe(HookOwner, MouseEvents.Buttons, OnMouse);
+        else MouseHook.Unsubscribe(HookOwner);
     }
 
     public void Toggle() => SetEnabled(!IsEnabled);
 
-    private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    private bool OnMouse(MouseHook.MouseEvent e)
+    {
+        if (e.Message != NativeMethods.WM_MBUTTONDOWN) return false;
+
+        // THE ONE PLACE TWO FEATURES ARBITRATE OVER THE SAME BUTTON, and it needs to be explicit
+        // because the alternative is a double action.
+        //
+        // Grab and pan owns the middle button when it is on: it swallows the physical press, decides
+        // whether the gesture was a pan or a click, and replays a tagged click if it was a click. So
+        // if this feature also acted on the PHYSICAL press, a middle click on a title bar would close
+        // that window immediately AND then replay a click onto whatever ended up under the cursor -
+        // closing a second window. Waiting for the replay makes the two features compose: hold to
+        // pan, click to close.
+        //
+        // With grab and pan off there is no replay to wait for, so the physical press is the click.
+        if (!e.IsOurs && FeatureRegistry.IsEnabled(FeatureKeys.GrabPan)) return false;
+
+        NativeMethods.POINT pt = new() { X = e.X, Y = e.Y };
+
+        return TryClose(pt);
+    }
+
+    private static bool TryClose(NativeMethods.POINT pt)
     {
         try
         {
-            if (nCode >= 0 && wParam == (IntPtr)NativeMethods.WM_MBUTTONDOWN)
-            {
-                NativeMethods.MSLLHOOKSTRUCT data =
-                    Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
+            IntPtr hwnd = NativeMethods.WindowFromPoint(pt);
+            if (hwnd == IntPtr.Zero) return false;
 
-                if (TryCloseTitleBarUnder(data.pt))
-                {
-                    // Swallow the click. Letting it through would deliver a middle-click to a
-                    // window that is already closing.
-                    return (IntPtr)1;
-                }
-            }
+            hwnd = NativeMethods.GetAncestor(hwnd, NativeMethods.GA_ROOT);
+            if (hwnd == IntPtr.Zero || !NativeMethods.IsWindow(hwnd)) return false;
+
+            // Never our own windows: the settings window, and every overlay this app puts on screen.
+            NativeMethods.GetWindowThreadProcessId(hwnd, out uint pid);
+            if (pid == (uint)Environment.ProcessId) return false;
+
+            StringBuilder sb = new(64);
+            NativeMethods.GetClassName(hwnd, sb, sb.Capacity);
+            string cls = sb.ToString();
+
+            // The shell is never a candidate. Closing Progman or a tray window does nothing good.
+            if (IsShellSurface(cls)) return false;
+
+            if (IsBrowser(cls) && SkipBrowsers()) return false;
+
+            // The free pre-filter, before the cross-process call. See the class comment.
+            if (!NativeMethods.GetWindowRect(hwnd, out NativeMethods.RECT r)) return false;
+            if (pt.Y > r.Top + CaptionBandPx) return false;
+
+            // A maximised window's caption still reports HTCAPTION, so no special case is needed,
+            // but a MINIMISED window's rect is off screen and cannot contain the point anyway.
+            IntPtr lParam = MakeLParam(pt.X, pt.Y);
+
+            IntPtr sent = NativeMethods.SendMessageTimeout(
+                hwnd, NativeMethods.WM_NCHITTEST, IntPtr.Zero, lParam,
+                NativeMethods.SMTO_ABORTIFHUNG, ProbeTimeoutMs, out IntPtr result);
+
+            // Zero means the window did not answer in time, which for a "Not Responding" window is
+            // the normal case. Leaving it alone is right: it cannot be asked to close either.
+            if (sent == IntPtr.Zero) return false;
+            if (result.ToInt64() != NativeMethods.HTCAPTION) return false;
+
+            NativeMethods.PostMessage(hwnd, NativeMethods.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+
+            // Swallow the click only now that it has definitely been acted on. Returning true on a
+            // click that did nothing would make middle-click dead everywhere.
+            return true;
         }
         catch
         {
+            return false;
         }
-
-        return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
     }
 
-    private static bool TryCloseTitleBarUnder(NativeMethods.POINT pt)
+    private static bool SkipBrowsers()
     {
-        IntPtr hwnd = NativeMethods.WindowFromPoint(pt);
-        if (hwnd == IntPtr.Zero) return false;
+        return string.Equals(
+            TuningRegistry.Choice(TuningRegistry.MiddleClickSkipBrowsers), "skip",
+            StringComparison.OrdinalIgnoreCase);
+    }
 
-        hwnd = NativeMethods.GetAncestor(hwnd, NativeMethods.GA_ROOT);
-        if (hwnd == IntPtr.Zero || !NativeMethods.IsWindow(hwnd)) return false;
+    /// <summary>
+    /// Window classes whose caption area is really a tab strip. Chrome_WidgetWin_1 covers Chrome,
+    /// Edge, Brave, Opera and every Electron application, which is a lot of what is on a desktop.
+    /// </summary>
+    private static bool IsBrowser(string cls)
+    {
+        return cls is "Chrome_WidgetWin_1" or "Chrome_WidgetWin_0" or "MozillaWindowClass";
+    }
 
-        // Never close the shell.
-        StringBuilder sb = new(256);
-        NativeMethods.GetClassName(hwnd, sb, sb.Capacity);
-        string cls = sb.ToString();
-        if (cls is "Shell_TrayWnd" or "Progman" or "WorkerW" or "Shell_SecondaryTrayWnd") return false;
-
-        // Never close our own settings window this way - it is not what a user means by it.
-        NativeMethods.GetWindowThreadProcessId(hwnd, out uint pid);
-        if (pid == (uint)Environment.ProcessId) return false;
-
-        IntPtr lParam = MakeLParam(pt.X, pt.Y);
-        IntPtr sent = NativeMethods.SendMessageTimeout(
-            hwnd, NativeMethods.WM_NCHITTEST, IntPtr.Zero, lParam,
-            NativeMethods.SMTO_ABORTIFHUNG, ProbeTimeoutMs, out IntPtr result);
-
-        // sent == 0 means the window did not answer in time. Treat that as "not the title bar"
-        // rather than guessing: closing a window on a timed-out probe would be a coin flip.
-        if (sent == IntPtr.Zero) return false;
-        if (result.ToInt64() != NativeMethods.HTCAPTION) return false;
-
-        NativeMethods.PostMessage(hwnd, NativeMethods.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
-        return true;
+    private static bool IsShellSurface(string cls)
+    {
+        return cls is "Shell_TrayWnd" or "Shell_SecondaryTrayWnd" or "Progman" or "WorkerW"
+            or "Windows.UI.Core.CoreWindow" or "TopLevelWindowForOverflowXamlIsland";
     }
 
     private static IntPtr MakeLParam(int x, int y)

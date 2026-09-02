@@ -27,9 +27,16 @@ public class MagneticGroupsFeature : IDisposable
         _locationDelegate = new NativeMethods.WinEventDelegate(WinEventProcLocation);
     }
 
-    public void Toggle()
+    public bool IsEnabled => _enabled;
+
+    /// <summary>
+    /// IDEMPOTENT: FeatureRegistry calls Apply with the state it wants, not with an instruction to
+    /// flip. See MagneticSnappingFeature.SetEnabled.
+    /// </summary>
+    public void SetEnabled(bool enabled)
     {
-        _enabled = !_enabled;
+        if (enabled == _enabled) return;
+        _enabled = enabled;
 
         if (_enabled)
         {
@@ -65,6 +72,8 @@ public class MagneticGroupsFeature : IDisposable
             _groupHwnds.Clear();
         }
     }
+
+    public void Toggle() => SetEnabled(!_enabled);
 
     private void WinEventProcStartEnd(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
     {

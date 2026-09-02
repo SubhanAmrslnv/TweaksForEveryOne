@@ -106,6 +106,50 @@ internal static class TuningRegistry
     public const string ClockDateFormat = "clock.dateFormat";
     public const string ClockGap = "clock.gap";
     public const string ClockAnchor = "clock.anchor";
+    public const string ClockFontSizeTime = "clock.fontSizeTime";
+    public const string ClockFontSizeDate = "clock.fontSizeDate";
+
+    /// <summary>
+    /// Keep the block inside the taskbar's height. Without this a large font size makes the two-row
+    /// block taller than the bar it sits on, so it overhangs onto the screen and covers whatever is
+    /// above it.
+    /// </summary>
+    public const string ClockFitToTaskbar = "clock.fitToTaskbar";
+
+    // --- Sound --------------------------------------------------------------------------------
+    // One profile for the whole app, so the keyboard clicks and the clipboard confirmations sound
+    // like the same instrument. Volumes are per feature, because the useful level for a click you
+    // hear a hundred times a minute is not the useful level for a confirmation you hear twice.
+    public const string KeyboardSoundProfile = "sound.profile";
+    public const string KeyboardSoundVolume = "sound.keyboardVolume";
+    public const string ClipboardSoundVolume = "sound.clipboardVolume";
+    public const string ClipboardShowOsd = "sound.clipboardOsd";
+    public const string VolumeTickVolume = "sound.volumeTickVolume";
+
+    // --- Taskbar volume wheel -----------------------------------------------------------------
+    public const string VolumeWheelStep = "volume.wheelStep";
+    public const string VolumeMiddleClickMute = "volume.middleClickMute";
+
+    // --- Cursor locator -----------------------------------------------------------------------
+    public const string LocatorShakeDistance = "locator.shakeDistance";
+    public const string LocatorShakeRatio = "locator.shakeRatio";
+    public const string LocatorRingSize = "locator.ringSize";
+
+    // --- Text magnifier -----------------------------------------------------------------------
+    public const string MagnifierZoom = "magnifier.zoom";
+    public const string MagnifierDragThreshold = "magnifier.dragThreshold";
+
+    // --- Middle click and grab & pan ----------------------------------------------------------
+    public const string MiddleClickSkipBrowsers = "middleClick.skipBrowsers";
+    public const string GrabPanHoldMs = "grabPan.holdMs";
+    public const string GrabPanStep = "grabPan.step";
+
+    // --- Smart Caps Lock ----------------------------------------------------------------------
+    public const string SmartCapsTapAction = "smartcaps.tapAction";
+    public const string SmartCapsShiftTapAction = "smartcaps.shiftTapAction";
+
+    // --- Smart taskbar ------------------------------------------------------------------------
+    public const string TaskbarHideScope = "taskbar.hideScope";
 
     private const string PageWindow = "Window Management";
     private const string PageOpacity = "Opacity & Effects";
@@ -277,6 +321,162 @@ internal static class TuningRegistry
             Key = ClockGap, Page = PageScreen, Group = "Taskbar clock",
             Title = "Gap from anchor", Unit = "px", Min = 0, Max = 400, Default = 12,
             Description = "Distance between the block and whatever it sits to the left of."
+        },
+        new TuningDescriptor
+        {
+            Key = ClockFontSizeTime, Page = PageScreen, Group = "Taskbar clock",
+            Title = "Time font size", Unit = "px", Min = 8, Max = 40, Default = 13,
+            Description = "Font size for the time and weather glyph."
+        },
+        new TuningDescriptor
+        {
+            Key = ClockFontSizeDate, Page = PageScreen, Group = "Taskbar clock",
+            Title = "Date font size", Unit = "px", Min = 8, Max = 40, Default = 11,
+            Description = "Font size for the date and weather conditions."
+        },
+        new TuningDescriptor
+        {
+            Key = ClockFitToTaskbar, Page = PageScreen, Group = "Taskbar clock", Kind = TuningKind.Choice,
+            Title = "Fit inside the taskbar", DefaultText = "on",
+            Choices = new[] { "on", "off" },
+            ChoiceLabels = new[] { "Shrink the text to fit the bar", "Use the exact sizes above" },
+            Description = "The block has two rows, so a large font size can make it taller than the taskbar - at which point it overhangs onto the screen and covers whatever is above it. Leave this on unless you have deliberately made the taskbar tall."
+        },
+
+        // --- Sound ----------------------------------------------------------------------------
+        new TuningDescriptor
+        {
+            Key = KeyboardSoundProfile, Page = PagePower, Group = "Sound", Kind = TuningKind.Choice,
+            Title = "Sound profile", DefaultText = "click",
+            Choices = new[] { "click", "typewriter", "soft" },
+            ChoiceLabels = new[] { "Click - short and dry", "Typewriter - heavier thock", "Soft - a quiet tone" },
+            Description = "The instrument for every sound the app makes. Each sound is generated in memory, so there are no audio files and nothing is read from disk while you type."
+        },
+        new TuningDescriptor
+        {
+            Key = KeyboardSoundVolume, Page = PagePower, Group = "Sound", Kind = TuningKind.Percent,
+            Title = "Keystroke volume", Unit = "%", Min = 0, Max = 100, Default = 35,
+            Description = "How loud a keystroke is. This is a sound you hear hundreds of times a minute, so it wants to be quieter than you first think. Zero silences it without switching the feature off."
+        },
+        new TuningDescriptor
+        {
+            Key = ClipboardSoundVolume, Page = PagePower, Group = "Sound", Kind = TuningKind.Percent,
+            Title = "Copy and paste volume", Unit = "%", Min = 0, Max = 100, Default = 55,
+            Description = "How loud the copy, paste, cut and select-all confirmations are."
+        },
+        new TuningDescriptor
+        {
+            Key = ClipboardShowOsd, Page = PagePower, Group = "Sound", Kind = TuningKind.Choice,
+            Title = "Show the clipboard label", DefaultText = "on",
+            Choices = new[] { "on", "off" },
+            ChoiceLabels = new[] { "Ring and label at the cursor", "Sound only" },
+            Description = "Whether copy, paste, cut and select-all also draw a coloured ring and a word at the pointer, or only make their sound."
+        },
+        new TuningDescriptor
+        {
+            Key = VolumeTickVolume, Page = PagePower, Group = "Sound", Kind = TuningKind.Percent,
+            Title = "Volume wheel tick", Unit = "%", Min = 0, Max = 100, Default = 25,
+            Description = "How loud each notch of the taskbar volume wheel is."
+        },
+
+        // --- Taskbar volume wheel -------------------------------------------------------------
+        new TuningDescriptor
+        {
+            Key = VolumeWheelStep, Page = PagePower, Group = "Taskbar volume",
+            Title = "Step per notch", Unit = "%", Min = 1, Max = 20, Default = 3,
+            Description = "How much one notch of the wheel moves the volume. Windows' own volume keys are fixed at two percent."
+        },
+        new TuningDescriptor
+        {
+            Key = VolumeMiddleClickMute, Page = PagePower, Group = "Taskbar volume", Kind = TuningKind.Choice,
+            Title = "Middle-click to mute", DefaultText = "on",
+            Choices = new[] { "on", "off" },
+            ChoiceLabels = new[] { "Middle-click the taskbar mutes", "Leave middle-click alone" },
+            Description = "Only applies over the taskbar itself. Switch it off if you use middle-click on the taskbar for something else."
+        },
+
+        // --- Cursor locator -------------------------------------------------------------------
+        new TuningDescriptor
+        {
+            Key = LocatorShakeDistance, Page = PagePower, Group = "Cursor locator",
+            Title = "Shake effort", Unit = "px", Min = 200, Max = 3000, Default = 900,
+            Description = "How far the pointer has to travel in half a second to count as a shake. Lower is easier to trigger, and easier to trigger by accident."
+        },
+        new TuningDescriptor
+        {
+            Key = LocatorShakeRatio, Page = PagePower, Group = "Cursor locator",
+            Title = "Shake tightness", Unit = "/10", Min = 15, Max = 80, Default = 30,
+            Description = "How much of that travel has to cancel itself out: 30 means the path was at least three times longer than the distance actually covered. This is what separates a shake from crossing the screen to click something."
+        },
+        new TuningDescriptor
+        {
+            Key = LocatorRingSize, Page = PagePower, Group = "Cursor locator",
+            Title = "Ring size", Unit = "px", Min = 80, Max = 600, Default = 260,
+            Description = "How large the rings start before they converge on the pointer."
+        },
+
+        // --- Text magnifier -------------------------------------------------------------------
+        new TuningDescriptor
+        {
+            Key = MagnifierZoom, Page = PagePower, Group = "Text magnifier",
+            Title = "Magnification", Unit = "x", Min = 2, Max = 8, Default = 3,
+            Description = "How much the lens enlarges. Takes effect the next time the feature is switched on, because the capture buffers are sized once rather than per frame."
+        },
+        new TuningDescriptor
+        {
+            Key = MagnifierDragThreshold, Page = PagePower, Group = "Text magnifier",
+            Title = "Appears after", Unit = "px", Min = 4, Max = 120, Default = 18,
+            Description = "How far a left-drag has to move before the lens appears. It only appears for a drag that moves mostly sideways, so scrolling, dragging a file and moving a window are left alone."
+        },
+
+        // --- Middle click and grab & pan ------------------------------------------------------
+        new TuningDescriptor
+        {
+            Key = MiddleClickSkipBrowsers, Page = PageWindow, Group = "Movement & Dragging", Kind = TuningKind.Choice,
+            Title = "Middle-click close: browsers", DefaultText = "skip",
+            Choices = new[] { "skip", "include" },
+            ChoiceLabels = new[] { "Never close a browser window", "Treat browsers like anything else" },
+            Description = "A browser's tab strip IS its title bar, so middle-clicking the empty space beside the tabs would close the whole window instead of a tab. Leave this on skip unless you never middle-click near a tab strip."
+        },
+        new TuningDescriptor
+        {
+            Key = GrabPanHoldMs, Page = PagePower, Group = "Grab & pan",
+            Title = "Hold before panning", Unit = "ms", Min = 0, Max = 600, Default = 180,
+            Description = "Hold the middle button this long and any movement then pans; move it further than a few pixels straight away and it pans immediately. A middle click that never moves is always passed straight through, however long you hold it - which is what keeps middle-click opening and closing browser tabs."
+        },
+        new TuningDescriptor
+        {
+            Key = GrabPanStep, Page = PagePower, Group = "Grab & pan",
+            Title = "Pan sensitivity", Unit = "px", Min = 5, Max = 100, Default = 22,
+            Description = "How far the pointer has to move for one notch of scrolling. Lower is faster."
+        },
+
+        // --- Smart Caps Lock ------------------------------------------------------------------
+        new TuningDescriptor
+        {
+            Key = SmartCapsTapAction, Page = PagePower, Group = "Smart Caps Lock", Kind = TuningKind.Choice,
+            Title = "A tap sends", DefaultText = "escape",
+            Choices = new[] { "escape", "backspace" },
+            ChoiceLabels = new[] { "Escape", "Backspace" },
+            Description = "What a short tap of Caps Lock does. Holding it always toggles Caps Lock for real."
+        },
+        new TuningDescriptor
+        {
+            Key = SmartCapsShiftTapAction, Page = PagePower, Group = "Smart Caps Lock", Kind = TuningKind.Choice,
+            Title = "Shift and a tap send", DefaultText = "backspace",
+            Choices = new[] { "backspace", "escape", "delete", "none" },
+            ChoiceLabels = new[] { "Backspace", "Escape", "Delete", "Nothing" },
+            Description = "The second key you can reach from Caps Lock, so it can be both Escape and Backspace without giving up either."
+        },
+
+        // --- Smart taskbar --------------------------------------------------------------------
+        new TuningDescriptor
+        {
+            Key = TaskbarHideScope, Page = PageScreen, Group = "Taskbar", Kind = TuningKind.Choice,
+            Title = "Auto-hide applies when", DefaultText = "all",
+            Choices = new[] { "all", "primary" },
+            ChoiceLabels = new[] { "Every taskbar is covered", "The primary one is covered" },
+            Description = "Windows' auto-hide setting is a single switch for ALL taskbars, so a decision taken from the primary monitor alone also hid the second monitor's bar - with nothing on that monitor to explain why. On 'all' the bars hide only when every one of them is actually covered."
         }
     };
 

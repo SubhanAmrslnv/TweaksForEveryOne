@@ -17,9 +17,16 @@ public class MultiMonitorDimmerFeature : IDisposable
 
     private const double DIMMER_OPACITY = 0.47; // 47% alpha
 
-    public void Toggle()
+    public bool IsEnabled => _enabled;
+
+    /// <summary>
+    /// IDEMPOTENT: FeatureRegistry calls Apply with the state it wants, not with an instruction to
+    /// flip. See MagneticSnappingFeature.SetEnabled.
+    /// </summary>
+    public void SetEnabled(bool enabled)
     {
-        _enabled = !_enabled;
+        if (enabled == _enabled) return;
+        _enabled = enabled;
 
         if (_enabled)
         {
@@ -42,6 +49,8 @@ public class MultiMonitorDimmerFeature : IDisposable
             });
         }
     }
+
+    public void Toggle() => SetEnabled(!_enabled);
 
     private async Task RunDimmerLoop(CancellationToken token)
     {

@@ -18,14 +18,10 @@ namespace WindowTweaks.Features;
 /// </summary>
 public class ChangeTransparencyFeature : IDisposable
 {
-    private readonly NativeMethods.LowLevelMouseProc _proc;
-    private IntPtr _hookId = IntPtr.Zero;
-
     public bool IsEnabled { get; private set; }
 
     public ChangeTransparencyFeature()
     {
-        _proc = HookCallback;
     }
 
     public void SetEnabled(bool enabled)
@@ -33,55 +29,32 @@ public class ChangeTransparencyFeature : IDisposable
         if (enabled == IsEnabled) return;
         IsEnabled = enabled;
 
-        if (enabled)
-        {
-            using Process curProcess = Process.GetCurrentProcess();
-            using ProcessModule? curModule = curProcess.MainModule;
-            if (curModule != null)
-            {
-                _hookId = NativeMethods.SetWindowsHookEx(NativeMethods.WH_MOUSE_LL, _proc,
-                    NativeMethods.GetModuleHandle(curModule.ModuleName), 0);
-            }
-        }
-        else
-        {
-            if (_hookId != IntPtr.Zero)
-            {
-                NativeMethods.UnhookWindowsHookEx(_hookId);
-                _hookId = IntPtr.Zero;
-            }
-        }
+        // The wheel only, which is what this gesture is.
+        if (enabled) MouseHook.Subscribe("ChangeTransparencyFeature", MouseEvents.Wheel, HookCallback);
+        else MouseHook.Unsubscribe("ChangeTransparencyFeature");
     }
 
     public void Toggle() => SetEnabled(!IsEnabled);
 
-    private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    private bool HookCallback(MouseHook.MouseEvent e)
     {
-        try
+        if (e.Message == NativeMethods.WM_MOUSEWHEEL)
         {
-            if (nCode >= 0 && wParam == (IntPtr)NativeMethods.WM_MOUSEWHEEL)
+            // Grab and pan scrolls by injecting wheel events. Panning with Shift and Alt held down
+            // would otherwise dissolve the window being panned.
+            if (e.IsOurs) return false;
+
+            bool isShift = (NativeMethods.GetAsyncKeyState(0x10) & 0x8000) != 0; // VK_SHIFT
+            bool isAlt = (NativeMethods.GetAsyncKeyState(0x12) & 0x8000) != 0;   // VK_MENU
+
+            if (isShift && isAlt)
             {
-                bool isShift = (NativeMethods.GetAsyncKeyState(0x10) & 0x8000) != 0; // VK_SHIFT
-                bool isAlt = (NativeMethods.GetAsyncKeyState(0x12) & 0x8000) != 0;   // VK_MENU
-
-                if (isShift && isAlt)
-                {
-                    NativeMethods.MSLLHOOKSTRUCT hookStruct =
-                        Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
-                    int delta = (short)(hookStruct.mouseData >> 16);
-
-                    ChangeTransparency(delta);
-
-                    // Swallow the scroll so the window underneath does not also scroll.
-                    return (IntPtr)1;
-                }
+                ChangeTransparency(e.WheelDelta);
+                // Swallow the scroll so the window underneath does not also scroll.
+                return true;
             }
         }
-        catch
-        {
-        }
-
-        return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
+        return false;
     }
 
     private static void ChangeTransparency(int delta)

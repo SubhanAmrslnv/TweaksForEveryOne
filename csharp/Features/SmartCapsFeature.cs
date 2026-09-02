@@ -1,42 +1,57 @@
-using System;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
+﻿using System;
 using System.Threading;
-using System.Threading.Tasks;
 using WindowTweaks.Core;
+
+// WPF and WinForms are both referenced, so Timer is ambiguous under ImplicitUsings. This is the
+// thread-pool timer, not the WinForms one - the callback must not need a message pump.
+using Timer = System.Threading.Timer;
 
 namespace WindowTweaks.Features;
 
 /// <summary>
-/// Smart Caps Lock: tap it for Escape, hold it to actually toggle Caps Lock.
+/// Smart Caps Lock: a tap sends another key, holding it toggles Caps Lock for real.
 ///
-/// Shares the process's single keyboard hook through KeyboardHook. It watches exactly one key -
-/// VK_CAPITAL - and ignores every other key it is shown; no key is stored or logged.
-/// See docs/ANTIVIRUS.md.
+/// Caps Lock is the best-placed key on the board and the least useful, so the point is to get TWO
+/// keys out of it without losing Caps Lock itself: a bare tap sends one key, Shift and a tap send
+/// the other, and both are configurable - so it can be Escape and Backspace at the same time, which
+/// is what was asked for.
 ///
-/// This is the ONE subscriber that suppresses, because remapping Caps Lock is impossible otherwise:
-/// the hardware press has to be swallowed so the OS never toggles the state, and the replacement key
-/// is synthesised instead. Injected events are ignored, or the hook would see its own output and
-/// recurse.
+/// This is the ONE keyboard-hook subscriber that suppresses, because remapping Caps Lock is
+/// impossible otherwise: the hardware press has to be swallowed so the OS never toggles the lock
+/// state, and the replacement key is synthesised instead. Injected events are ignored, or the hook
+/// would see its own output and recurse.
+///
+/// WHY THE HOLD IS A TIMER AND NOT A SLEEPING TASK. The first version did
+/// <c>Task.Run(() =&gt; Thread.Sleep(holdMs))</c> on every press, so ordinary typing spun up a
+/// thread-pool work item per keystroke that spent its whole life blocked. One reusable timer
+/// replaces all of it, and - the part that actually matters - a timer can be CANCELLED, so releasing
+/// the key stops the hold instead of leaving a sleeping thread to wake up and check a flag.
+///
+/// Only VK_CAPITAL is looked at. Every other key is ignored on sight and nothing is retained; see
+/// docs/ANTIVIRUS.md.
 /// </summary>
 public class SmartCapsFeature : IDisposable
 {
     private const string HookOwner = nameof(SmartCapsFeature);
 
     private const int VK_CAPITAL = 0x14;
-    private const int VK_ESCAPE = 0x1B;
-    private const uint KEYEVENTF_KEYUP = 0x0002;
+    private const int VK_SHIFT = 0x10;
 
-    private readonly Stopwatch _timer = new();
+    private const ushort VK_ESCAPE = 0x1B;
+    private const ushort VK_BACK = 0x08;
+    private const ushort VK_DELETE = 0x2E;
 
-    // Volatile because these are written on the keyboard-hook thread and read on the thread-pool
-    // thread that waits out the hold. Without it the JIT is free to hoist the reads in that wait
-    // loop's continuation, and a tap could be misread as a hold (or vice versa) at random.
+    /// <summary>
+    /// Fires once when the press has lasted long enough to be a hold. Volatile-free because it is
+    /// only ever assigned under <see cref="_gate"/>.
+    /// </summary>
+    private Timer? _holdTimer;
+
+    private readonly object _gate = new();
+
+    // Written on the hook thread, read on the timer thread.
     private volatile bool _capsDown;
-    private volatile bool _toggled;
-
-    /// <summary>The hold threshold for the press currently in flight. See OnKey.</summary>
-    private volatile int _holdMs = 400;
+    private volatile bool _becameHold;
 
     public bool IsEnabled { get; private set; }
 
@@ -52,9 +67,10 @@ public class SmartCapsFeature : IDisposable
         else
         {
             KeyboardHook.Unsubscribe(HookOwner);
+
+            CancelHold();
             _capsDown = false;
-            _toggled = false;
-            _timer.Reset();
+            _becameHold = false;
         }
     }
 
@@ -67,27 +83,17 @@ public class SmartCapsFeature : IDisposable
 
         if (e.IsKeyDown)
         {
+            // Auto-repeat delivers a key-down every 32 ms while the key is held. Only the first one
+            // starts a gesture; the rest are swallowed and otherwise ignored.
             if (!_capsDown)
             {
                 _capsDown = true;
-                _toggled = false;
-                _timer.Restart();
+                _becameHold = false;
 
-                // Captured before the wait so the whole gesture is judged against one value, even
-                // if the user moves the slider mid-press.
+                // Captured once, so the whole gesture is judged against one value even if the slider
+                // moves mid-press.
                 int holdMs = TuningRegistry.Int(TuningRegistry.SmartCapsHoldMs);
-                _holdMs = holdMs;
-
-                // Held long enough: let it be a real Caps Lock after all.
-                Task.Run(() =>
-                {
-                    Thread.Sleep(holdMs);
-                    if (_capsDown && !_toggled)
-                    {
-                        _toggled = true;
-                        SimulateKeyPress(VK_CAPITAL);
-                    }
-                });
+                StartHold(holdMs);
             }
 
             return true; // Swallow the hardware press.
@@ -96,40 +102,84 @@ public class SmartCapsFeature : IDisposable
         if (_capsDown)
         {
             _capsDown = false;
-            _timer.Stop();
+            CancelHold();
 
-            if (!_toggled && _timer.ElapsedMilliseconds < _holdMs)
-            {
-                SimulateKeyPress(VK_ESCAPE);
-            }
+            // The hold already fired and turned this into a real Caps Lock. Nothing more to send.
+            if (!_becameHold) SendTapKey();
         }
 
-        return true; // Swallow the hardware release.
+        return true; // Swallow the hardware release, whose press was swallowed too.
     }
 
-    private static void SimulateKeyPress(ushort vk)
+    private void SendTapKey()
+    {
+        bool shift = (NativeMethods.GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+
+        string choice = shift
+            ? TuningRegistry.Choice(TuningRegistry.SmartCapsShiftTapAction)
+            : TuningRegistry.Choice(TuningRegistry.SmartCapsTapAction);
+
+        ushort? key = choice.ToLowerInvariant() switch
+        {
+            "escape" => VK_ESCAPE,
+            "backspace" => VK_BACK,
+            "delete" => VK_DELETE,
+            _ => null
+        };
+
+        if (key == null) return;
+
+        // Shift is released first when it is the modifier that SELECTED this action, or the target
+        // application receives Shift+Backspace - which is a different command in several editors.
+        if (shift) SyntheticInput.ReleaseKey(VK_SHIFT);
+
+        SyntheticInput.Tap(key.Value);
+    }
+
+    private void StartHold(int holdMs)
+    {
+        lock (_gate)
+        {
+            _holdTimer ??= new Timer(OnHoldElapsed, null, Timeout.Infinite, Timeout.Infinite);
+            _holdTimer.Change(Math.Max(1, holdMs), Timeout.Infinite);
+        }
+    }
+
+    private void CancelHold()
+    {
+        lock (_gate)
+        {
+            _holdTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+        }
+    }
+
+    private void OnHoldElapsed(object? state)
     {
         try
         {
-            NativeMethods.INPUT[] inputs = new NativeMethods.INPUT[2];
+            // The release may have landed between the timer firing and this running.
+            if (!_capsDown || _becameHold) return;
 
-            inputs[0].type = NativeMethods.INPUT_KEYBOARD;
-            inputs[0].u.ki.wVk = vk;
-            inputs[0].u.ki.dwFlags = 0;
+            _becameHold = true;
 
-            inputs[1].type = NativeMethods.INPUT_KEYBOARD;
-            inputs[1].u.ki.wVk = vk;
-            inputs[1].u.ki.dwFlags = KEYEVENTF_KEYUP;
-
-            NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(NativeMethods.INPUT)));
+            // Held long enough: let it be a real Caps Lock after all. The lock state toggles on the
+            // synthetic press, which is why the tap path must not also send anything.
+            SyntheticInput.Tap(VK_CAPITAL);
         }
         catch
         {
+            // A throw on a timer thread is an unhandled exception that takes the process down.
         }
     }
 
     public void Dispose()
     {
         SetEnabled(false);
+
+        lock (_gate)
+        {
+            _holdTimer?.Dispose();
+            _holdTimer = null;
+        }
     }
 }

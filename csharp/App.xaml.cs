@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Threading;
@@ -45,6 +45,19 @@ public partial class App : System.Windows.Application
     private readonly DragParallaxFeature _dragParallaxFeature = new();
     private readonly RippleClickFeature _rippleClickFeature = new();
     private readonly MiddleClickCloseFeature _middleClickCloseFeature = new();
+    private readonly AcousticKeyboardFeature _acousticKeyboardFeature = new();
+    private readonly TaskbarVolumeFeature _taskbarVolumeFeature = new();
+    private readonly ClipboardOsdFeature _clipboardOsdFeature = new();
+
+    // Built in the constructor, not in a field initialiser: it takes the clipboard feature above,
+    // and C# forbids one instance field initialiser from referring to another (CS0236). Not in
+    // OnStartup either - a readonly field assigned there would have to be nullable, and every use
+    // site would then carry a null-forgiving operator for a field that is never null.
+    private readonly TextFormatFeature _textFormatFeature;
+
+    private readonly CursorLocatorFeature _cursorLocatorFeature = new();
+
+    private readonly TextMagnifierFeature _textMagnifierFeature = new();
 
     // --- Hotkey commands ---
     private readonly FocusModeFeature _focusModeFeature = new();
@@ -91,11 +104,21 @@ public partial class App : System.Windows.Application
     private const uint VK_F4 = 0x73, VK_F5 = 0x74, VK_F6 = 0x75, VK_F12 = 0x7B;
     private const uint VK_NUMPAD0 = 0x60;
 
+    public App()
+    {
+        // The one feature that takes a collaborator. See the field's comment for why it is here.
+        _textFormatFeature = new TextFormatFeature(_clipboardOsdFeature);
+    }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
         SettingsStore.Load();
+
+        // Anything that cannot reach this class - the taskbar clock's WM_CLOSE handler - asks for
+        // shutdown through here. Set before any feature can exist, let alone show a window.
+        AppLifetime.ShutdownRequested = RequestShutdown;
 
         _altDragFeature = new AltDragFeature();
         _restoreAllFeature = new RestoreAllFeature(_rollUpFeature, _trayMinimizeFeature);
@@ -108,9 +131,9 @@ public partial class App : System.Windows.Application
 
         // Must exist before anything else: it is the only way to ask this app to exit, since it
         // shows no window of its own.
-        _shutdownListener = new ShutdownListener(Shutdown);
+        _shutdownListener = new ShutdownListener(RequestShutdown);
 
-        _systemTrayManager = new SystemTrayManager(ShowSettingsWindow, ReloadApp, Shutdown);
+        _systemTrayManager = new SystemTrayManager(ShowSettingsWindow, ReloadApp, RequestShutdown);
         _hotkeyManager = new HotkeyManager();
 
         RegisterFeatures();
@@ -155,23 +178,23 @@ public partial class App : System.Windows.Application
         // --- Window management -----------------------------------------------------------------
         Add(FeatureKeys.AltDrag, "Linux-style Alt-Drag", PageWindow, "Movement & Dragging",
             "Alt + left-click moves any window from anywhere in it; Alt + right-click resizes from the nearest edge.",
-            "Alt+Drag", true, _ => _altDragFeature!.Toggle());
+            "Alt+Drag", true, on => _altDragFeature!.SetEnabled(on));
 
         Add(FeatureKeys.MagneticSnap, "Magnetic window snapping", PageWindow, "Movement & Dragging",
-            "On release each axis snaps independently to a screen edge, a work-area edge or another window's edge. Reach scales with how hard you throw it.",
-            "Shift+Alt+S", false, _ => _magneticSnappingFeature.Toggle());
+            "On release each axis snaps independently to a screen edge, a work-area edge or another window's edge. Reach scales with how hard you throw it. Windows' own snap wins at the screen edges, by design - if Windows resizes the window, this leaves it alone.",
+            "Shift+Alt+S", false, on => _magneticSnappingFeature.SetEnabled(on));
 
         Add(FeatureKeys.MagneticGroups, "Magnetic window groups", PageWindow, "Movement & Dragging",
             "Windows already touching each other move together.",
-            "Shift+Alt+J", false, _ => _magneticGroupsFeature.Toggle());
+            "Shift+Alt+J", false, on => _magneticGroupsFeature.SetEnabled(on));
 
         Add(FeatureKeys.MiddleClickClose, "Middle-click title bar to close", PageWindow, "Movement & Dragging",
-            "Middle-click a window's title bar to close it, the way a browser tab closes. Hung windows are detected and left alone.",
+            "Middle-click a window's title bar to close it, the way a browser tab closes. Browsers are skipped by default, because their tab strip IS their title bar - see the Tuning page. Hung windows are detected and left alone.",
             null, false, on => _middleClickCloseFeature.SetEnabled(on));
 
         Add(FeatureKeys.PositionMemory, "Position memory", PageWindow, "Layout & States",
             "Apps reopen at the size and position you last left them, keyed on the executable and window class.",
-            "Shift+Alt+M", false, _ => _positionMemoryFeature.Toggle());
+            "Shift+Alt+M", false, on => _positionMemoryFeature.SetEnabled(on));
 
         Add(FeatureKeys.RollUp, "Window roll-up", PageWindow, "Layout & States",
             "Collapse a window to just its title bar, and roll it back down.",
@@ -212,7 +235,7 @@ public partial class App : System.Windows.Application
 
         Add(FeatureKeys.MonitorDimmer, "Multi-monitor focus dimmer", PageOpacity, "Ambient",
             "Dims the monitors you are not working on.",
-            "Shift+Alt+D", false, _ => _multiMonitorDimmerFeature.Toggle());
+            "Shift+Alt+D", false, on => _multiMonitorDimmerFeature.SetEnabled(on));
 
         Add(FeatureKeys.FocusMode, "Focus / cinema mode", PageOpacity, "Ambient",
             "Blacks out everything except the active window.",
@@ -260,13 +283,37 @@ public partial class App : System.Windows.Application
             "Same kill-switch on a double-tap of Alt, without a chord.",
             "Alt, Alt", true, on => _doubleAltTrigger!.SetEnabled(on));
 
+        Add(FeatureKeys.AcousticKeyboard, "Keyboard sounds", PagePower, "Sound",
+            "A mechanical keyboard click on every keystroke. Space and Enter sound deeper, backspace drier, modifiers quieter. Pick the instrument and the volume on the Tuning page - every sound is generated in memory, so nothing is read from disk while you type.",
+            null, false, on => _acousticKeyboardFeature.SetEnabled(on));
+
+        Add(FeatureKeys.ClipboardOsd, "Copy and paste feedback", PagePower, "Sound",
+            "Ctrl+C, Ctrl+V, Ctrl+X and Ctrl+A each get their own sound and their own coloured ring at the pointer, so you can tell a copy from a cut without looking. Never intercepts the chord.",
+            null, true, on => _clipboardOsdFeature.SetEnabled(on));
+
+        Add(FeatureKeys.TaskbarVolume, "Taskbar volume wheel", PagePower, "Sound",
+            "Scroll the wheel over the taskbar to change the volume, with a readout showing the new level - including on a second monitor, where Windows' own flyout appears on the primary. Middle-click the taskbar to mute.",
+            null, true, on => _taskbarVolumeFeature.SetEnabled(on));
+
+        Add(FeatureKeys.TextFormat, "camelCase the selection", PagePower, "Workflow",
+            "Ctrl+Alt+C rewrites the selected text as camelCase in place. It works through the clipboard, because that is the only way to read a selection out of another application - and it puts your clipboard back afterwards.",
+            "Ctrl+Alt+C", true, on => _textFormatFeature.SetEnabled(on));
+
+        Add(FeatureKeys.CursorLocator, "Shake to find the cursor", PagePower, "Pointer",
+            "Shake the mouse and two rings converge on the pointer. Judged on how much of the movement cancels itself out, so crossing the screen to click something does not trigger it.",
+            null, true, on => _cursorLocatorFeature.SetEnabled(on));
+
+        Add(FeatureKeys.TextMagnifier, "Magnifier while selecting text", PagePower, "Pointer",
+            "A lens follows the pointer while you drag across text. Only for a drag that moves mostly sideways, so scrolling, dragging a file and moving a window are left alone.",
+            null, true, on => _textMagnifierFeature.SetEnabled(on));
+
         Add(FeatureKeys.SmartCaps, "Smart Caps Lock", PagePower, "System",
-            "Tap Caps Lock for Escape; hold it to actually toggle Caps Lock.",
+            "A tap of Caps Lock sends another key and holding it toggles Caps Lock for real. Both the tap and the Shift+tap are configurable on the Tuning page, so it can be Escape and Backspace at once.",
             null, true, on => _smartCapsFeature.SetEnabled(on));
 
         Add(FeatureKeys.GrabPan, "Universal grab & pan", PagePower, "System",
-            "Hold the middle button to pan any scrollable window, like the hand tool in an image editor.",
-            "Shift+Alt+Space", false, _ => _grabPanFeature.Toggle());
+            "Hold the middle button and drag to pan any scrollable window, like the hand tool in an image editor. A short middle click is passed straight through, so opening and closing browser tabs still works.",
+            "Shift+Alt+Space", false, on => _grabPanFeature.SetEnabled(on));
 
         Add(FeatureKeys.StealthPanic, "Stealth panic (triple Escape)", PagePower, "System",
             "Three taps of Escape hides every window and mutes the system.",
@@ -275,15 +322,15 @@ public partial class App : System.Windows.Application
         // --- Screen & shell --------------------------------------------------------------------
         Add(FeatureKeys.HotCorners, "Hot corners", PageScreen, "Edges",
             "Throw the pointer into a screen corner to trigger an action. Gated on dwell time, so brushing a corner does nothing.",
-            "Shift+Alt+C", false, _ => _hotCornersFeature.Toggle());
+            "Shift+Alt+C", false, on => _hotCornersFeature.SetEnabled(on));
 
         Add(FeatureKeys.InfiniteWrap, "Infinite cursor wrap", PageScreen, "Edges",
             "The pointer wraps across screen edges. Gated on approach speed and dwell, because the outer edge is somewhere the pointer lands constantly.",
-            "Shift+Alt+I", false, _ => _infiniteWrapFeature.Toggle());
+            "Shift+Alt+I", false, on => _infiniteWrapFeature.SetEnabled(on));
 
         Add(FeatureKeys.SmartTaskbar, "Smart auto-hide taskbar", PageScreen, "Taskbar",
             "Hides the taskbar only when a window is maximised or touches the bottom edge.",
-            "Shift+Alt+T", false, _ => _smartTaskbarFeature.Toggle());
+            "Shift+Alt+T", false, on => _smartTaskbarFeature.SetEnabled(on));
 
         Add(FeatureKeys.CustomClock, "Custom taskbar clock", PageScreen, "Taskbar",
             "Draws a two-row block on the taskbar: weather and time on the first line, conditions and date on the second. Positioned relative to the tray, never at a fixed coordinate.",
@@ -336,7 +383,7 @@ public partial class App : System.Windows.Application
         // Always available - these are the app's own controls.
         Hk(sa, VK_W, "Shift+Alt+W", ShowSettingsWindow);
         Hk(sa, VK_F5, "Shift+Alt+F5", ReloadApp);
-        Hk(sa, VK_F6, "Shift+Alt+F6", Shutdown);
+        Hk(sa, VK_F6, "Shift+Alt+F6", RequestShutdown);
         Hk(sa, VK_ESCAPE, "Shift+Alt+Esc", () => _bossKeyFeature.Toggle());
         Hk(sa, VK_Y, "Shift+Alt+Y", RestoreEverything);
         Hk(sa, VK_F12, "Shift+Alt+F12", () => _gameModeFeature.Toggle());
@@ -477,6 +524,36 @@ public partial class App : System.Windows.Application
     // Lifecycle
     // -----------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// THE ONE WAY OUT. Every exit path goes through here - the tray menu, Shift+Alt+F6, a WM_CLOSE
+    /// from the installer or from Windows shutting down - and it is what made "Full Exit" reliable.
+    ///
+    /// Three things it does that a bare Shutdown() did not:
+    ///
+    ///   1. IT IS IDEMPOTENT. Shutdown can be asked for twice - the installer posts WM_CLOSE to every
+    ///      top-level window of the process, and this app owns several - and WPF throws on the second
+    ///      call, from inside a message handler, leaving the first shutdown half finished.
+    ///
+    ///   2. IT STOPS THE HOOKS FEEDING THE DISPATCHER FIRST. Every feature that answers a hook
+    ///      marshals its work onto the UI thread, so a hand resting on the mouse or a held key kept
+    ///      queueing work onto the dispatcher that was trying to shut down. AppLifetime.BeginExit is
+    ///      checked at the top of both shared hooks, so from this line on they add nothing.
+    ///
+    ///   3. IT ARMS A WATCHDOG. Teardown talks to audio endpoints over COM, un-parents foreign
+    ///      windows and closes layered windows, none of which this app controls the timing of. There
+    ///      is no correct timeout for any one of them, so there is one for all of them together.
+    /// </summary>
+    private void RequestShutdown()
+    {
+        if (!AppLifetime.BeginExit()) return;
+
+        AppLifetime.StartWatchdog();
+
+        // Not inside the caller's message handler: a WM_CLOSE sender is waiting on this message, and
+        // OnExit does real work.
+        Dispatcher.BeginInvoke(new Action(Shutdown));
+    }
+
     private void ReloadApp()
     {
         SettingsStore.Flush();
@@ -496,7 +573,8 @@ public partial class App : System.Windows.Application
                 UseShellExecute = true
             });
         }
-        Shutdown();
+
+        RequestShutdown();
     }
 
     private void ShowSettingsWindow()
@@ -517,7 +595,14 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // OnExit can also be reached without RequestShutdown - Windows ending the session, or an
+        // unhandled failure - so the flag and the watchdog are armed here too. Both are idempotent.
+        if (AppLifetime.BeginExit()) AppLifetime.StartWatchdog();
+
         _housekeeping?.Stop();
+
+        // Silence anything in flight before the audio device is released below.
+        SoundEngine.Shutdown();
 
         // Leave Game Mode first, so the real configuration is what gets written.
         if (_gameModeFeature.IsActive) _gameModeFeature.Exit();
@@ -542,6 +627,11 @@ public partial class App : System.Windows.Application
         Dispose(_hotCornersFeature);
         Dispose(_infiniteWrapFeature);
         Dispose(_smartTaskbarFeature);
+        Dispose(_taskbarVolumeFeature);
+        Dispose(_clipboardOsdFeature);
+        Dispose(_textFormatFeature);
+        Dispose(_cursorLocatorFeature);
+        Dispose(_textMagnifierFeature);
         Dispose(_grabPanFeature);
         Dispose(_customClockFeature);
         Dispose(_smartCapsFeature);
@@ -560,9 +650,23 @@ public partial class App : System.Windows.Application
         // Nothing should still be dimmed, but a crashed feature could have left a record behind.
         AlphaCompositor.ResetAll();
 
-        // Release the shared low-level keyboard hook explicitly. Subscribers drop it as they are
-        // disposed, but the process must not exit still holding a global keyboard hook.
+        // Release the shared low-level hooks explicitly. Subscribers drop them as they are disposed,
+        // but the process must not exit still holding a global keyboard or mouse hook - a hook whose
+        // owning process is gone stalls input delivery system-wide until Windows notices.
+        //
+        // THE MOUSE HOOK WAS MISSING FROM THIS LIST, and that is one of the reasons exiting appeared
+        // to freeze: five features install it, and if any of them failed to unsubscribe the process
+        // went away with a live WH_MOUSE_LL hook behind it.
         KeyboardHook.Shutdown();
+        MouseHook.Shutdown();
+
+        // Only after both hooks are gone. HookThread's message pump is what DELIVERS hook callbacks,
+        // so stopping the pump while a hook is still installed would stall input, not free it.
+        HookThread.Stop();
+
+        // The cached audio endpoint is a COM object; release it rather than leaving it to a finalizer
+        // that may run after the apartment has gone.
+        AudioManager.Shutdown();
 
         _systemTrayManager?.Dispose();
         _shutdownListener?.Dispose();
@@ -571,6 +675,12 @@ public partial class App : System.Windows.Application
         SettingsStore.Flush();
 
         base.OnExit(e);
+
+        // The process must actually end. WPF's shutdown does not wait for background threads, but a
+        // hook thread, an audio thread or a COM apartment mid-teardown can still keep the process
+        // alive with no window and no tray icon - which is the "it does not exit at all" report.
+        // Everything above has already run, so there is nothing left to lose here.
+        Environment.Exit(0);
     }
 
     private static void Dispose(IDisposable? d)

@@ -141,6 +141,27 @@ $Shortcut.Description = "Window Tweaks"
 $Shortcut.Save()
 
 Write-Host "Installation Complete!"
+
+# If ExplorerPatcher is installed, wait for it to fully load into explorer.exe 
+# before starting the app, as our taskbar hooks might fail if the taskbar is still being built.
+if (Test-Path "HKCU:\Software\ExplorerPatcher") {
+    Write-Host "Waiting for ExplorerPatcher to initialize..."
+    $deadline = (Get-Date).AddSeconds(10)
+    while ((Get-Date) -lt $deadline) {
+        $explorer = Get-Process explorer -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($explorer) {
+            # In PowerShell, checking Modules might throw if elevated/access denied, 
+            # but we run elevated anyway. Using a fast check.
+            $epDll = $explorer.Modules -match "ExplorerPatcher.dll"
+            if ($epDll) {
+                Write-Host "ExplorerPatcher is ready."
+                break
+            }
+        }
+        Start-Sleep -Milliseconds 250
+    }
+}
+
 Write-Host "Starting Window Tweaks..."
 Start-Process "$InstallDir\WindowTweaks.exe"
 

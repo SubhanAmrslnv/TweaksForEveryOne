@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -68,6 +68,12 @@ internal static class KeyboardHook
     // Insertion-ordered so dispatch order is deterministic.
     private static readonly List<KeyValuePair<string, Handler>> Subscribers = new();
 
+    /// <summary>
+    /// A snapshot of Subscribers, rebuilt only when the list changes. The callback used to take the
+    /// lock and call ToArray() on every key event, which allocated on an input path.
+    /// </summary>
+    private static volatile KeyValuePair<string, Handler>[] _snapshot = Array.Empty<KeyValuePair<string, Handler>>();
+
     private static IntPtr _hook = IntPtr.Zero;
 
     // The delegate must be held in a field. If it is only passed to SetWindowsHookEx, the GC is free
@@ -97,19 +103,27 @@ internal static class KeyboardHook
         {
             RemoveOwner(owner);
             Subscribers.Add(new KeyValuePair<string, Handler>(owner, handler));
-            EnsureInstalled();
+            _snapshot = Subscribers.ToArray();
         }
+
+        // Outside the lock: installing runs on the hook thread and waits for it, and that thread
+        // must never be able to block on a lock the UI thread is holding.
+        EnsureInstalled();
     }
 
     public static void Unsubscribe(string owner)
     {
+        bool empty;
+
         lock (Gate)
         {
             RemoveOwner(owner);
-
-            // No subscribers means no reason to hold a global keyboard hook. Release it.
-            if (Subscribers.Count == 0) Uninstall();
+            _snapshot = Subscribers.ToArray();
+            empty = Subscribers.Count == 0;
         }
+
+        // No subscribers means no reason to hold a global keyboard hook. Release it.
+        if (empty) Uninstall();
     }
 
     /// <summary>Caller must hold Gate.</summary>
@@ -121,44 +135,55 @@ internal static class KeyboardHook
         }
     }
 
-    /// <summary>Caller must hold Gate.</summary>
+    /// <summary>
+    /// Installs the hook ON THE HOOK THREAD. A low-level hook's callbacks are delivered to the
+    /// thread that installed it, and Windows holds the keystroke that caused one until that thread
+    /// returns - so installing from the UI thread makes every keystroke in the operating system
+    /// wait behind WPF. See Core/HookThread.cs.
+    /// </summary>
     private static void EnsureInstalled()
     {
-        if (_hook != IntPtr.Zero) return;
-
-        try
+        HookThread.Invoke(() =>
         {
-            _proc = HookCallback;
+            if (_hook != IntPtr.Zero) return;
 
-            using Process curProcess = Process.GetCurrentProcess();
-            using ProcessModule? curModule = curProcess.MainModule;
-            if (curModule == null) return;
+            try
+            {
+                _proc = HookCallback;
 
-            _hook = NativeMethods.SetWindowsHookEx(
-                NativeMethods.WH_KEYBOARD_LL, _proc,
-                NativeMethods.GetModuleHandle(curModule.ModuleName), 0);
-        }
-        catch
-        {
-            _hook = IntPtr.Zero;
-        }
+                using Process curProcess = Process.GetCurrentProcess();
+                using ProcessModule? curModule = curProcess.MainModule;
+                if (curModule == null) return;
+
+                _hook = NativeMethods.SetWindowsHookEx(
+                    NativeMethods.WH_KEYBOARD_LL, _proc,
+                    NativeMethods.GetModuleHandle(curModule.ModuleName), 0);
+            }
+            catch
+            {
+                _hook = IntPtr.Zero;
+            }
+        });
     }
 
-    /// <summary>Caller must hold Gate.</summary>
+    /// <summary>Removes the hook, on the same thread that installed it.</summary>
     private static void Uninstall()
     {
-        if (_hook == IntPtr.Zero) return;
-
-        try
+        HookThread.Invoke(() =>
         {
-            NativeMethods.UnhookWindowsHookEx(_hook);
-        }
-        catch
-        {
-        }
+            if (_hook == IntPtr.Zero) return;
 
-        _hook = IntPtr.Zero;
-        _proc = null;
+            try
+            {
+                NativeMethods.UnhookWindowsHookEx(_hook);
+            }
+            catch
+            {
+            }
+
+            _hook = IntPtr.Zero;
+            _proc = null;
+        });
     }
 
     /// <summary>Release the hook regardless of subscribers. Exit only.</summary>
@@ -167,16 +192,21 @@ internal static class KeyboardHook
         lock (Gate)
         {
             Subscribers.Clear();
-            Uninstall();
+            _snapshot = Array.Empty<KeyValuePair<string, Handler>>();
         }
+
+        Uninstall();
     }
 
     private static IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        IntPtr hook;
-        lock (Gate) hook = _hook;
+        IntPtr hook = _hook;
 
         if (nCode < 0) return NativeMethods.CallNextHookEx(hook, nCode, wParam, lParam);
+
+        // Teardown is reached by refusing to queue more work, not by draining the queue. A held key
+        // used to keep feeding the very dispatcher that OnExit was trying to shut down.
+        if (AppLifetime.IsExiting) return NativeMethods.CallNextHookEx(hook, nCode, wParam, lParam);
 
         bool suppress = false;
 
@@ -194,14 +224,10 @@ internal static class KeyboardHook
 
                 KeyEvent e = new(vkCode, isDown, injected);
 
-                // Snapshot under the lock, then dispatch outside it: a handler may subscribe or
-                // unsubscribe in response (Stealth Panic suspends features), and mutating the list
-                // under a live enumerator would throw inside a hook callback.
-                KeyValuePair<string, Handler>[] snapshot;
-                lock (Gate)
-                {
-                    snapshot = Subscribers.ToArray();
-                }
+                // The snapshot is read without the lock and never mutated in place: a handler may
+                // subscribe or unsubscribe in response (Stealth Panic suspends features), and
+                // mutating the live list under an enumerator would throw inside a hook callback.
+                KeyValuePair<string, Handler>[] snapshot = _snapshot;
 
                 // Every subscriber sees every event, even after one asks to suppress, so their tap
                 // counters stay correct. Suppression is the OR of all answers.

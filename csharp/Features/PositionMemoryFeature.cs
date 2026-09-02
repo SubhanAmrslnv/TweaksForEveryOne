@@ -68,9 +68,15 @@ public class PositionMemoryFeature : IDisposable
         }
     }
 
-    public void Toggle()
+    /// <summary>
+    /// IDEMPOTENT: FeatureRegistry calls Apply with the state it wants, not with an instruction to
+    /// flip. See MagneticSnappingFeature.SetEnabled.
+    /// </summary>
+    public void SetEnabled(bool enabled)
     {
-        _isEnabled = !_isEnabled;
+        if (enabled == _isEnabled) return;
+        _isEnabled = enabled;
+
         if (_isEnabled)
         {
             // EVENT_SYSTEM_MOVESIZEEND (0x000B) for saving, EVENT_OBJECT_SHOW (0x8002) for restoring
@@ -93,6 +99,8 @@ public class PositionMemoryFeature : IDisposable
             Debug.WriteLine("Position Memory: Disabled");
         }
     }
+
+    public void Toggle() => SetEnabled(!_isEnabled);
 
     private void WinEventProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
     {

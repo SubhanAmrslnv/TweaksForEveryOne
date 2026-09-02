@@ -21,9 +21,16 @@ public class HotCornersFeature : IDisposable
     private const int THRESHOLD = 5;
     private const int DELAY_MS = 200;
 
-    public void Toggle()
+    public bool IsEnabled => _enabled;
+
+    /// <summary>
+    /// IDEMPOTENT: FeatureRegistry calls Apply with the state it wants, not with an instruction to
+    /// flip. See MagneticSnappingFeature.SetEnabled.
+    /// </summary>
+    public void SetEnabled(bool enabled)
     {
-        _enabled = !_enabled;
+        if (enabled == _enabled) return;
+        _enabled = enabled;
 
         if (_enabled)
         {
@@ -37,6 +44,8 @@ public class HotCornersFeature : IDisposable
             _cts = null;
         }
     }
+
+    public void Toggle() => SetEnabled(!_enabled);
 
     private async Task RunMonitorLoop(CancellationToken token)
     {

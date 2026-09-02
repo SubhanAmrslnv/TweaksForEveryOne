@@ -33,14 +33,10 @@ public class RippleClickFeature : IDisposable
 {
     // Read when a ripple is spawned, so a change to either slider shows on the very next click.
 
-    private readonly NativeMethods.LowLevelMouseProc _proc;
-    private IntPtr _hookId = IntPtr.Zero;
-
     public bool IsEnabled { get; private set; }
 
     public RippleClickFeature()
     {
-        _proc = HookCallback;
     }
 
     public void SetEnabled(bool enabled)
@@ -48,51 +44,25 @@ public class RippleClickFeature : IDisposable
         if (enabled == IsEnabled) return;
         IsEnabled = enabled;
 
-        if (enabled)
-        {
-            using Process curProcess = Process.GetCurrentProcess();
-            using ProcessModule? curModule = curProcess.MainModule;
-            if (curModule != null)
-            {
-                _hookId = NativeMethods.SetWindowsHookEx(NativeMethods.WH_MOUSE_LL, _proc,
-                    NativeMethods.GetModuleHandle(curModule.ModuleName), 0);
-            }
-        }
-        else
-        {
-            if (_hookId != IntPtr.Zero)
-            {
-                NativeMethods.UnhookWindowsHookEx(_hookId);
-                _hookId = IntPtr.Zero;
-            }
-        }
+        // Buttons only. A ripple has nothing to say about a mouse move, and subscribing to moves
+        // would call this handler a hundred times a second to return false.
+        if (enabled) MouseHook.Subscribe("RippleClickFeature", MouseEvents.Buttons, HookCallback);
+        else MouseHook.Unsubscribe("RippleClickFeature");
     }
 
     public void Toggle() => SetEnabled(!IsEnabled);
 
-    private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    private bool HookCallback(MouseHook.MouseEvent e)
     {
-        try
+        if (e.Message == NativeMethods.WM_LBUTTONDOWN)
         {
-            if (nCode >= 0 && wParam == (IntPtr)NativeMethods.WM_LBUTTONDOWN)
-            {
-                NativeMethods.MSLLHOOKSTRUCT data =
-                    Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
+            if (e.IsInjected) return false;
 
-                int x = data.pt.X;
-                int y = data.pt.Y;
-
-                // Never build UI inside the hook itself: it has to return promptly, and the ripple
-                // is not urgent. BeginInvoke also puts us on the dispatcher regardless of which
-                // thread the hook was delivered on.
-                Application.Current?.Dispatcher.BeginInvoke(new Action(() => Spawn(x, y)));
-            }
+            int x = e.X;
+            int y = e.Y;
+            Application.Current?.Dispatcher.BeginInvoke(new Action(() => Spawn(x, y)));
         }
-        catch
-        {
-        }
-
-        return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
+        return false;
     }
 
     private static void Spawn(int screenX, int screenY)
@@ -101,6 +71,14 @@ public class RippleClickFeature : IDisposable
         {
             int maxRadius = TuningRegistry.Int(TuningRegistry.RippleRadius);
             int durationMs = TuningRegistry.Int(TuningRegistry.RippleDurationMs);
+
+            // The radius is a physical pixel count, but WPF lays out in device-independent units, so
+            // it has to be divided by the scale of the monitor the click landed on - otherwise the
+            // ring is half again too big at 150%. Position is applied separately, in physical
+            // pixels, by OverlayPlacement: Window.Left is in WPF units and assigning a hook's
+            // coordinates to it puts the ripple in the wrong place on any scaled display.
+            double scale = OverlayPlacement.ScaleAt(screenX, screenY);
+            double logicalDiameter = maxRadius * 2 / scale;
 
             Ellipse ring = new()
             {
@@ -124,38 +102,25 @@ public class RippleClickFeature : IDisposable
                 Topmost = true,
                 ResizeMode = ResizeMode.NoResize,
                 IsHitTestVisible = false,
-                Width = maxRadius * 2,
-                Height = maxRadius * 2,
-                Left = screenX - maxRadius,
-                Top = screenY - maxRadius,
+                Width = logicalDiameter,
+                Height = logicalDiameter,
+
+                // Off screen until OverlayPlacement puts it where the click was, so it never
+                // appears at the wrong coordinate for one frame.
+                Left = -10000,
+                Top = -10000,
                 Content = ring,
                 // Opacity is set before Show() - showing first would put one fully opaque frame on
                 // screen before the animation's first tick.
                 Opacity = 0.85
             };
 
-            overlay.SourceInitialized += (_, _) =>
-            {
-                try
-                {
-                    IntPtr hwnd = new System.Windows.Interop.WindowInteropHelper(overlay).Handle;
-                    if (hwnd == IntPtr.Zero) return;
-
-                    uint ex = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
-                    NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE,
-                        ex | NativeMethods.WS_EX_TRANSPARENT
-                           | NativeMethods.WS_EX_NOACTIVATE
-                           | NativeMethods.WS_EX_TOOLWINDOW);
-                }
-                catch
-                {
-                }
-            };
+            overlay.SourceInitialized += (_, _) => OverlayPlacement.MakeClickThrough(overlay);
 
             Duration duration = new(TimeSpan.FromMilliseconds(durationMs));
             IEasingFunction ease = new CubicEase { EasingMode = EasingMode.EaseOut };
 
-            DoubleAnimation grow = new(8, maxRadius * 2, duration) { EasingFunction = ease };
+            DoubleAnimation grow = new(8, logicalDiameter, duration) { EasingFunction = ease };
             DoubleAnimation fade = new(0.85, 0.0, duration) { EasingFunction = ease };
 
             // Closing is driven by the animation that shows it, but the window is not left to the
@@ -173,6 +138,9 @@ public class RippleClickFeature : IDisposable
             };
 
             overlay.Show();
+
+            // After Show, because the window needs a handle before it can be moved with SetWindowPos.
+            OverlayPlacement.CentreOn(overlay, screenX, screenY);
 
             ring.BeginAnimation(FrameworkElement.WidthProperty, grow);
             ring.BeginAnimation(FrameworkElement.HeightProperty, grow);

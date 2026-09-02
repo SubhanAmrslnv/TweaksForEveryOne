@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -212,6 +212,10 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
 
+    [DllImport("gdi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool DeleteObject(IntPtr hObject);
+
     public delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     /// <summary>
@@ -222,9 +226,20 @@ internal static class NativeMethods
     public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     public const int WH_KEYBOARD_LL = 13;
+    public const int VK_MENU = 0x12; // Alt
+    public const int VK_PAUSE = 0x13;
+    public const int VK_CAPITAL = 0x14; // Caps Lock
+    public const int VK_ESCAPE = 0x1B;
+    public const int VK_SPACE = 0x20;
+    
+    public const int VK_VOLUME_MUTE = 0xAD;
+    public const int VK_VOLUME_DOWN = 0xAE;
+    public const int VK_VOLUME_UP = 0xAF;
+
+    public const int VK_LWIN = 0x5B;
+
     public const int WM_KEYDOWN = 0x0100;
     public const int WM_SYSKEYDOWN = 0x0104;
-    public const int VK_ESCAPE = 0x1B;
     
     public const int WH_MOUSE_LL = 14;
     public const int WM_MOUSEMOVE = 0x0200;
@@ -269,8 +284,10 @@ internal static class NativeMethods
     public static extern bool LockWorkStation();
 
     // --- Added for AlwaysOnBottom (Desktop Widget) ---
+    // lpWindowName is nullable, and declaring it so matters: every caller in this app searches by
+    // CLASS and passes null for the title, which produced a nullable warning at each call site.
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-    public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+    public static extern IntPtr FindWindow(string lpClassName, string? lpWindowName);
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
     public static extern IntPtr FindWindowEx(IntPtr parentHandle, IntPtr childAfter, string lclassName, string windowTitle);
@@ -420,4 +437,145 @@ internal static class NativeMethods
     [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SystemParametersInfoSet(uint uiAction, uint uiParam, IntPtr pvParam, uint fWinIni);
+    // ---------------------------------------------------------------------------------------
+    // A private message pump for HookThread.
+    //
+    // The low-level hooks USED TO BE INSTALLED FROM THE WPF UI THREAD, and that is a system-wide
+    // performance bug, not an internal detail: Windows delivers a WH_MOUSE_LL / WH_KEYBOARD_LL
+    // callback to the thread that installed the hook, and it BLOCKS the input that produced it
+    // until that thread returns. With the hooks on the UI thread, every mouse move in the whole OS
+    // had to wait behind whatever WPF was doing - a ripple animation, the clock tick, a settings
+    // window laying itself out. Past LowLevelHooksTimeout (300 ms by default) Windows stops waiting
+    // and silently DROPS the hook, which is exactly the reported "Windows' own snap works only the
+    // second time".
+    //
+    // HookThread owns a dedicated thread with nothing on it but the hooks and this pump.
+    // ---------------------------------------------------------------------------------------
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MSG
+    {
+        public IntPtr hwnd;
+        public uint message;
+        public IntPtr wParam;
+        public IntPtr lParam;
+        public uint time;
+        public POINT pt;
+    }
+
+    [DllImport("user32.dll")]
+    public static extern int GetMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PostThreadMessage(uint idThread, uint Msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll")]
+    public static extern uint GetCurrentThreadId();
+
+    /// <summary>Ask HookThread to drain its work queue.</summary>
+    public const uint WM_HOOKTHREAD_RUN = 0x0400 + 0x51;
+
+    /// <summary>Ask HookThread's pump to return.</summary>
+    public const uint WM_HOOKTHREAD_QUIT = 0x0400 + 0x52;
+
+    // ---------------------------------------------------------------------------------------
+    // Per-monitor DPI, for placing overlay windows.
+    //
+    // WPF's Window.Left/Top are device-independent units; a mouse hook reports PHYSICAL pixels.
+    // Assigning one to the other put every overlay in this app at the wrong place on any display
+    // scaled above 100% - at 150% the cursor locator and the text magnifier landed two thirds of
+    // the way towards the top-left corner, which is why they read as "does not appear".
+    // ---------------------------------------------------------------------------------------
+
+    [DllImport("shcore.dll")]
+    public static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
+
+    /// <summary>MDT_EFFECTIVE_DPI - what the display is actually scaled to.</summary>
+    public const int MDT_EFFECTIVE_DPI = 0;
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
+    // ---------------------------------------------------------------------------------------
+    // Sound. PlaySound with SND_MEMORY | SND_ASYNC plays a WAV that was synthesised in memory and
+    // returns immediately, so a keystroke sound can be started from the hook thread itself without
+    // a dispatcher round trip. See Core/SoundEngine.cs.
+    // ---------------------------------------------------------------------------------------
+
+    [DllImport("winmm.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PlaySound(IntPtr pszSound, IntPtr hmod, uint fdwSound);
+
+    public const uint SND_ASYNC = 0x0001;
+    public const uint SND_NODEFAULT = 0x0002;
+    public const uint SND_MEMORY = 0x0004;
+    public const uint SND_PURGE = 0x0040;
+    public const uint SND_NOSTOP = 0x0010;
+
+    // ---------------------------------------------------------------------------------------
+    // Mouse messages and the tag this process stamps on its own synthetic input.
+    // ---------------------------------------------------------------------------------------
+
+    public const int WM_LBUTTONUP = 0x0202;
+    public const int WM_RBUTTONDOWN = 0x0204;
+    public const int WM_RBUTTONUP = 0x0205;
+    public const int WM_MOUSEHWHEEL = 0x020E;
+
+    /// <summary>
+    /// Stamped into dwExtraInfo on every mouse or key event this process synthesises, so the shared
+    /// hooks can recognise their own output. The LLMHF_INJECTED flag is not enough on its own: it is
+    /// set for ANY injected event, including one from another tool, and a feature that replays a
+    /// swallowed click has to know which injected events are specifically its own. Grab &amp; pan used
+    /// to count them instead ("ignore the next two"), which desynchronised the moment any other
+    /// event arrived in between and left middle-click dead in the browser.
+    /// </summary>
+    public static readonly IntPtr SyntheticTag = new IntPtr(0x57544B53); // 'WTKS'
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetDesktopWindow();
+
+    [DllImport("user32.dll")]
+    public static extern bool IsIconic(IntPtr hWnd);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WINDOWPLACEMENT
+    {
+        public int length;
+        public int flags;
+        public int showCmd;
+        public POINT ptMinPosition;
+        public POINT ptMaxPosition;
+        public RECT rcNormalPosition;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
+
+    public const int SW_SHOWMINIMIZED = 2;
+    public const int SW_SHOWMAXIMIZED = 3;
+
+    // ---------------------------------------------------------------------------------------
+    // Keeping an overlay out of screen capture.
+    //
+    // The text magnifier captures the screen around the cursor and draws it in a lens near the
+    // cursor, so without this the lens photographs itself. Keeping the two apart is impossible near
+    // a screen edge, where the lens has to be clamped back over the region it is magnifying.
+    // WDA_EXCLUDEFROMCAPTURE (Windows 10 2004 and later) removes the window from capture entirely.
+    // ---------------------------------------------------------------------------------------
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
+
+    public const uint WDA_NONE = 0x00;
+    public const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
+    /// <summary>
+    /// Increments every time ANY process changes the clipboard. The camelCase formatter uses it to
+    /// answer "did my synthetic Ctrl+C actually copy something", which comparing clipboard TEXT
+    /// cannot: copying text identical to what was already there looks like a failed copy.
+    /// </summary>
+    [DllImport("user32.dll")]
+    public static extern uint GetClipboardSequenceNumber();
 }

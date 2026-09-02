@@ -8,8 +8,8 @@ internal static class FeatureKeys
 {
     // Window management
     public const string AltDrag = "window.altDrag";
-    public const string MagneticSnap = "window.magneticSnap";
     public const string MagneticGroups = "window.magneticGroups";
+    public const string MagneticSnap = "window.magneticSnap";
     public const string PositionMemory = "window.positionMemory";
     public const string MiddleClickClose = "window.middleClickClose";
     public const string RollUp = "window.rollUp";
@@ -37,6 +37,12 @@ internal static class FeatureKeys
     public const string QuickLook = "power.quickLook";
     public const string Spotlight = "power.spotlight";
     public const string MicMute = "power.micMute";
+    public const string AcousticKeyboard = "hotkey.acousticKeyboard";
+    public const string TaskbarVolume = "hotkey.taskbarVolume";
+    public const string ClipboardOsd = "power.clipboardOsd";
+    public const string TextFormat = "power.textFormat";
+    public const string CursorLocator = "power.cursorLocator";
+    public const string TextMagnifier = "power.textMagnifier";
     public const string SmartCaps = "power.smartCaps";
     public const string StealthPanic = "power.stealthPanic";
     public const string GrabPan = "power.grabPan";
@@ -60,8 +66,15 @@ internal static class FeatureKeys
     public const string StartWithWindows = "general.startWithWindows";
 
     /// <summary>
-    /// What Game Mode switches off. Anything that steals focus, dims a window, animates, installs
-    /// a low-level hook on the mouse, or repositions a window while a game is running.
+    /// What Game Mode switches off. Anything that steals focus, dims a window, animates, makes a
+    /// sound, draws an overlay, installs a low-level hook, or repositions a window while a game is
+    /// running.
+    ///
+    /// KEEPING THIS LIST COMPLETE IS THE WHOLE POINT OF GAME MODE. A feature that is missing from it
+    /// is a feature that keeps a global input hook installed and keeps drawing top-most windows over
+    /// a full-screen game - and it will be blamed on the game, not on this app, because Game Mode
+    /// reported that it had suspended everything. Six of the entries below were missing after the
+    /// last round of features was added: every one of them holds a mouse or keyboard hook.
     ///
     /// Deliberately NOT suspended: the pure hotkey commands (always-on-top, tray minimize, plain
     /// paste, the layout keys). They only act when explicitly pressed, so they cost a game nothing.
@@ -88,6 +101,15 @@ internal static class FeatureKeys
         SmartTaskbar,
         CustomClock,
         ClockWeather,
-        PositionMemory
+        PositionMemory,
+
+        // Added with the features themselves. Each one holds a low-level hook, and the first three
+        // also make a sound or draw an overlay.
+        AcousticKeyboard,
+        ClipboardOsd,
+        CursorLocator,
+        TextMagnifier,
+        TaskbarVolume,
+        TextFormat
     };
 }

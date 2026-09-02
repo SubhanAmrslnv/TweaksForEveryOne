@@ -109,7 +109,13 @@ public class CustomClockFeature : IDisposable
         if (msg == (int)NativeMethods.WM_CLOSE)
         {
             handled = true;
-            System.Windows.Application.Current?.Shutdown();
+
+            // Through AppLifetime rather than straight to Application.Shutdown: the app's exit path
+            // has to be idempotent (the installer posts WM_CLOSE to EVERY top-level window of the
+            // process, and this app owns several), and it has to stop the input hooks feeding the
+            // dispatcher before teardown starts. Calling Shutdown directly here skipped both, and a
+            // second WM_CLOSE arriving a moment later threw from inside this handler.
+            AppLifetime.RequestShutdown();
         }
         return IntPtr.Zero;
     }
@@ -277,6 +283,8 @@ public class CustomClockFeature : IDisposable
     {
         if (_timeText == null || _dateText == null || _glyphText == null || _infoText == null) return;
 
+        ApplyFontSizes();
+
         DateTime now = DateTime.Now;
         _timeText.Text = SafeFormat(now, TuningRegistry.Text(TuningRegistry.ClockTimeFormat), "HH:mm:ss");
         _dateText.Text = SafeFormat(now, TuningRegistry.Text(TuningRegistry.ClockDateFormat), "dd.MM.yyyy");
@@ -304,6 +312,83 @@ public class CustomClockFeature : IDisposable
         _glyphText.Text = $"{r.Glyph} {r.TemperatureText}";
 
         _infoText.Text = r.WindText;
+    }
+
+    /// <summary>
+    /// Applies the two font sizes from the Tuning page, shrinking them if the resulting two-row
+    /// block would be taller than the taskbar it sits on.
+    ///
+    /// WHY THE CLAMP EXISTS. The block has two rows, so its height is roughly the sum of both font
+    /// sizes plus the panel's padding, and the taskbar is typically 48 physical pixels. Nothing
+    /// stopped a user picking 40 px for the time - at which point the block was two and a half times
+    /// the height of the bar, overhung onto the screen, and covered whatever was above it. Windows
+    /// will not clip it, because this is a top-most window that merely happens to be drawn over the
+    /// taskbar.
+    ///
+    /// The sizes are scaled together rather than clamped independently, so the deliberate difference
+    /// between the time row and the date row survives.
+    /// </summary>
+    private void ApplyFontSizes()
+    {
+        if (_timeText == null || _dateText == null || _glyphText == null || _infoText == null) return;
+
+        double sizeTime = TuningRegistry.Int(TuningRegistry.ClockFontSizeTime);
+        double sizeDate = TuningRegistry.Int(TuningRegistry.ClockFontSizeDate);
+
+        bool fit = string.Equals(TuningRegistry.Choice(TuningRegistry.ClockFitToTaskbar), "on",
+            StringComparison.OrdinalIgnoreCase);
+
+        if (fit)
+        {
+            int barHeight = TaskbarHeight();
+
+            if (barHeight > 0)
+            {
+                // WPF lays the block out in device-independent units, and the taskbar's height is
+                // physical, so the budget has to be converted before it can be compared.
+                double scale = OverlayPlacement.ScaleAt(0, 0);
+                if (scale <= 0) scale = 1.0;
+
+                // The panel's own vertical padding, plus a pixel of line spacing per row.
+                const double ChromeUnits = 6.0;
+
+                double budget = barHeight / scale - ChromeUnits;
+                double wanted = sizeTime + sizeDate;
+
+                if (budget > 0 && wanted > budget)
+                {
+                    double factor = budget / wanted;
+
+                    // A floor, so "fit" can never collapse the text to something unreadable on a
+                    // deliberately tiny bar. Overhanging slightly beats being illegible.
+                    sizeTime = Math.Max(7.0, Math.Floor(sizeTime * factor));
+                    sizeDate = Math.Max(6.0, Math.Floor(sizeDate * factor));
+                }
+            }
+        }
+
+        // Assigning FontSize invalidates layout, so only assign when it actually changed - this runs
+        // twice a second.
+        if (_timeText.FontSize != sizeTime) _timeText.FontSize = sizeTime;
+        if (_dateText.FontSize != sizeDate) _dateText.FontSize = sizeDate;
+
+        // The weather glyph sits a little larger than the time it shares a row with; symbol glyphs
+        // have a smaller apparent size than digits at the same point size.
+        double glyph = sizeTime + 2;
+        if (_glyphText.FontSize != glyph) _glyphText.FontSize = glyph;
+        if (_infoText.FontSize != sizeDate) _infoText.FontSize = sizeDate;
+    }
+
+    /// <summary>The primary taskbar's height in physical pixels, or 0 when it cannot be read.</summary>
+    private static int TaskbarHeight()
+    {
+        IntPtr taskbar = NativeMethods.FindWindow("Shell_TrayWnd", null);
+        if (taskbar == IntPtr.Zero) return 0;
+
+        if (!NativeMethods.GetWindowRect(taskbar, out NativeMethods.RECT bar)) return 0;
+
+        int height = bar.Bottom - bar.Top;
+        return height > 0 ? height : 0;
     }
 
     /// <summary>

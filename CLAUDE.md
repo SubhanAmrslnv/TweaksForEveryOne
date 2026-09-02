@@ -50,17 +50,43 @@ dotnet publish .\csharp\WindowTweaks.csproj -c Release -r win-x64 --self-contain
 | `Core\SettingsStore.cs` | `%APPDATA%\WindowTweaks\settings.json`. Debounced 700 ms, temp-file-then-move, never throws |
 | `Core\AlphaCompositor.cs` | **The only place allowed to write a foreign window's opacity.** `final = base * product(layers)` |
 | `Core\ShutdownListener.cs` | A message-only window, so the app can be asked to exit at all |
-| `Core\KeyboardHook.cs` | **The one low-level keyboard hook in the process**, shared and reference-counted. Read its header before adding a subscriber |
+| `Core\AppLifetime.cs` | **The exit flag and the exit watchdog.** `IsExiting` is checked at the top of both shared hooks; `BeginExit` makes shutdown idempotent; `StartWatchdog` guarantees the process actually ends |
+| `Core\HookThread.cs` | **The thread that owns the low-level hooks**, above-normal priority, running nothing but a `GetMessage` pump. Read its header before moving a hook off it — this is the file that decides whether the whole OS feels laggy |
+| `Core\KeyboardHook.cs` | **The one low-level keyboard hook in the process**, shared and reference-counted, installed on `HookThread`. Read its header before adding a subscriber |
+| `Core\MouseHook.cs` | **The one low-level mouse hook**, same arrangement. Subscribers declare an event mask (`Move` / `Buttons` / `Wheel`), and events the app injected itself arrive with `IsOurs` set |
+| `Core\SyntheticInput.cs` | **The only place allowed to inject keys or mouse events.** Everything it sends is tagged with `NativeMethods.SyntheticTag`, which is what makes `IsOurs` work |
+| `Core\SoundEngine.cs` | **Every sound the app makes**, synthesised into a WAV in memory and played through winmm on its own thread. No audio files, no disk, no dispatcher |
+| `Core\OverlayPlacement.cs` | **The only correct way to place an overlay from hook coordinates.** Hooks report physical pixels; `Window.Left` is in WPF units. Position via here, size via `ScaleAt` |
+| `Core\OsdWindow.cs` | A reusable on-screen readout (a line of text, optionally a meter). Click-through, reused rather than recreated, and its `Post` refuses work while the app is exiting |
 | `Core\WeatherService.cs` | **The only code in the app that touches the network.** open-meteo, off by default, inert until a city is set |
 | `Core\HotkeyManager.cs` | `RegisterHotKey(IntPtr.Zero, id, ...)`, ids from 9001, `WM_HOTKEY` dispatched off `ComponentDispatcher.ThreadPreprocessMessage`. Failed registrations are reported, not swallowed |
-| `Core\NativeMethods.cs` | The single P/Invoke surface — 54 `DllImport`s. Put new interop here, not in a feature |
+| `Core\NativeMethods.cs` | The single P/Invoke surface. Put new interop here, not in a feature |
 | `Core\SystemTrayManager.cs` | `NotifyIcon` + Settings / Restart / Exit. Uses `SystemIcons.Application` — the app has no icon of its own |
-| `Core\AudioManager.cs` | Speaker and mic mute over the MMDevice COM interfaces |
+| `Core\AudioManager.cs` | Speaker and mic mute, and the master volume, over the MMDevice COM interfaces. **The render endpoint is cached and only touched from the UI thread** — building it costs ~6,500 µs, which is far too much per wheel notch |
 | `Core\LayoutHistoryManager.cs` | Per-HWND rect stack behind `UndoLayoutFeature` |
 | `MainWindow.xaml(.cs)` | The settings window. Built from `FeatureRegistry`; a switch applies and persists immediately, so there is no Save button |
-| `Features\*.cs` | 39 features, one class each |
+| `Features\*.cs` | One feature per class |
 
-**Each feature is self-contained and nothing arbitrates between them.** A feature owns its own Win32 hooks, its own `DispatcherTimer`s, its own tuning constants and its own teardown. There is no render pipeline, no animation scheduler, no settings store, no tuning registry and no logging. Adding a feature is: a class, a field on `App`, a `Register` call, a `Dispose` call.
+**Each feature is self-contained, and the two places that arbitrate say so out loud.** A feature owns
+its own Win32 hooks, its own `DispatcherTimer`s and its own teardown. There is no render pipeline, no
+animation scheduler and no logging. Adding a feature is: a class, a field on `App`, a `Register` call,
+a `Dispose` call.
+
+The exceptions are documented in the code because two features cannot both own one button:
+`MiddleClickCloseFeature` and `TaskbarVolumeFeature` both step aside for `GrabPanFeature` while it is
+enabled, and act on the tagged click it replays instead. Anything else that wants the middle button
+has to join that arrangement rather than invent a second one.
+
+### `Apply` takes a state, never an instruction to flip
+
+`FeatureRegistry` calls a feature's `Apply` with the state it WANTS, so **an `Apply` handler must be
+idempotent** — `on => feature.SetEnabled(on)`, never `_ => feature.Toggle()`.
+
+Nine features used to be wired the second way, discarding the argument, and it stayed invisible only
+because the registry and the features happened to agree. Where they did not, the results were:
+Alt-Drag started with its private flag `true` while no hook was installed, so `Apply(true)` at
+startup turned it OFF and every switch read backwards for the rest of the session — including Game
+Mode, which switched it ON. Any new feature whose flag does not start `false` reproduces this.
 
 ### How state flows, and the rules that keep it honest
 
@@ -97,7 +123,24 @@ Five things that will bite you here:
   the process rather than trusting either route. A forced kill skips `OnExit`, which is what flushes
   settings **and** what lets each feature undo the opacity, tray-hiding and re-parenting it applied to
   other applications' windows.
-- **Game Mode's suppression must never reach `settings.json`.** Shift+Alt+F12 switches ~18 features
+- **Every exit path goes through `App.RequestShutdown`, and it is not a formality.** Measured: posting
+  `WM_CLOSE` to this process reaches **13–15 top-level windows**, so shutdown is genuinely requested
+  many times over, and WPF throws on the second `Shutdown()` — from inside a message handler, leaving
+  the first one half finished. `RequestShutdown` is idempotent, sets `AppLifetime.IsExiting` *before*
+  teardown so the hooks stop feeding the dispatcher (a hand resting on the mouse or a held key kept
+  queueing work onto the dispatcher that was trying to shut down), and arms a watchdog for the parts
+  of teardown whose timing the app does not control — COM calls into an audio endpoint being removed,
+  `SetParent` on a window whose owner has gone. **`MouseHook.Shutdown()` belongs in `OnExit` next to
+  `KeyboardHook.Shutdown()`**, and `HookThread.Stop()` must come *after* both: the pump is what
+  delivers hook callbacks, so stopping it with a hook still installed stalls input rather than
+  freeing it. Exiting with hooks live now measures ~130 ms.
+- **Game Mode's suspend list has to stay complete, and it is the second thing to check when a new
+  feature is added.** `FeatureKeys.GameModeSuspends` is what Shift+Alt+F12 switches off, and a feature
+  missing from it keeps a global input hook installed and keeps drawing top-most windows over a
+  full-screen game — which gets blamed on the game, because Game Mode reported that it had suspended
+  everything. Six entries were missing after the last round of features; every one of them held a
+  mouse or keyboard hook.
+- **Game Mode's suppression must never reach `settings.json`.** Shift+Alt+F12 switches ~24 features
   off in memory; persisting that would write the user's whole configuration as "off" with nothing left
   to restore it from. Three defences: `FeatureRegistry.Set(..., persist: false)`,
   `SettingsStore.SuppressPersistence` held for the duration, and a `Flush()` *before* the first flag is
@@ -207,9 +250,10 @@ Read from `App.OnStartup`, which is the only place they are declared. `Shift+Alt
 | `Shift+Alt+F12` | Game Mode - suspend interfering features, in memory only |
 | `Alt+F4` | Gravity-drop close |
 | `Ctrl+Alt+V` | Plain-text paste |
+| `Ctrl+Alt+C` | camelCase the selection (owned by the feature's keyboard hook, not by `RegisterHotKey`) |
 | `Ctrl+G` | Quick folder jump |
 
-Not hotkeys — the constructor-activated hooks: **triple `Esc`** → boss key, **double-tap `Alt`** → mic mute, **double-tap `Ctrl`** → spotlight, **`Shift+Alt+Wheel`** → transparency (a `WH_MOUSE_LL` hook gated on `GetAsyncKeyState` for Shift and Alt, clamping alpha to 25..255).
+Not hotkeys — gestures answered by the two shared hooks: **triple `Esc`** → boss key, **double-tap `Alt`** → mic mute, **double-tap `Ctrl`** → spotlight, **`Shift+Alt+Wheel`** → transparency (gated on `GetAsyncKeyState` for Shift and Alt, clamping alpha to 25..255), **tap `Caps Lock`** → Escape or Backspace, **hold the middle button and drag** → grab & pan, **wheel over the taskbar** → volume, **middle-click the taskbar** → mute, **shake the mouse** → find the cursor, **drag sideways across text** → magnifier.
 
 `Shift+Alt+Numpad*` is bound only under the digit names, so with NumLock **off** the keypad sends the navigation names and the whole tiling gesture is dead.
 
@@ -217,7 +261,17 @@ Not hotkeys — the constructor-activated hooks: **triple `Esc`** → boss key, 
 
 The model to copy for fidelity, and the only feature that carries the original physics: `EVENT_SYSTEM_MOVESIZESTART`/`END` for the drag, `EVENT_OBJECT_LOCATIONCHANGE` for velocity, an EMA with a **time constant** (`k = 1 - Exp(-dtMs / 30.0)`) over velocity in **pixels per second**, the `DWMWA_EXTENDED_FRAME_BOUNDS` ↔ `GetWindowRect` conversion on both origin and size, speed-scaled reach, a corner boost that retries the second axis once the first grabs, hysteresis, a direction penalty for a line the window is moving away from, and a quintic ease-out glide with overshoot.
 
-Two divergences that matter: its tuning values are `const` fields (`BASE_SNAP_DISTANCE` 30, `CORNER_BOOST` 2.2, `NEIGHBOUR_PROX` 90, `HYST` 5) rather than settings, and its glide is a per-feature `async` loop over `Task.Delay(15)` rather than one shared clock — so two features animating one window will fight, and there is no ownership claim to stop them.
+One divergence that remains: its glide is a per-feature `async` loop over `Task.Delay(15)` rather than one shared clock — so two features animating one window will fight, and there is no ownership claim to stop them.
+
+**It defers to Windows' own snap, and that deference is load-bearing.** Dragging a window to a screen
+edge triggers Aero Snap, which *resizes* the window, and that resize is not always finished when
+`EVENT_SYSTEM_MOVESIZEEND` arrives — so reading the rectangle immediately still showed the pre-snap
+size, a magnetic snap was computed from stale geometry, and the glide put the window somewhere in the
+middle of the screen at its original size. Two rules follow: the decision waits `SettleMs` (45 ms)
+and then bails out if the window was resized during the drag or is now maximised, and **the glide is
+move-only — `SWP_NOSIZE`, with no width or height passed in at all.** The glide used to re-apply the
+size it captured before the animation started, which silently undid anything that resized the window
+mid-glide. A magnetic snap has no business changing a window's size.
 
 ## Antivirus false positives — a first-class constraint
 
@@ -235,11 +289,17 @@ Rewriting in C++ would not help either — the keyboard hook is the signal, not 
 
 Rules that follow, and that must not be quietly undone:
 
-- **One keyboard hook, installed only on demand.** `Core/KeyboardHook.cs` is the single
-  `WH_KEYBOARD_LL` hook; four features used to install their own, which reads as a program determined
-  to capture keystrokes. Subscribe through it, never call `SetWindowsHookEx(WH_KEYBOARD_LL)` again.
+- **One keyboard hook and one mouse hook, installed only on demand.** `Core/KeyboardHook.cs` and
+  `Core/MouseHook.cs` are the single `WH_KEYBOARD_LL` and `WH_MOUSE_LL` hooks; four features used to
+  install their own keyboard hook and five their own mouse hook, which reads as a program determined
+  to capture input no matter what. Subscribe through them, never call `SetWindowsHookEx` again.
 - **Never retain a keystroke.** Subscribers keep a tap counter and a stopwatch. Storing, buffering or
-  logging key data would make the heuristic *correct*.
+  logging key data would make the heuristic *correct*. The keyboard-sound feature is the closest
+  call: it reads the virtual key to choose which click to play and discards it inside the callback,
+  keeping only one timestamp for throttling. A "which keys are currently held" set would be over the
+  line, which is why auto-repeat is thinned by time instead.
+- **All synthetic input goes through `Core/SyntheticInput.cs`.** One small file, no key buffering
+  anywhere near it, every event tagged so the app can recognise its own output.
 - **Never add a packer, obfuscator, single-file bundle, trimming or ReadyToRun.** Each is a documented
   cause of false positives; the reasons are recorded in `WindowTweaks.csproj` so nobody re-adds them.
 - **Keep the assembly metadata and `app.manifest` populated**, and keep the manifest at `asInvoker`.
@@ -269,7 +329,11 @@ The fix is one persistent record per window holding a **base** the user chose ti
 
 ### Win32 facts that cost real debugging time
 
+- **A low-level hook callback runs on the thread that installed the hook, and Windows holds the input event until it returns.** Install one from the UI thread and every mouse move in the whole OS queues behind WPF — a ripple animation, a clock tick, a settings window laying itself out. Past `LowLevelHooksTimeout` (300 ms by default) Windows stops waiting and *silently removes the hook*, so the symptom is not "slow" but "the gesture worked the second time". This is why `Core\HookThread.cs` exists and why nothing else may live on it. A handler's budget there is microseconds: no disk, no COM, no `SendMessage` without a very short timeout.
+- **Three coordinate spaces, not two.** On top of the frame-bounds pair below there is WPF: a hook reports **physical pixels**, and `Window.Left`/`Top`/`Width`/`Height` are **device-independent units**. Assigning one to the other is correct only at 100% scaling — at 150% every overlay lands two thirds of the way to the top-left corner, and on a 4K panel at 250% it lands off screen. That presents as "the feature does nothing", not as "it is in the wrong place", which is how it survived in four features at once. Position through `Core\OverlayPlacement.cs` (physical, via `SetWindowPos`) and divide any physical size by `ScaleAt`.
 - **Two coordinate spaces.** `DWMWA_EXTENDED_FRAME_BOUNDS` (attr 9) is the visible frame; `GetWindowRect` includes the invisible DWM border. Convert both origin *and* size or every snap lands ~7 px off.
+- **`SHAppBarMessage(ABM_SETSTATE)` is system-wide.** It takes one taskbar handle, but the auto-hide state it sets applies to *every* taskbar, secondary monitors included. There is no per-monitor form, so a decision taken from the primary monitor alone makes the second monitor's bar disappear with nothing on that monitor to explain why.
+- **`SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)`** takes a window out of screen capture. It is the only clean way to stop a magnifier photographing itself; keeping the lens clear of the region it magnifies is impossible near a screen edge, where it has to be clamped back over it.
 - **`DWMWA_CLOAKED`** (attr 14) is what filters UWP-suspended and other-virtual-desktop windows. `IsWindowVisible` alone does not catch them.
 - **Never `SendMessage` to a foreign window without a timeout.** A window whose thread is not pumping ("Not Responding") never returns and freezes the whole process with it. Use `SendMessageTimeout` with `SMTO_ABORTIFHUNG`.
 - **Never make a foreign window layered speculatively.** `SetLayeredWindowAttributes` forces `WS_EX_LAYERED`; on a GPU-composited or full-screen window that costs a redirection surface and can break exclusive full-screen presentation. Decide eligibility *before* touching it.

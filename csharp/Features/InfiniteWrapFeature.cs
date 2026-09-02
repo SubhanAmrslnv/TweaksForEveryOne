@@ -17,9 +17,16 @@ public class InfiniteWrapFeature : IDisposable
     private const int SPEED_MIN = 250; // Approach speed px/s minimum
     private const int COOLDOWN_MS = 700; // ms before it can wrap again
 
-    public void Toggle()
+    public bool IsEnabled => _enabled;
+
+    /// <summary>
+    /// IDEMPOTENT: FeatureRegistry calls Apply with the state it wants, not with an instruction to
+    /// flip. See MagneticSnappingFeature.SetEnabled.
+    /// </summary>
+    public void SetEnabled(bool enabled)
     {
-        _enabled = !_enabled;
+        if (enabled == _enabled) return;
+        _enabled = enabled;
 
         if (_enabled)
         {
@@ -33,6 +40,8 @@ public class InfiniteWrapFeature : IDisposable
             _cts = null;
         }
     }
+
+    public void Toggle() => SetEnabled(!_enabled);
 
     private async Task RunMonitorLoop(CancellationToken token)
     {

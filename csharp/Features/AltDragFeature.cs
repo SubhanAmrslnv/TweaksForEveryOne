@@ -1,16 +1,20 @@
 using System;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Windows.Threading;
 using WindowTweaks.Core;
 
 namespace WindowTweaks.Features;
 
 public class AltDragFeature : IDisposable
 {
-    private bool _enabled = true;
-    private IntPtr _hook = IntPtr.Zero;
-    private NativeMethods.LowLevelMouseProc _procDelegate;
+    /// <summary>
+    /// FALSE, and it matters. This field used to start as true while no hook was installed, so the
+    /// feature and the registry disagreed from the first line of OnStartup: the registry defaults
+    /// Alt-Drag to ON, called Apply(true), and Apply was wired to Toggle() - which flipped this to
+    /// false and unsubscribed. Alt-drag was therefore dead whenever the settings window said it was
+    /// on, and ALIVE during Game Mode, which is supposed to switch it off. The state a feature
+    /// reports has to be the state it is actually in.
+    /// </summary>
+    private bool _enabled;
 
     private const int HTCAPTION = 2;
     private const int WM_NCLBUTTONDOWN = 0x00A1;
@@ -39,91 +43,74 @@ public class AltDragFeature : IDisposable
 
     public AltDragFeature()
     {
-        _procDelegate = new NativeMethods.LowLevelMouseProc(HookCallback);
     }
 
-    public void Toggle()
-    {
-        _enabled = !_enabled;
+    public bool IsEnabled => _enabled;
 
-        if (_enabled)
-        {
-            if (_hook == IntPtr.Zero)
-            {
-                using (var curProcess = Process.GetCurrentProcess())
-                using (var curModule = curProcess.MainModule)
-                {
-                    _hook = NativeMethods.SetWindowsHookEx(NativeMethods.WH_MOUSE_LL, _procDelegate, NativeMethods.GetModuleHandle(curModule.ModuleName), 0);
-                }
-            }
-        }
-        else
-        {
-            if (_hook != IntPtr.Zero)
-            {
-                NativeMethods.UnhookWindowsHookEx(_hook);
-                _hook = IntPtr.Zero;
-            }
-        }
+    /// <summary>
+    /// IDEMPOTENT, and it has to stay that way. FeatureRegistry calls a feature's Apply with the
+    /// state it WANTS, so an Apply that flips instead of setting only works while the two never
+    /// disagree - and Game Mode is precisely the case where they do.
+    /// </summary>
+    public void SetEnabled(bool enabled)
+    {
+        if (enabled == _enabled) return;
+        _enabled = enabled;
+
+        // Buttons only: this handler reads Alt and then queries the window under the cursor, and
+        // calling it for every mouse move would be that work a hundred times a second for nothing.
+        if (_enabled) MouseHook.Subscribe("AltDragFeature", MouseEvents.Buttons, HookCallback);
+        else MouseHook.Unsubscribe("AltDragFeature");
     }
 
-    private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    public void Toggle() => SetEnabled(!_enabled);
+
+    private bool HookCallback(MouseHook.MouseEvent e)
     {
-        if (nCode >= 0)
+        if (e.Message == WM_LBUTTONDOWN)
         {
-            int msg = wParam.ToInt32();
-
-            if (msg == WM_LBUTTONDOWN)
+            // Check if Alt is held
+            short altState = GetAsyncKeyState(VK_MENU);
+            if ((altState & 0x8000) != 0)
             {
-                // Check if Alt is held
-                short altState = GetAsyncKeyState(VK_MENU);
-                if ((altState & 0x8000) != 0)
+                // Get window under cursor
+                NativeMethods.POINT pt = new NativeMethods.POINT { X = e.X, Y = e.Y };
+                IntPtr hwnd = NativeMethods.WindowFromPoint(pt);
+                if (hwnd != IntPtr.Zero)
                 {
-                    var hookStruct = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
-
-                    // Get window under cursor
-                    NativeMethods.POINT pt = new NativeMethods.POINT { X = hookStruct.pt.X, Y = hookStruct.pt.Y };
-                    IntPtr hwnd = NativeMethods.WindowFromPoint(pt);
-                    if (hwnd != IntPtr.Zero)
+                    IntPtr root = NativeMethods.GetAncestor(hwnd, NativeMethods.GA_ROOT);
+                    if (root != IntPtr.Zero)
                     {
-                        IntPtr root = NativeMethods.GetAncestor(hwnd, NativeMethods.GA_ROOT);
-                        if (root != IntPtr.Zero)
+                        // Skip maximized windows
+                        WINDOWPLACEMENT placement = new WINDOWPLACEMENT();
+                        placement.length = Marshal.SizeOf(typeof(WINDOWPLACEMENT));
+                        if (GetWindowPlacement(root, ref placement))
                         {
-                            // Skip maximized windows
-                            WINDOWPLACEMENT placement = new WINDOWPLACEMENT();
-                            placement.length = Marshal.SizeOf(typeof(WINDOWPLACEMENT));
-                            if (GetWindowPlacement(root, ref placement))
+                            if (placement.showCmd == SW_SHOWMAXIMIZED)
                             {
-                                if (placement.showCmd == SW_SHOWMAXIMIZED)
-                                {
-                                    // Don't drag maximized windows
-                                    return NativeMethods.CallNextHookEx(_hook, nCode, wParam, lParam);
-                                }
+                                // Don't drag maximized windows
+                                return false;
                             }
-
-                            // Activate the window
-                            NativeMethods.SetForegroundWindow(root);
-
-                            // Trigger native drag
-                            NativeMethods.PostMessage(root, (uint)WM_NCLBUTTONDOWN, new IntPtr(HTCAPTION), IntPtr.Zero);
-
-                            // Swallow the original click so we don't click on buttons inside the window
-                            return new IntPtr(1);
                         }
+
+                        // Activate the window
+                        NativeMethods.SetForegroundWindow(root);
+
+                        // Trigger native drag
+                        NativeMethods.PostMessage(root, (uint)WM_NCLBUTTONDOWN, new IntPtr(HTCAPTION), IntPtr.Zero);
+
+                        // Swallow the original click so we don't click on buttons inside the window
+                        return true;
                     }
                 }
             }
         }
 
-        return NativeMethods.CallNextHookEx(_hook, nCode, wParam, lParam);
+        return false;
     }
 
     public void Dispose()
     {
-        if (_hook != IntPtr.Zero)
-        {
-            NativeMethods.UnhookWindowsHookEx(_hook);
-            _hook = IntPtr.Zero;
-        }
+        SetEnabled(false);
     }
 }
