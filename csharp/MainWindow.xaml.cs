@@ -53,6 +53,10 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        // Null is a valid value here - it means "keep the WPF default" - so an icon that
+        // failed to load costs a generic title bar, not a crash on opening settings.
+        Icon = Core.AppIcon.WindowIcon;
+
         SubtitleText.Text = "Settings apply instantly";
         SettingsPathText.Text = SettingsStore.FilePath;
 

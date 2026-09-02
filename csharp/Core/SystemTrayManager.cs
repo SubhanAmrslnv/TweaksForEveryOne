@@ -12,7 +12,7 @@ public class SystemTrayManager : IDisposable
     {
         _notifyIcon = new NotifyIcon
         {
-            Icon = System.Drawing.SystemIcons.Application,
+            Icon = AppIcon.Tray,
             Visible = true,
             Text = "TweaksForEveryOne (.NET)"
         };

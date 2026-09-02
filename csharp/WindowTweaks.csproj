@@ -8,6 +8,12 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- The Win32 icon compiled into the .exe: what Explorer, the taskbar, Alt+Tab and the
+         Properties dialog show. The .ico carries 16/20/24/32/40/48/64/96/128/256 px frames,
+         so every shell surface picks a real frame instead of upscaling one. It is also
+         embedded as a resource below, so the tray and window icons load the same asset. -->
+    <ApplicationIcon>..\Project_Icon\Icon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <!--
@@ -80,5 +86,11 @@
          useful thing to be able to say in a false-positive report. -->
     <Deterministic>true</Deterministic>
   </PropertyGroup>
+
+  <!-- Same icon, embedded so runtime code can load it without depending on a file next to
+       the exe. See Core\AppIcon.cs. -->
+  <ItemGroup>
+    <Resource Include="..\Project_Icon\Icon.ico" Link="Icon.ico" />
+  </ItemGroup>
 
 </Project>
