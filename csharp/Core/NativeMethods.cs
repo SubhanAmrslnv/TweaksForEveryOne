@@ -578,4 +578,38 @@ internal static class NativeMethods
     /// </summary>
     [DllImport("user32.dll")]
     public static extern uint GetClipboardSequenceNumber();
+
+    // ---------------------------------------------------------------------------------------
+    // Telling a text selection from a window drag.
+    //
+    // The text magnifier used to trust "the drag moved mostly sideways", which is also true of
+    // dragging a window by its title bar - so the lens appeared over every horizontal window move.
+    // Two cheap questions separate the two: WHERE the press landed (HTCLIENT, or a caption/border),
+    // and WHICH CURSOR the target chose for that spot. Text areas show the I-beam; a caption, a tab
+    // strip and empty client space show the plain arrow.
+    // ---------------------------------------------------------------------------------------
+
+    /// <summary>WM_NCHITTEST result meaning "inside the client area" - the only place text lives.</summary>
+    public const int HTCLIENT = 1;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct CURSORINFO
+    {
+        public int cbSize;
+        public int flags;
+        public IntPtr hCursor;
+        public POINT ptScreenPos;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetCursorInfo(ref CURSORINFO pci);
+
+    /// <summary>The system cursors, whose handles are shared - so a handle comparison identifies them.</summary>
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr LoadCursor(IntPtr hInstance, int lpCursorName);
+
+    public const int IDC_ARROW = 32512;
+    public const int IDC_IBEAM = 32513;
+    public const int IDC_SIZEALL = 32646;
 }

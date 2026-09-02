@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -34,10 +35,28 @@ namespace WindowTweaks.Features;
 ///      the whole duration of a drag. All four are now created once and reused: the capture goes
 ///      into one Bitmap and is copied into one WriteableBitmap.
 ///
-/// It is also GATED so it does not appear on every left-drag. A drag that moves mostly sideways is a
-/// text selection; a drag that moves mostly vertically is a scroll, a window move or dragging a file.
-/// Requiring horizontal dominance keeps the lens out of the way of all three without needing to know
-/// what is under the cursor.
+/// It is also GATED so it does not appear on every left-drag, and horizontal dominance alone is NOT
+/// enough of a gate: dragging a window by its title bar moves mostly sideways too, which is why the
+/// lens used to open over every window move. Four tests have to agree, and the last three are done
+/// on the UI thread because they cost more than a hook callback may spend:
+///
+///   1. THE DRAG MOVES MOSTLY SIDEWAYS. Free, and rejects scrolling and dragging a file downwards.
+///      Once the gesture has declared itself either way it is not reconsidered - a selection that
+///      wraps down several lines is still a selection.
+///
+///   2. THE PRESS LANDED IN A CLIENT AREA. WM_NCHITTEST at the press point: a caption, a border or a
+///      scrollbar is never text, and the caption is the window drag this gate exists to reject.
+///      Cross-process, so it goes through SendMessageTimeout with SMTO_ABORTIFHUNG.
+///
+///   3. THE TARGET CHOSE A TEXT CURSOR. Applications with a custom frame (browsers, Electron apps)
+///      answer HTCLIENT for their tab strip, so the hit test alone still lets a window drag through.
+///      Over text the cursor is an I-beam; over a tab strip, a toolbar or empty client space it is
+///      the plain arrow. A cursor the application supplied itself is allowed through, and test 4
+///      catches it if it turns out to have been a drag.
+///
+///   4. THE WINDOW UNDER THE PRESS DID NOT MOVE. Checked every tick while the lens is open, because
+///      nothing measured at press time can rule out a frame the application drags itself. If it
+///      moves, the lens closes and stays closed for the rest of the press.
 /// </summary>
 public class TextMagnifierFeature : IDisposable
 {
@@ -46,10 +65,17 @@ public class TextMagnifierFeature : IDisposable
     /// <summary>The lens size in physical pixels. The source box it magnifies is this over the zoom.</summary>
     private const int LensPx = 220;
 
+    /// <summary>How long the target gets to answer WM_NCHITTEST before it is treated as hung.</summary>
+    private const uint ProbeTimeoutMs = 40;
+
     private bool _pressed;
     private bool _active;
     private int _startX;
     private int _startY;
+
+    // The top-level window the press landed on, and where it was at that moment. Test 4 above.
+    private IntPtr _target;
+    private NativeMethods.RECT _targetRect;
 
     private Window? _window;
     private Image? _image;
@@ -72,6 +98,7 @@ public class TextMagnifierFeature : IDisposable
         {
             _pressed = false;
             _active = false;
+            _target = IntPtr.Zero;
             MouseHook.Subscribe(HookOwner, MouseEvents.Buttons | MouseEvents.Move, OnMouse);
         }
         else
@@ -79,6 +106,7 @@ public class TextMagnifierFeature : IDisposable
             MouseHook.Unsubscribe(HookOwner);
             _pressed = false;
             _active = false;
+            _target = IntPtr.Zero;
             OsdWindow.RunOnUi(TearDown);
         }
     }
@@ -116,9 +144,11 @@ public class TextMagnifierFeature : IDisposable
                 int threshold = TuningRegistry.Int(TuningRegistry.MagnifierDragThreshold);
                 if (dx < threshold && dy < threshold) return false;
 
-                // Horizontal dominance: a selection sweeps sideways, a scroll or a window drag does
-                // not. Once the gesture has declared itself either way, stop reconsidering it -
-                // a selection that later wraps down several lines is still a selection.
+                // Test 1 only, and it is the free one. The hook thread may not run the others: a
+                // low-level hook holds up every input event in the OS until it returns, and the hit
+                // test is a cross-process SendMessage. Start() finishes the decision.
+                // Once the gesture has declared itself either way, stop reconsidering it - a
+                // selection that later wraps down several lines is still a selection.
                 if (dx <= dy)
                 {
                     // Committed to "not a selection" for the rest of this press.
@@ -139,6 +169,15 @@ public class TextMagnifierFeature : IDisposable
     {
         if (!IsEnabled || !_active) return;
 
+        // Tests 2 and 3. Rejecting here gives up on the whole press, so a window drag cannot re-arm
+        // the lens by wobbling the cursor.
+        if (!LooksLikeTextSelection())
+        {
+            _active = false;
+            _pressed = false;
+            return;
+        }
+
         try
         {
             Build();
@@ -153,6 +192,83 @@ public class TextMagnifierFeature : IDisposable
         }
         catch
         {
+        }
+    }
+
+    /// <summary>
+    /// Answers "was the press that started this drag a press on text" - tests 2 and 3 in the class
+    /// comment. Also records the window the press landed on, which is what test 4 watches.
+    /// </summary>
+    private bool LooksLikeTextSelection()
+    {
+        _target = IntPtr.Zero;
+
+        try
+        {
+            NativeMethods.POINT pt = new() { X = _startX, Y = _startY };
+
+            IntPtr hwnd = NativeMethods.WindowFromPoint(pt);
+            if (hwnd == IntPtr.Zero) return false;
+
+            // Never our own windows: the lens is click-through, but the settings window is not.
+            NativeMethods.GetWindowThreadProcessId(hwnd, out uint pid);
+            if (pid == (uint)Environment.ProcessId) return false;
+
+            IntPtr root = NativeMethods.GetAncestor(hwnd, NativeMethods.GA_ROOT);
+            if (root != IntPtr.Zero && NativeMethods.IsWindow(root) &&
+                NativeMethods.GetWindowRect(root, out NativeMethods.RECT rect))
+            {
+                _target = root;
+                _targetRect = rect;
+            }
+
+            // Test 2. A window that does not answer in time has told us nothing either way, so the
+            // decision passes to the cursor rather than turning a busy window into a rejection.
+            IntPtr lParam = (IntPtr)(((_startY & 0xFFFF) << 16) | (_startX & 0xFFFF));
+
+            IntPtr sent = NativeMethods.SendMessageTimeout(
+                hwnd, NativeMethods.WM_NCHITTEST, IntPtr.Zero, lParam,
+                NativeMethods.SMTO_ABORTIFHUNG, ProbeTimeoutMs, out IntPtr area);
+
+            if (sent != IntPtr.Zero && area.ToInt64() != NativeMethods.HTCLIENT) return false;
+
+            // Test 3. System cursor handles are shared, so identifying one is a handle comparison
+            // and not a bitmap inspection.
+            NativeMethods.CURSORINFO ci = new() { cbSize = Marshal.SizeOf<NativeMethods.CURSORINFO>() };
+            if (!NativeMethods.GetCursorInfo(ref ci) || ci.hCursor == IntPtr.Zero) return false;
+
+            if (ci.hCursor == NativeMethods.LoadCursor(IntPtr.Zero, NativeMethods.IDC_IBEAM)) return true;
+            if (ci.hCursor == NativeMethods.LoadCursor(IntPtr.Zero, NativeMethods.IDC_ARROW)) return false;
+            if (ci.hCursor == NativeMethods.LoadCursor(IntPtr.Zero, NativeMethods.IDC_SIZEALL)) return false;
+
+            // A cursor the application supplied itself. Editors ship their own I-beam, so refusing
+            // here would switch the lens off in the applications it is most wanted in.
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Test 4: the window under the press has moved, so this was a drag of a frame the application
+    /// draws itself - a browser tab strip, an Electron title bar - and not a text selection.
+    /// </summary>
+    private bool TargetMoved()
+    {
+        if (_target == IntPtr.Zero) return false;
+
+        try
+        {
+            if (!NativeMethods.IsWindow(_target)) return true;
+            if (!NativeMethods.GetWindowRect(_target, out NativeMethods.RECT now)) return false;
+
+            return now.Left != _targetRect.Left || now.Top != _targetRect.Top;
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -261,6 +377,16 @@ public class TextMagnifierFeature : IDisposable
         // must be able to stop the timer that a disabled feature would otherwise keep running.
         if (!IsEnabled || !_active)
         {
+            Stop();
+            return;
+        }
+
+        if (TargetMoved())
+        {
+            // Give up on the whole press, not just this frame: the window is on the move and every
+            // later frame would reach the same answer.
+            _active = false;
+            _pressed = false;
             Stop();
             return;
         }

@@ -644,6 +644,7 @@ public partial class App : System.Windows.Application
         Dispose(_gravityCloseFeature);
         Dispose(_trayMinimizeFeature);
         Dispose(_stealthPanicTrigger);
+        Dispose(_micMuteFeature);
         Dispose(_doubleAltTrigger);
         Dispose(_doubleCtrlTrigger);
 

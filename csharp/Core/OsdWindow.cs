@@ -35,9 +35,6 @@ internal sealed class OsdWindow : IDisposable
     private Grid? _meterHost;
     private DispatcherTimer? _hideTimer;
 
-    /// <summary>Held so a fade that is already running can be replaced rather than raced.</summary>
-    private bool _fading;
-
     public OsdWindow(double minWidth = 0)
     {
         _minWidth = minWidth;
@@ -125,15 +122,16 @@ internal sealed class OsdWindow : IDisposable
                 }
             }
 
-            // Cancel any fade before measuring: an animation still holding OpacityProperty wins
-            // over a plain assignment, so the overlay would stay on its way out and vanish
-            // mid-gesture.
-            if (_fading)
-            {
-                _window.BeginAnimation(UIElement.OpacityProperty, null);
-                _fading = false;
-            }
-
+            // ALWAYS clear the fade, running or finished. This is unconditional for a reason: a
+            // DoubleAnimation defaults to FillBehavior.HoldEnd, so a fade that has COMPLETED still
+            // owns OpacityProperty and still holds it at 0 - and an animated value beats a plain
+            // assignment, so the line below is silently discarded while it is installed.
+            //
+            // Clearing it only while a fade was in flight is what made every readout in the app a
+            // one-shot: the first Show worked, the fade ran, and from then on the window was shown,
+            // placed and timed out completely invisibly. That reads as "the volume wheel broke after
+            // one use", which is exactly what it was reported as.
+            _window.BeginAnimation(UIElement.OpacityProperty, null);
             _window.Opacity = 1;
 
             if (!_window.IsVisible) _window.Show();
@@ -144,7 +142,15 @@ internal sealed class OsdWindow : IDisposable
             OverlayPlacement.CentreOn(_window, physicalX, physicalY + 28);
             OverlayPlacement.MakeClickThrough(_window);
 
-            _hideTimer ??= new DispatcherTimer();
+            // Build always leaves this wired, but create it with its handler attached rather than
+            // bare: a DispatcherTimer with no Tick subscriber never hides the readout, so the
+            // overlay would sit on screen for the rest of the session.
+            if (_hideTimer == null)
+            {
+                _hideTimer = new DispatcherTimer();
+                _hideTimer.Tick += OnHideTick;
+            }
+
             _hideTimer.Stop();
             _hideTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(50, holdMs));
             _hideTimer.Start();
@@ -164,7 +170,6 @@ internal sealed class OsdWindow : IDisposable
             if (_window != null)
             {
                 _window.BeginAnimation(UIElement.OpacityProperty, null);
-                _fading = false;
                 _window.Hide();
             }
         }
@@ -269,11 +274,12 @@ internal sealed class OsdWindow : IDisposable
             // layered window still costs a redirection surface and still answers WindowFromPoint.
             fade.Completed += (_, _) =>
             {
-                _fading = false;
                 try { _window?.Hide(); } catch { }
             };
 
-            _fading = true;
+            // The animation is deliberately left installed here rather than cleared on completion:
+            // clearing it reverts Opacity to the base value, which is 1, so the overlay would flash
+            // back to fully opaque for a frame before Hide ran. Show clears it instead.
             _window.BeginAnimation(UIElement.OpacityProperty, fade);
         }
         catch
