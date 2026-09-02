@@ -46,18 +46,46 @@ compile_commands.json
 *.a
 tweaksd
 
-# .NET Core / C# Project Ignores
+# .NET / C# build output (csharp\). These are also tracked in git from before
+# these rules landed - `git rm -r --cached` them or they keep making diff noise.
 bin/
 obj/
 csharp/bin/
 csharp/obj/
+csharp/publish/
+csharp/**/bin/
+csharp/**/obj/
+
+# Visual Studio per-user state and caches
+.vs/
+csharp/.vs/
 *.user
 *.userosscache
-*.sln.docstates
-.vs/
-TestResults/
-*.suo
 *.userprefs
+*.suo
+*.sln.docstates
+*.VC.db
+*.VC.VC.opendb
+
+# NuGet
 packages/
-*/csharp/bin
-*/csharp/.vs
+*.nupkg
+*.snupkg
+.nuget/
+
+# Test / coverage output
+TestResults/
+[Cc]overage*/
+*.coverage
+*.coveragexml
+*.trx
+
+# Publish / signing artefacts
+PublishProfiles/*.pubxml.user
+*.pfx
+*.snk
+
+# Build logs and crash dumps
+*.binlog
+msbuild.log
+*.dmp
