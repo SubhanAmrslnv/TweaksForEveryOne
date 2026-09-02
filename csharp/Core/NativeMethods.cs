@@ -498,20 +498,72 @@ internal static class NativeMethods
     public static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
 
     // ---------------------------------------------------------------------------------------
-    // Sound. PlaySound with SND_MEMORY | SND_ASYNC plays a WAV that was synthesised in memory and
-    // returns immediately, so a keystroke sound can be started from the hook thread itself without
-    // a dispatcher round trip. See Core/SoundEngine.cs.
+    // Sound. The waveOut family, NOT PlaySound.
+    //
+    // PlaySound(SND_MEMORY | SND_ASYNC) opens and closes a stream on the default endpoint on EVERY
+    // call, and on Windows 11 waveOut is emulated over WASAPI - so a keystroke click asked the audio
+    // engine to build and tear down a stream up to twenty times a second. Sustained typing made
+    // those calls start failing, silently (SND_NODEFAULT turns a failure into silence), until the
+    // engine caught up: the keyboard sound cut out for a stretch and then came back on its own.
+    //
+    // waveOut lets the device be opened ONCE and kept open for as long as sounds keep arriving, so
+    // a click costs a buffer write and nothing else. See Core/SoundEngine.cs.
     // ---------------------------------------------------------------------------------------
 
-    [DllImport("winmm.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool PlaySound(IntPtr pszSound, IntPtr hmod, uint fdwSound);
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WAVEFORMATEX
+    {
+        public ushort wFormatTag;
+        public ushort nChannels;
+        public uint nSamplesPerSec;
+        public uint nAvgBytesPerSec;
+        public ushort nBlockAlign;
+        public ushort wBitsPerSample;
+        public ushort cbSize;
+    }
 
-    public const uint SND_ASYNC = 0x0001;
-    public const uint SND_NODEFAULT = 0x0002;
-    public const uint SND_MEMORY = 0x0004;
-    public const uint SND_PURGE = 0x0040;
-    public const uint SND_NOSTOP = 0x0010;
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WAVEHDR
+    {
+        public IntPtr lpData;
+        public uint dwBufferLength;
+        public uint dwBytesRecorded;
+        public IntPtr dwUser;
+        public uint dwFlags;
+        public uint dwLoops;
+        public IntPtr lpNext;
+        public IntPtr reserved;
+    }
+
+    [DllImport("winmm.dll")]
+    public static extern uint waveOutOpen(out IntPtr phwo, uint uDeviceID, ref WAVEFORMATEX pwfx,
+        IntPtr dwCallback, IntPtr dwInstance, uint fdwOpen);
+
+    [DllImport("winmm.dll")]
+    public static extern uint waveOutPrepareHeader(IntPtr hwo, IntPtr pwh, uint cbwh);
+
+    [DllImport("winmm.dll")]
+    public static extern uint waveOutUnprepareHeader(IntPtr hwo, IntPtr pwh, uint cbwh);
+
+    [DllImport("winmm.dll")]
+    public static extern uint waveOutWrite(IntPtr hwo, IntPtr pwh, uint cbwh);
+
+    [DllImport("winmm.dll")]
+    public static extern uint waveOutReset(IntPtr hwo);
+
+    [DllImport("winmm.dll")]
+    public static extern uint waveOutClose(IntPtr hwo);
+
+    public const uint MMSYSERR_NOERROR = 0;
+
+    /// <summary>Open whatever the system's preferred output device is, rather than a fixed index.</summary>
+    public const uint WAVE_MAPPER = 0xFFFFFFFF;
+
+    public const ushort WAVE_FORMAT_PCM = 1;
+    public const uint CALLBACK_NULL = 0x00000000;
+
+    /// <summary>WAVEHDR.dwFlags: the driver has finished with this buffer, so it can be reused.</summary>
+    public const uint WHDR_DONE = 0x00000001;
 
     // ---------------------------------------------------------------------------------------
     // Mouse messages and the tag this process stamps on its own synthetic input.

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 
@@ -137,6 +137,7 @@ internal static class TuningRegistry
 
     // --- Text magnifier -----------------------------------------------------------------------
     public const string MagnifierZoom = "magnifier.zoom";
+    public const string MagnifierLensSize = "magnifier.lensSize";
     public const string MagnifierDragThreshold = "magnifier.dragThreshold";
 
     // --- Middle click and grab & pan ----------------------------------------------------------
@@ -251,7 +252,7 @@ internal static class TuningRegistry
         new TuningDescriptor
         {
             Key = RippleRadius, Page = PageAnimation, Group = "Ripple click",
-            Title = "Ring size", Unit = "px", Min = 10, Max = 200, Default = 44,
+            Title = "Ring size", Unit = "px", Min = 10, Max = 200, Default = 22,
             Description = "How far the ring expands from the cursor before it finishes fading."
         },
         new TuningDescriptor
@@ -421,6 +422,12 @@ internal static class TuningRegistry
             Key = MagnifierZoom, Page = PagePower, Group = "Text magnifier",
             Title = "Magnification", Unit = "x", Min = 2, Max = 8, Default = 3,
             Description = "How much the lens enlarges. Takes effect the next time the feature is switched on, because the capture buffers are sized once rather than per frame."
+        },
+        new TuningDescriptor
+        {
+            Key = MagnifierLensSize, Page = PagePower, Group = "Text magnifier",
+            Title = "Lens size", Unit = "px", Min = 80, Max = 320, Default = 130,
+            Description = "The diameter of the round lens. Like magnification, it takes effect the next time the feature is switched on, because the capture buffers are sized once rather than per frame."
         },
         new TuningDescriptor
         {

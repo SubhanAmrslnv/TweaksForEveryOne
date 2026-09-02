@@ -55,7 +55,7 @@ dotnet publish .\csharp\WindowTweaks.csproj -c Release -r win-x64 --self-contain
 | `Core\KeyboardHook.cs` | **The one low-level keyboard hook in the process**, shared and reference-counted, installed on `HookThread`. Read its header before adding a subscriber |
 | `Core\MouseHook.cs` | **The one low-level mouse hook**, same arrangement. Subscribers declare an event mask (`Move` / `Buttons` / `Wheel`), and events the app injected itself arrive with `IsOurs` set |
 | `Core\SyntheticInput.cs` | **The only place allowed to inject keys or mouse events.** Everything it sends is tagged with `NativeMethods.SyntheticTag`, which is what makes `IsOurs` work |
-| `Core\SoundEngine.cs` | **Every sound the app makes**, synthesised into a WAV in memory and played through winmm on its own thread. No audio files, no disk, no dispatcher |
+| `Core\SoundEngine.cs` | **Every sound the app makes**, synthesised as PCM in memory and written to a winmm `waveOut` device from its own thread. No audio files, no disk, no dispatcher. The device is opened once and held while sounds keep arriving - `PlaySound` opened and tore down a stream per click, which is what made the keyboard sound cut out for stretches and come back on its own |
 | `Core\OverlayPlacement.cs` | **The only correct way to place an overlay from hook coordinates.** Hooks report physical pixels; `Window.Left` is in WPF units. Position via here, size via `ScaleAt` |
 | `Core\OsdWindow.cs` | A reusable on-screen readout (a line of text, optionally a meter). Click-through, reused rather than recreated, and its `Post` refuses work while the app is exiting |
 | `Core\WeatherService.cs` | **The only code in the app that touches the network.** open-meteo, off by default, inert until a city is set |

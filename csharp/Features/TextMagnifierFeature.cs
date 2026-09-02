@@ -6,12 +6,13 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 using WindowTweaks.Core;
 using Brushes = System.Windows.Media.Brushes;
 using Color = System.Windows.Media.Color;
-using Image = System.Windows.Controls.Image;
 using PixelFormat = System.Drawing.Imaging.PixelFormat;
+using Rectangle = System.Drawing.Rectangle;
 
 namespace WindowTweaks.Features;
 
@@ -62,8 +63,12 @@ public class TextMagnifierFeature : IDisposable
 {
     private const string HookOwner = nameof(TextMagnifierFeature);
 
-    /// <summary>The lens size in physical pixels. The source box it magnifies is this over the zoom.</summary>
-    private const int LensPx = 220;
+    /// <summary>
+    /// The lens diameter in physical pixels, from magnifier.lensSize. Captured in Build() rather
+    /// than read per frame: the capture buffers are sized from it, and Refresh() consumes it 25
+    /// times a second - see the "read a tuning value once per operation" rule in CLAUDE.md.
+    /// </summary>
+    private int _lensPx = 130;
 
     /// <summary>How long the target gets to answer WM_NCHITTEST before it is treated as hung.</summary>
     private const uint ProbeTimeoutMs = 40;
@@ -78,7 +83,7 @@ public class TextMagnifierFeature : IDisposable
     private NativeMethods.RECT _targetRect;
 
     private Window? _window;
-    private Image? _image;
+    private Ellipse? _lens;
     private DispatcherTimer? _timer;
 
     // Created once per session and reused every frame. See fault 3 above.
@@ -295,35 +300,46 @@ public class TextMagnifierFeature : IDisposable
         ReleaseCaptureBuffers();
 
         int zoom = Math.Max(2, TuningRegistry.Int(TuningRegistry.MagnifierZoom));
-        _sourcePx = Math.Max(16, LensPx / zoom);
+        _lensPx = Math.Max(40, TuningRegistry.Int(TuningRegistry.MagnifierLensSize));
+        _sourcePx = Math.Max(16, _lensPx / zoom);
 
         _capture = new Bitmap(_sourcePx, _sourcePx, PixelFormat.Format32bppRgb);
         _captureGraphics = Graphics.FromImage(_capture);
         _surface = new WriteableBitmap(_sourcePx, _sourcePx, 96, 96, PixelFormats.Bgr32, null);
 
-        _image = new Image
+        // A REAL circle, and it has to be a brush rather than a clip to be one. The child of a
+        // Border with a large CornerRadius is not clipped to the radius - ClipToBounds clips to the
+        // rectangle - so the previous version drew a square image inside a round outline. An
+        // EllipseGeometry clip would work but has to be rebuilt whenever the logical size changes,
+        // which happens every time the lens crosses onto a monitor with a different scale. Filling
+        // an Ellipse with the capture instead lets WPF do the clipping: the shape stretches with
+        // the window and the brush follows it, with no geometry to keep in step.
+        //
+        // The brush holds the same WriteableBitmap the capture writes into, so a frame is still one
+        // WritePixels and nothing allocated - see fault 3 above.
+        ImageBrush fill = new(_surface)
         {
-            Source = _surface,
-            Stretch = Stretch.Fill,
-
             // Point sampling would show hard pixel blocks; the lens is for READING, so the
             // interpolated version is the useful one.
-            SnapsToDevicePixels = false
+            Stretch = Stretch.Fill
         };
 
-        Border frame = new()
+        _lens = new Ellipse
         {
-            // A modest radius, NOT a circle. A large CornerRadius rounds the border's own stroke but
-            // does not clip the child - ClipToBounds clips to the rectangle, not to the radius - so
-            // asking for a circle produced a square image inside a round outline. Clipping to an
-            // ellipse would need a geometry rebuilt on every DPI change, for no gain: what the lens
-            // is for is reading the text, and a rectangle shows more of the line than a circle does.
-            CornerRadius = new CornerRadius(10),
-            BorderThickness = new Thickness(2),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0xB0, 0xFF, 0xFF, 0xFF)),
-            Background = Brushes.Black,
-            Child = _image,
-            ClipToBounds = true
+            Fill = fill,
+            Stroke = new SolidColorBrush(Color.FromArgb(0xB0, 0xFF, 0xFF, 0xFF)),
+            StrokeThickness = 2,
+
+            // A stroke is centred on the path, so half of it lies outside the ellipse. Without the
+            // inset that half falls outside the window and is clipped away, leaving a rim that is
+            // thinner at the top and left than the width asks for.
+            Margin = new Thickness(1)
+        };
+
+        Grid frame = new()
+        {
+            Background = Brushes.Transparent,
+            Children = { _lens }
         };
 
         _window = new Window
@@ -413,7 +429,7 @@ public class TextMagnifierFeature : IDisposable
         // the same value 25 times a second bought a full measure-and-arrange pass per frame for a
         // window whose size had not moved.
         double scale = OverlayPlacement.ScaleAt(pt.X, pt.Y);
-        double logical = LensPx / scale;
+        double logical = _lensPx / scale;
 
         if (_window.Width != logical)
         {
@@ -423,7 +439,7 @@ public class TextMagnifierFeature : IDisposable
 
         // Above the cursor, clear of the line being selected. The lens is excluded from capture, so
         // the only reason for the offset is to not cover the text the user is reading.
-        OverlayPlacement.MoveTo(_window, pt.X - LensPx / 2, pt.Y - LensPx - 24);
+        OverlayPlacement.MoveTo(_window, pt.X - _lensPx / 2, pt.Y - _lensPx - 24);
 
         _captureGraphics.CopyFromScreen(
             pt.X - _sourcePx / 2, pt.Y - _sourcePx / 2, 0, 0,
@@ -460,7 +476,7 @@ public class TextMagnifierFeature : IDisposable
 
             _window?.Close();
             _window = null;
-            _image = null;
+            _lens = null;
         }
         catch
         {

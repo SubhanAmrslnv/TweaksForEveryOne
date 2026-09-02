@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -31,7 +31,7 @@ internal enum SoundId
 }
 
 /// <summary>
-/// Every sound this app makes, synthesised into a WAV in memory and played with winmm's PlaySound.
+/// Every sound this app makes, synthesised as PCM in memory and played through winmm's waveOut.
 ///
 /// WHY NOT SystemSounds. The first version of the keyboard feature called
 /// <c>SystemSounds.Exclamation.Play()</c> on every keystroke, which is wrong three times over: it is
@@ -45,8 +45,22 @@ internal enum SoundId
 /// has to form an opinion about. A click is a damped noise burst plus a decaying tone - about twenty
 /// lines of arithmetic - so it is generated once, cached, and thereafter costs nothing.
 ///
-/// THREADING. Play() is called from the hook thread, where the budget is microseconds. PlaySound
-/// itself opens a waveOut device and takes closer to a millisecond, so it never runs on the caller's
+/// WHY NOT PlaySound. It was the first implementation, and it is the reason the keyboard sound used
+/// to play for a while, go silent for a while, and then come back on its own. PlaySound with
+/// SND_ASYNC opens a stream on the default endpoint, plays, and tears it down again - on EVERY call.
+/// On Windows 11 waveOut is emulated over WASAPI, so a click asked the audio engine to build and
+/// destroy a stream up to twenty times a second; under sustained typing those calls begin to fail,
+/// and SND_NODEFAULT turns a failure into silence rather than an error, so the feature simply
+/// stopped until the engine caught up. The same happens for as long as another application holds
+/// the endpoint in exclusive mode. Nothing recovered it except waiting.
+///
+/// So the device is opened ONCE and kept open while sounds keep arriving (see EnsureDevice), a click
+/// costs one buffer write and nothing else, and a write that fails closes the device so the next
+/// click reopens it - which is what makes an endpoint change or an exclusive-mode grab recover by
+/// itself instead of silencing the feature for the rest of the session.
+///
+/// THREADING. Play() is called from the hook thread, where the budget is microseconds. Opening a
+/// device and writing a buffer are not microsecond operations, so they never run on the caller's
 /// thread: a request sets a single slot and wakes a dedicated audio thread. The slot is single, not
 /// a queue, deliberately - if sounds arrive faster than they can be played the newest one wins and
 /// the rest are dropped, which is what you want from a click and the only way a held key cannot
@@ -56,15 +70,52 @@ internal static class SoundEngine
 {
     private const int SampleRate = 44100;
 
+    /// <summary>
+    /// How many buffers may sit in the driver's queue at once. A click is under 60 ms and they
+    /// arrive at most every 45 ms, so this is generous; its real job is to bound the queue if
+    /// something ever asks for sounds faster than the device retires them.
+    /// </summary>
+    private const int SlotCount = 8;
+
+    /// <summary>
+    /// The per-slot buffer. The longest sound in the table is about 180 ms of 16-bit mono at
+    /// 44.1 kHz, which is under 16 KB; 32 KB leaves room without being worth measuring.
+    /// </summary>
+    private const int SlotBytes = 32 * 1024;
+
+    /// <summary>
+    /// How long the output device is held open after the last sound. Long enough that a burst of
+    /// typing pays for one open, short enough that plugging in headphones is followed by the next
+    /// click coming out of them - waveOut binds to whatever WAVE_MAPPER resolved to at open time,
+    /// so the only way to follow a default-device change is to have let go of the old one.
+    /// </summary>
+    private const int IdleCloseMs = 3000;
+
     private static readonly object Gate = new();
 
-    /// <summary>Cached unmanaged WAV buffers, keyed by (sound, profile, volume).</summary>
-    private static readonly Dictionary<string, IntPtr> Cache = new();
+    /// <summary>
+    /// Cached 16-bit mono PCM, keyed by (sound, profile, volume). Managed, and safe to keep managed:
+    /// the driver never reads these arrays. A clip is copied into one of the pinned ring buffers
+    /// below at the moment it is queued, so nothing the GC can move is ever handed to waveOut.
+    /// </summary>
+    private static readonly Dictionary<string, byte[]> Cache = new();
 
     private static readonly AutoResetEvent Wake = new(false);
     private static Thread? _player;
-    private static IntPtr _pending = IntPtr.Zero;
+    private static byte[]? _pending;
     private static bool _stopping;
+
+    // The output device and its buffer ring. Touched ONLY by the player thread; Shutdown reaches it
+    // by joining that thread rather than by closing the device from underneath it.
+    private static IntPtr _device = IntPtr.Zero;
+    private static readonly IntPtr[] Headers = new IntPtr[SlotCount];
+    private static readonly IntPtr[] Buffers = new IntPtr[SlotCount];
+    private static readonly bool[] Prepared = new bool[SlotCount];
+    private static int _nextSlot;
+
+    private static readonly int HeaderSize = Marshal.SizeOf<NativeMethods.WAVEHDR>();
+    private static readonly int FlagsOffset =
+        (int)Marshal.OffsetOf<NativeMethods.WAVEHDR>(nameof(NativeMethods.WAVEHDR.dwFlags));
 
     /// <summary>
     /// Plays a sound and returns immediately. Safe to call from a hook callback, and safe to call
@@ -77,13 +128,12 @@ internal static class SoundEngine
 
         try
         {
-            IntPtr wav = GetOrBuild(id, profile, Math.Clamp(volumePercent, 1, 100));
-            if (wav == IntPtr.Zero) return;
+            byte[] clip = GetOrBuild(id, profile, Math.Clamp(volumePercent, 1, 100));
 
             EnsurePlayer();
 
             // Single slot on purpose: see the class comment.
-            Interlocked.Exchange(ref _pending, wav);
+            Interlocked.Exchange(ref _pending, clip);
             Wake.Set();
         }
         catch
@@ -122,18 +172,35 @@ internal static class SoundEngine
         });
     }
 
-    /// <summary>Silence anything in flight. Exit only.</summary>
+    /// <summary>Silence anything in flight and release the device. Exit only.</summary>
     public static void Shutdown()
     {
-        lock (Gate) _stopping = true;
+        Thread? player;
+
+        lock (Gate)
+        {
+            _stopping = true;
+            player = _player;
+        }
+
         try { Wake.Set(); } catch { }
-        try { NativeMethods.PlaySound(IntPtr.Zero, IntPtr.Zero, NativeMethods.SND_PURGE); } catch { }
+
+        // Joined rather than raced: the player thread owns the device, and resetting it from here
+        // while that thread is mid-write is the one way this file could take the process down on the
+        // way out. Bounded, because exit must not wait on an audio driver.
+        try { player?.Join(150); } catch { }
     }
 
     private static void EnsurePlayer()
     {
+        // Unlocked fast path, because this runs on the hook thread for every keystroke and the
+        // thread is created exactly once in a session. The check is repeated under the lock, which
+        // is the one that decides.
+        if (Volatile.Read(ref _player) != null) return;
+
         lock (Gate)
         {
+            if (_stopping) return;
             if (_player != null) return;
 
             _player = new Thread(PlayLoop)
@@ -147,39 +214,198 @@ internal static class SoundEngine
 
     private static void PlayLoop()
     {
-        while (true)
+        try
         {
-            Wake.WaitOne();
-
-            lock (Gate)
+            while (true)
             {
-                if (_stopping) return;
-            }
+                // A bounded wait, so an idle session is not holding an audio endpoint open. The
+                // timeout is the only thing that closes the device during normal running.
+                bool signalled = Wake.WaitOne(IdleCloseMs);
 
-            if (AppLifetime.IsExiting) return;
+                lock (Gate)
+                {
+                    if (_stopping) return;
+                }
 
-            IntPtr wav = Interlocked.Exchange(ref _pending, IntPtr.Zero);
-            if (wav == IntPtr.Zero) continue;
+                if (AppLifetime.IsExiting) return;
 
-            try
-            {
-                // SND_MEMORY: wav points at a WAV image, not a filename. SND_ASYNC so a longer
-                // sound cannot stall the next one. SND_NODEFAULT so a failure is silence rather
-                // than the Windows default beep, which would be far worse than no sound at all.
-                NativeMethods.PlaySound(wav, IntPtr.Zero,
-                    NativeMethods.SND_MEMORY | NativeMethods.SND_ASYNC | NativeMethods.SND_NODEFAULT);
-            }
-            catch
-            {
+                if (!signalled)
+                {
+                    CloseDevice();
+                    continue;
+                }
+
+                byte[]? clip = Interlocked.Exchange(ref _pending, null);
+                if (clip == null) continue;
+
+                // One retry, because the first failure is what closes a device that has gone stale -
+                // an endpoint switched away, or one another application took exclusively. Without it
+                // the click that discovered the problem would be lost as well.
+                if (!Emit(clip)) Emit(clip);
             }
         }
+        catch
+        {
+            // Never let this thread die with a device still open.
+        }
+        finally
+        {
+            CloseDevice();
+
+            lock (Gate) _player = null;
+        }
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // The output device. Everything in this section runs on the player thread only.
+    // -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Queues one clip. Returns false only when the device failed and has been closed, which is the
+    /// one case worth retrying.
+    /// </summary>
+    private static bool Emit(byte[] clip)
+    {
+        if (clip.Length <= 0 || clip.Length > SlotBytes) return true;
+        if (!EnsureDevice()) return true;
+
+        IntPtr header = TakeFreeSlot(clip);
+
+        // Every buffer is still with the driver. Dropping the click is right: the ring is far larger
+        // than any sensible backlog, so this only happens when the device has stopped retiring
+        // buffers at all, and one more would not be heard either.
+        if (header == IntPtr.Zero) return true;
+
+        if (NativeMethods.waveOutWrite(_device, header, (uint)HeaderSize) != NativeMethods.MMSYSERR_NOERROR)
+        {
+            CloseDevice();
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool EnsureDevice()
+    {
+        if (_device != IntPtr.Zero) return true;
+
+        NativeMethods.WAVEFORMATEX format = new()
+        {
+            wFormatTag = NativeMethods.WAVE_FORMAT_PCM,
+            nChannels = 1,
+            nSamplesPerSec = SampleRate,
+            nAvgBytesPerSec = SampleRate * 2,
+            nBlockAlign = 2,
+            wBitsPerSample = 16,
+            cbSize = 0
+        };
+
+        try
+        {
+            uint result = NativeMethods.waveOutOpen(out IntPtr device, NativeMethods.WAVE_MAPPER,
+                ref format, IntPtr.Zero, IntPtr.Zero, NativeMethods.CALLBACK_NULL);
+
+            if (result != NativeMethods.MMSYSERR_NOERROR) return false;
+
+            _device = device;
+        }
+        catch
+        {
+            _device = IntPtr.Zero;
+            return false;
+        }
+
+        // The ring is allocated once for the life of the process and reused across opens. Freeing it
+        // on every close would put unmanaged churn back on the path this whole design exists to
+        // remove, and it is a quarter of a megabyte.
+        for (int i = 0; i < SlotCount; i++)
+        {
+            if (Buffers[i] == IntPtr.Zero) Buffers[i] = Marshal.AllocHGlobal(SlotBytes);
+            if (Headers[i] == IntPtr.Zero) Headers[i] = Marshal.AllocHGlobal(HeaderSize);
+
+            // A header prepared against the previous device handle means nothing to this one.
+            Prepared[i] = false;
+        }
+
+        _nextSlot = 0;
+        return true;
+    }
+
+    /// <summary>
+    /// Finds a slot the driver has finished with, loads the clip into it and prepares it. Returns
+    /// the header, or zero when every slot is still queued.
+    /// </summary>
+    private static IntPtr TakeFreeSlot(byte[] clip)
+    {
+        for (int attempt = 0; attempt < SlotCount; attempt++)
+        {
+            int slot = _nextSlot;
+            _nextSlot = (_nextSlot + 1) % SlotCount;
+
+            IntPtr header = Headers[slot];
+            if (header == IntPtr.Zero || Buffers[slot] == IntPtr.Zero) continue;
+
+            if (Prepared[slot])
+            {
+                uint flags = (uint)Marshal.ReadInt32(header, FlagsOffset);
+                if ((flags & NativeMethods.WHDR_DONE) == 0) continue;
+
+                NativeMethods.waveOutUnprepareHeader(_device, header, (uint)HeaderSize);
+                Prepared[slot] = false;
+            }
+
+            // Copied into the ring rather than handed over directly: the driver reads the buffer
+            // after waveOutWrite returns, so it has to be unmanaged memory whose lifetime this file
+            // controls, not a managed array the GC is free to move.
+            Marshal.Copy(clip, 0, Buffers[slot], clip.Length);
+
+            NativeMethods.WAVEHDR wh = new()
+            {
+                lpData = Buffers[slot],
+                dwBufferLength = (uint)clip.Length
+            };
+            Marshal.StructureToPtr(wh, header, false);
+
+            if (NativeMethods.waveOutPrepareHeader(_device, header, (uint)HeaderSize) != NativeMethods.MMSYSERR_NOERROR)
+            {
+                return IntPtr.Zero;
+            }
+
+            Prepared[slot] = true;
+            return header;
+        }
+
+        return IntPtr.Zero;
+    }
+
+    private static void CloseDevice()
+    {
+        if (_device == IntPtr.Zero) return;
+
+        IntPtr device = _device;
+        _device = IntPtr.Zero;
+
+        // Reset first: it marks every queued buffer done, which is what lets them be unprepared and
+        // the handle closed at all. waveOutClose fails with WAVERR_STILLPLAYING otherwise, and the
+        // device would leak for the rest of the session.
+        try { NativeMethods.waveOutReset(device); } catch { }
+
+        for (int i = 0; i < SlotCount; i++)
+        {
+            if (!Prepared[i]) continue;
+
+            try { NativeMethods.waveOutUnprepareHeader(device, Headers[i], (uint)HeaderSize); } catch { }
+            Prepared[i] = false;
+        }
+
+        try { NativeMethods.waveOutClose(device); } catch { }
     }
 
     // -------------------------------------------------------------------------------------------
     // Synthesis
     // -------------------------------------------------------------------------------------------
 
-    private static IntPtr GetOrBuild(SoundId id, string profile, int volumePercent)
+    private static byte[] GetOrBuild(SoundId id, string profile, int volumePercent)
     {
         // Volume is quantised to 5% steps so dragging the slider cannot generate twenty buffers.
         int bucket = volumePercent / 5 * 5;
@@ -189,39 +415,30 @@ internal static class SoundEngine
 
         lock (Gate)
         {
-            if (Cache.TryGetValue(key, out IntPtr existing)) return existing;
+            if (Cache.TryGetValue(key, out byte[]? existing)) return existing;
         }
 
-        byte[] wav = BuildWav(id, profile, bucket / 100.0);
-
-        // Unmanaged, and never freed. SND_MEMORY with SND_ASYNC means winmm reads this buffer AFTER
-        // PlaySound returns, so it has to stay put and stay valid - a managed array could be moved
-        // by a collection mid-playback.
-        //
-        // NOT FREED, AND NOT EVICTED, DELIBERATELY. An eviction scheme has to free a block that the
-        // player thread may have taken from the slot but not yet handed to PlaySound, which is a
-        // use-after-free inside the audio driver - and the leak it would be protecting against is
-        // small and hard-bounded: ten sounds times three profiles times twenty volume buckets, about
-        // five kilobytes each, so under three megabytes even if a user sweeps every slider through
-        // every position. Real sessions hold four or five entries.
-        IntPtr block = Marshal.AllocHGlobal(wav.Length);
-        Marshal.Copy(wav, 0, block, wav.Length);
+        // Built outside the lock: synthesis is milliseconds of arithmetic, and Play() reaches this
+        // method from the hook thread, where a lock held across that would be a lock held across an
+        // input event for the whole operating system.
+        byte[] pcm = BuildPcm(id, profile, bucket / 100.0);
 
         lock (Gate)
         {
-            if (Cache.TryGetValue(key, out IntPtr raced))
-            {
-                Marshal.FreeHGlobal(block);
-                return raced;
-            }
+            // NOT EVICTED, DELIBERATELY. The growth it would be protecting against is small and
+            // hard-bounded: ten sounds times three profiles times twenty volume buckets, about five
+            // kilobytes each, so under three megabytes even if a user sweeps every slider through
+            // every position. Real sessions hold four or five entries.
+            if (Cache.TryGetValue(key, out byte[]? raced)) return raced;
 
-            Cache[key] = block;
+            Cache[key] = pcm;
         }
 
-        return block;
+        return pcm;
     }
 
-    private static byte[] BuildWav(SoundId id, string profile, double gain)
+    /// <summary>Synthesises one sound as raw little-endian 16-bit mono PCM - no container.</summary>
+    private static byte[] BuildPcm(SoundId id, string profile, double gain)
     {
         double[] samples = Synthesise(id, profile);
 
@@ -237,14 +454,17 @@ internal static class SoundEngine
 
         double scale = gain / peak * 0.9;
 
-        short[] pcm = new short[samples.Length];
+        byte[] pcm = new byte[samples.Length * 2];
         for (int i = 0; i < samples.Length; i++)
         {
             double v = samples[i] * scale;
-            pcm[i] = (short)Math.Clamp(v * short.MaxValue, short.MinValue, short.MaxValue);
+            short sample = (short)Math.Clamp(v * short.MaxValue, short.MinValue, short.MaxValue);
+
+            pcm[i * 2] = (byte)sample;
+            pcm[i * 2 + 1] = (byte)(sample >> 8);
         }
 
-        return Wrap(pcm);
+        return pcm;
     }
 
     private static double[] Synthesise(SoundId id, string profile)
@@ -410,50 +630,5 @@ internal static class SoundEngine
     private static int Samples(double seconds)
     {
         return Math.Max(1, (int)(seconds * SampleRate));
-    }
-
-    /// <summary>Wraps PCM in the smallest valid RIFF/WAVE container: 16-bit, mono, 44.1 kHz.</summary>
-    private static byte[] Wrap(short[] pcm)
-    {
-        const int HeaderBytes = 44;
-        int dataBytes = pcm.Length * 2;
-        byte[] wav = new byte[HeaderBytes + dataBytes];
-
-        void Ascii(int at, string text)
-        {
-            for (int i = 0; i < text.Length; i++) wav[at + i] = (byte)text[i];
-        }
-
-        void U32(int at, uint value)
-        {
-            wav[at] = (byte)value;
-            wav[at + 1] = (byte)(value >> 8);
-            wav[at + 2] = (byte)(value >> 16);
-            wav[at + 3] = (byte)(value >> 24);
-        }
-
-        void U16(int at, ushort value)
-        {
-            wav[at] = (byte)value;
-            wav[at + 1] = (byte)(value >> 8);
-        }
-
-        Ascii(0, "RIFF");
-        U32(4, (uint)(36 + dataBytes));
-        Ascii(8, "WAVE");
-        Ascii(12, "fmt ");
-        U32(16, 16);              // PCM header size
-        U16(20, 1);               // WAVE_FORMAT_PCM
-        U16(22, 1);               // mono
-        U32(24, SampleRate);
-        U32(28, SampleRate * 2);  // byte rate: mono, two bytes per sample
-        U16(32, 2);               // block align
-        U16(34, 16);              // bits per sample
-        Ascii(36, "data");
-        U32(40, (uint)dataBytes);
-
-        for (int i = 0; i < pcm.Length; i++) U16(HeaderBytes + i * 2, (ushort)pcm[i]);
-
-        return wav;
     }
 }

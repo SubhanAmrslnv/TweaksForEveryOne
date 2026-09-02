@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using WindowTweaks.Core;
 using Brushes = System.Windows.Media.Brushes;
 using Color = System.Windows.Media.Color;
@@ -46,9 +47,23 @@ public class CursorLocatorFeature : IDisposable
     /// <summary>After firing, stay quiet this long, or one shake fires three times.</summary>
     private const double CooldownMs = 1200.0;
 
+    /// <summary>How often the rings are re-centred on the pointer while they converge.</summary>
+    /// <remarks>
+    /// 15 ms, not 16: Windows' clock tick is ~15.6 ms, so a 16 ms deadline always lands just past
+    /// one and waits for the next.
+    /// </remarks>
+    private const int FollowIntervalMs = 15;
+
     private Window? _window;
     private Ellipse? _outerRing;
     private Ellipse? _innerRing;
+
+    /// <summary>Re-centres the overlay on the pointer for as long as the reveal is playing.</summary>
+    private DispatcherTimer? _follow;
+
+    /// <summary>The point the overlay was last moved to, so an unmoved pointer costs no SetWindowPos.</summary>
+    private int _followX = int.MinValue;
+    private int _followY = int.MinValue;
 
     private int _lastX = int.MinValue;
     private int _lastY = int.MinValue;
@@ -211,8 +226,16 @@ public class CursorLocatorFeature : IDisposable
 
             if (!_window.IsVisible) _window.Show();
 
+            _followX = physicalX;
+            _followY = physicalY;
             OverlayPlacement.CentreOn(_window, physicalX, physicalY);
             OverlayPlacement.MakeClickThrough(_window);
+
+            // The rings converge on the POINTER, not on the spot the shake happened to end at.
+            // A hand that shakes the mouse rarely stops dead, so rings pinned to the trigger
+            // point drift away from the thing they are pointing at - which is the one job this
+            // feature has. Following keeps them under the cursor for the whole 700 ms.
+            StartFollowing();
 
             Duration duration = new(TimeSpan.FromMilliseconds(700));
             IEasingFunction ease = new QuarticEase { EasingMode = EasingMode.EaseOut };
@@ -223,7 +246,15 @@ public class CursorLocatorFeature : IDisposable
             DoubleAnimation fade = new(0.95, 0.0, duration) { EasingFunction = ease };
             fade.Completed += (_, _) =>
             {
-                try { if (_window != null && _window.Opacity <= 0.01) _window.Hide(); } catch { }
+                try
+                {
+                    if (_window != null && _window.Opacity <= 0.01)
+                    {
+                        StopFollowing();
+                        _window.Hide();
+                    }
+                }
+                catch { }
             };
 
             _window.BeginAnimation(UIElement.OpacityProperty, fade);
@@ -231,6 +262,58 @@ public class CursorLocatorFeature : IDisposable
         catch
         {
             // Cosmetic.
+        }
+    }
+
+    /// <summary>
+    /// Starts (or restarts) the timer that keeps the overlay under the pointer. It runs on the UI
+    /// thread - never on the hook thread - and only for the length of one reveal, because a timer
+    /// left running would poll the cursor for the whole session to move nothing.
+    /// </summary>
+    private void StartFollowing()
+    {
+        _follow ??= new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = TimeSpan.FromMilliseconds(FollowIntervalMs)
+        };
+
+        _follow.Tick -= OnFollowTick;
+        _follow.Tick += OnFollowTick;
+        _follow.Start();
+    }
+
+    private void StopFollowing()
+    {
+        try { _follow?.Stop(); } catch { }
+    }
+
+    /// <summary>
+    /// A throw here would kill the timer and leave the rings stranded wherever they were for the
+    /// rest of the session, so every path out of it is guarded.
+    /// </summary>
+    private void OnFollowTick(object? sender, EventArgs e)
+    {
+        try
+        {
+            if (!IsEnabled || _window == null || !_window.IsVisible)
+            {
+                StopFollowing();
+                return;
+            }
+
+            if (!NativeMethods.GetCursorPos(out NativeMethods.POINT pt)) return;
+
+            // SetWindowPos on a real window is ~260 us; a pointer that has not moved buys nothing
+            // by paying it sixty-six times a second.
+            if (pt.X == _followX && pt.Y == _followY) return;
+
+            _followX = pt.X;
+            _followY = pt.Y;
+            OverlayPlacement.CentreOn(_window, pt.X, pt.Y);
+        }
+        catch
+        {
+            StopFollowing();
         }
     }
 
@@ -255,6 +338,19 @@ public class CursorLocatorFeature : IDisposable
 
     private void TearDown()
     {
+        try
+        {
+            if (_follow != null)
+            {
+                _follow.Stop();
+                _follow.Tick -= OnFollowTick;
+                _follow = null;
+            }
+        }
+        catch
+        {
+        }
+
         try
         {
             if (_window != null)
