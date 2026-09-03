@@ -155,10 +155,15 @@ public partial class App : System.Windows.Application
 
         _gameModeFeature.StateChanged += OnGameModeChanged;
 
-        // One slow sweep for records belonging to windows that have since closed. A minute is far
-        // slower than anything a user can notice and costs nothing.
+        // One slow sweep for records belonging to windows that have since closed, and a drop of the
+        // process-name cache, whose entries go stale when Windows reuses a process id. A minute is
+        // far slower than anything a user can notice and costs nothing.
         _housekeeping = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
-        _housekeeping.Tick += (_, _) => AlphaCompositor.Sweep();
+        _housekeeping.Tick += (_, _) =>
+        {
+            AlphaCompositor.Sweep();
+            ProcessNameCache.Trim();
+        };
         _housekeeping.Start();
     }
 
@@ -193,7 +198,7 @@ public partial class App : System.Windows.Application
             null, false, on => _middleClickCloseFeature.SetEnabled(on));
 
         Add(FeatureKeys.PositionMemory, "Position memory", PageWindow, "Layout & States",
-            "Apps reopen at the size and position you last left them, keyed on the executable and window class.",
+            "Apps reopen at the position you last left them, keyed on the executable and window class. Their size is never changed.",
             "Shift+Alt+M", false, on => _positionMemoryFeature.SetEnabled(on));
 
         Add(FeatureKeys.RollUp, "Window roll-up", PageWindow, "Layout & States",
@@ -666,8 +671,10 @@ public partial class App : System.Windows.Application
         HookThread.Stop();
 
         // The cached audio endpoint is a COM object; release it rather than leaving it to a finalizer
-        // that may run after the apartment has gone.
+        // that may run after the apartment has gone. The session manager behind the breathing
+        // exemption is cached the same way and goes for the same reason.
         AudioManager.Shutdown();
+        AudioSessionMonitor.Shutdown();
 
         _systemTrayManager?.Dispose();
         _shutdownListener?.Dispose();

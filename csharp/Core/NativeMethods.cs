@@ -105,10 +105,23 @@ internal static class NativeMethods
     [DllImport("dwmapi.dll")]
     public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
 
+    // Overload for the integer-valued DWM attributes. The declaration above returns a RECT because
+    // that is what DWMWA_EXTENDED_FRAME_BOUNDS is; DWMWA_CLOAKED is a BOOL-sized int, and one
+    // signature cannot serve both. Same entry point, two marshalling shapes.
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
+
     [DllImport("dwmapi.dll")]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
 
     public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+
+    /// <summary>
+    /// Attr 14. What filters UWP-suspended and other-virtual-desktop windows: IsWindowVisible
+    /// returns TRUE for both, so it alone does not catch them.
+    /// </summary>
+    public const int DWMWA_CLOAKED = 14;
+
     public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     public const int DWMWCP_DONOTROUND = 1;
 
@@ -154,6 +167,12 @@ internal static class NativeMethods
     public const uint GW_OWNER = 4;
 
     public const int GWL_STYLE = -16;
+
+    // Window styles the eligibility filters test. These were private consts inside
+    // PositionMemoryFeature, which is the duplication FeatureKeys and TuningRegistry exist to stop.
+    public const uint WS_MINIMIZE = 0x20000000;
+    public const uint WS_THICKFRAME = 0x00040000;
+    public const uint WS_MAXIMIZEBOX = 0x00010000;
 
     [DllImport("user32.dll")]
     public static extern bool IsWindow(IntPtr hWnd);
@@ -259,7 +278,28 @@ internal static class NativeMethods
 
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     public static extern IntPtr GetModuleHandle(string lpModuleName);
-    
+
+    // --- Naming a process's image file (see ProcessNameCache) ---------------------------------
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern IntPtr OpenProcess(uint dwDesiredAccess, [MarshalAs(UnmanagedType.Bool)] bool bInheritHandle, uint dwProcessId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool CloseHandle(IntPtr hObject);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool QueryFullProcessImageName(IntPtr hProcess, uint dwFlags, StringBuilder lpExeName, ref int lpdwSize);
+
+    /// <summary>
+    /// The weakest right that can name a process image, and deliberately NOT PROCESS_VM_READ.
+    /// This app is already scored by AV heuristics for its input hooks (see docs/ANTIVIRUS.md), and
+    /// reading another process's MEMORY is a different accusation from asking its image name.
+    /// </summary>
+    public const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+
+
     [DllImport("user32.dll")]
     public static extern short GetAsyncKeyState(int vKey);
 

@@ -79,6 +79,8 @@ internal static class TuningRegistry
     // --- Breathing ----------------------------------------------------------------------------
     public const string BreathingIdleSeconds = "breathing.idleSeconds";
     public const string BreathingDimPercent = "breathing.dimPercent";
+    public const string BreathingExemptAudio = "breathing.exemptAudio";
+    public const string BreathingExcludeProcesses = "breathing.excludeProcesses";
 
     // --- Proximity ghost ----------------------------------------------------------------------
     public const string GhostMaxDistance = "ghost.maxDistance";
@@ -206,6 +208,21 @@ internal static class TuningRegistry
             Key = BreathingDimPercent, Page = PageOpacity, Group = "Breathing windows", Kind = TuningKind.Percent,
             Title = "Faded opacity", Unit = "%", Min = 10, Max = 100, Default = 47,
             Description = "How solid an idle window stays. This multiplies with any opacity you set by hand, so a window already at 50% breathes between 50% and this fraction of it."
+        },
+        new TuningDescriptor
+        {
+            Key = BreathingExemptAudio, Page = PageOpacity, Group = "Breathing windows", Kind = TuningKind.Choice,
+            Title = "Leave anything playing sound alone", DefaultText = "on",
+            Choices = new[] { "on", "off" },
+            ChoiceLabels = new[] { "Never fade an app that is playing sound", "Fade it like anything else" },
+            Description = "This is what keeps a video in an ordinary window from fading while you watch it. It works per APPLICATION, not per window: while a browser is playing anything, none of its windows fade. A music player counts as playing sound too, so switch this off if you would rather Spotify faded while it plays. Picture-in-Picture and fullscreen video are never faded either way."
+        },
+        new TuningDescriptor
+        {
+            Key = BreathingExcludeProcesses, Page = PageOpacity, Group = "Breathing windows", Kind = TuningKind.Text,
+            Title = "Never fade these apps",
+            DefaultText = "vlc,mpv,mpc-hc64,mpc-hc,potplayermini64,wmplayer",
+            Description = "Comma-separated process names without .exe - the names in Task Manager's Details tab. These never fade whether or not they are playing sound, which covers a video paused on a frame you are looking at. Takes effect when you click away from this box."
         },
 
         // --- Proximity ghost ------------------------------------------------------------------

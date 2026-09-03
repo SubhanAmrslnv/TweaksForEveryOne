@@ -19,12 +19,17 @@ public class PositionMemoryFeature : IDisposable
 
     public bool IsEnabled => _isEnabled;
 
+    /// <summary>
+    /// POSITION ONLY, deliberately. Size is never stored and never restored: replaying a captured
+    /// width/height silently undoes whatever the app or the user did to the window's dimensions in
+    /// between - the same reason MagneticSnappingFeature's glide is move-only. Older
+    /// window-positions.json files carry "W"/"H" members; they deserialize harmlessly (unmapped
+    /// members are ignored) and are dropped on the next save.
+    /// </summary>
     public struct WindowRect
     {
         public int X { get; set; }
         public int Y { get; set; }
-        public int W { get; set; }
-        public int H { get; set; }
     }
 
     public PositionMemoryFeature()
@@ -187,12 +192,14 @@ public class PositionMemoryFeature : IDisposable
 
         if (NativeMethods.GetWindowRect(hwnd, out NativeMethods.RECT winRect))
         {
+            // The size is measured only to reject a degenerate rect (a window caught mid-creation);
+            // it is never stored. See WindowRect.
             int w = winRect.Right - winRect.Left;
             int h = winRect.Bottom - winRect.Top;
-            
+
             if (w <= 0 || h <= 0) return;
 
-            _positions[key] = new WindowRect { X = winRect.Left, Y = winRect.Top, W = w, H = h };
+            _positions[key] = new WindowRect { X = winRect.Left, Y = winRect.Top };
             SavePositions(); // Ideally this is debounced, but this works for now
         }
     }
@@ -204,8 +211,13 @@ public class PositionMemoryFeature : IDisposable
 
         if (_positions.TryGetValue(key, out WindowRect rect))
         {
-            // Restore it!
-            NativeMethods.SetWindowPos(hwnd, IntPtr.Zero, rect.X, rect.Y, rect.W, rect.H, NativeMethods.SWP_NOACTIVATE);
+            if (!NativeMethods.IsWindow(hwnd)) return;
+
+            // Move-only: no width or height is passed in at all, so a remembered position can never
+            // resize the window. SWP_NOZORDER because restoring a position is no reason to raise the
+            // window over whatever the user is currently looking at.
+            NativeMethods.SetWindowPos(hwnd, IntPtr.Zero, rect.X, rect.Y, 0, 0,
+                NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_NOZORDER);
         }
     }
 
