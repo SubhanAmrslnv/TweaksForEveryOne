@@ -1,74 +1,181 @@
-﻿# Window Tweaks - Full Feature List
+# Window Tweaks — feature list
 
-The following list contains all features present in the project, including both existing implementations and newly added ones (currently set up as stubs).
+Every switch in the settings window, in the order the window itself groups them, plus the commands
+that have no switch. Generated against `App.RegisterFeatures()` and `App.RegisterHotkeys()`; if the
+two ever disagree, the code is right and this file is stale.
 
-## 🛠 1. Power-User Tweaks
-- **Smart Auto-Hide Taskbar**: Hides the taskbar only when a window is maximized or touches the bottom edge. *(Exists: SmartTaskbarFeature)*
-- **macOS Quick Look**: Previews the selected file instantly in Explorer by pressing Space. *(Exists: QuickLookFeature)*
-- **Multi-Monitor Focus Dimmer**: Automatically dims inactive monitors by 50% to reduce eye strain. *(Exists: MultiMonitorDimmerFeature)*
-- **macOS Hot Corners**: Triggers commands (Task View, Hide Windows, etc.) by moving the mouse to screen corners. *(Exists: HotCornersFeature)*
-- **Premium Volume OSD**: A macOS-style blurred volume indicator that appears when adjusting volume on the taskbar. *(Exists: TaskbarVolumeFeature)*
-- **Live Window PiP (Shift+Alt+P)**: Creates a live, always-on-top Picture-in-Picture version of any window. *(Exists: LivePipFeature)*
-- **Universal Grab & Pan**: Middle-click and drag to pan any window, similar to the Photoshop Hand Tool. *(Exists: GrabPanFeature)*
-- **Global Mic Kill-Switch**: Mutes the microphone globally by double-tapping the Alt key. *(Exists: MicMuteFeature)*
-- **Infinite Cursor Wrap**: Wraps the cursor around screen edges on multi-monitor or large setups (teleportation). *(Exists: InfiniteWrapFeature)*
-- **Quick Spotlight Launcher**: Opens a minimalist search and launcher bar by double-tapping the Ctrl key. *(Exists: SpotlightFeature)*
-- **Smart Active Border**: Draws a colorful, elegant border exclusively around the active window. *(Newly Added: SmartActiveBorderFeature)*
-- **Always on Bottom (Shift+Alt+B)**: Pins any window to the background like a desktop widget. *(Exists: AlwaysOnBottomFeature)*
-- **Global Text Expander**: Automatically expands abbreviations like @@mail or @@date into full text snippets. *(Newly Added: GlobalTextExpanderFeature)*
-- **Middle-Click to Close**: Closes any window instantly by middle-clicking its title bar. *(Exists: MiddleClickCloseFeature)*
-- **Proximity Ghost Window (Shift+Alt+G)**: Makes a window 80% transparent, becoming solid and clickable only when the cursor approaches. *(Exists: ProximityGhostFeature)*
+**Read the status column.** Thirty-one entries are marked **stub**: the switch exists, persists and
+appears in the settings window, but the feature class behind it is empty and flipping it does
+nothing yet. They are listed here because they are real settings a user can see, not because they
+work.
 
-## 🚀 2. Performance & OS Tuning
-- **Zero-delay Menus**: Opens context menus instantly (0-50ms) mimicking macOS responsiveness. *(Newly Added: ZeroDelayMenusFeature)*
-- **Snappy Taskbar Previews**: Accelerates taskbar window previews from the default 400ms down to 100ms. *(Newly Added: SnappyTaskbarPreviewsFeature)*
-- **Smooth Scrolling**: Applies interpolated, buttery-smooth scrolling globally across all applications. *(Newly Added: SmoothScrollingFeature)*
+Defaults are what a fresh `settings.json` gets. `—` means the feature has no hotkey of its own.
 
-## ✨ 3. Premium Window Animations
-- **Fade In / Ease-Out**: Replaces abrupt window disappearance in Focus Mode with cinematic fade-in/out transitions. *(Newly Added: FadeInEaseOutFeature)*
-- **Custom Text Caret**: Overrides the default text cursor with a thicker, smoother, eye-friendly caret. *(Newly Added: CustomTextCaretFeature)*
-- **Bouncy Snapping**: Adds a rubber-band bounce effect when snapping windows to screen edges. *(Newly Added: BouncySnappingFeature)*
-- **Gravity Drop Close (Alt+F4)**: Makes closing windows fall downwards with gravity before fading out. *(Exists: GravityCloseFeature)*
-- **Breathing Backgrounds**: Slowly fades inactive windows to 70% transparency after 6 seconds of inactivity. *(Exists: BreathingFeature)*
-- **Focus Pulse**: Gently swells and shrinks (2-3% scale) a window when focused via Alt+Tab to draw attention. *(Newly Added: FocusPulseFeature)*
-- **Ghost Slide-In**: Animates new application windows sliding up smoothly from the bottom like a smartphone app. *(Newly Added: GhostSlideInFeature)*
-- **Parallax Dragging**: Makes a window transparent based on how fast you drag it (faster equals more transparent). *(Exists: DragParallaxFeature)*
-- **Magnetic Seam Flash**: Emits a brief neon flash effect where the borders of two windows magnetically snap together. *(Newly Added: MagneticSeamFlashFeature)*
-- **Theater Spotlight**: Darkens the background and creates a spotlight effect following the cursor over the active window. *(Newly Added: TheaterSpotlightFeature)*
-- **Fly-to-Mouse Minimize**: Sucks minimizing windows directly into the mouse cursor rather than the taskbar. *(Newly Added: FlyToMouseMinimizeFeature)*
-- **Window Unrolling**: Unrolls new windows vertically from top to bottom like a window blind in 0.2 seconds. *(Newly Added: WindowUnrollingFeature)*
+---
 
-## 🌪 4. Next-Gen Physics & Tactile Animations
-- **Ripple Click**: Creates a water ripple effect on every mouse click. *(Exists: RippleClickFeature)*
-- **Context Menu Unfold**: Unfolds context menus downwards like origami instead of appearing instantly. *(Newly Added: ContextMenuUnfoldFeature)*
-- **Elastic Drag (Ghost Drift)**: Creates a rubber-band stretching effect when dragging files and snaps back on release. *(Newly Added: ElasticDragFeature)*
-- **Cursor Yawn & Breathe**: Makes an idle cursor subtly breathe and yawn when left untouched. *(Newly Added: CursorYawnBreatheFeature)*
-- **Momentum Tilt**: Slightly tilts windows in the direction of movement while dragging and settles with inertia. *(Newly Added: MomentumTiltFeature)*
-- **Black Hole Minimize & Delete**: Sucks minimizing windows and deleted files into a gravitational black hole effect. *(Newly Added: BlackHoleMinimizeFeature)*
-- **Resistance Edge**: Simulates tactile rubber-like resistance when dragging a window against screen edges. *(Newly Added: ResistanceEdgeFeature)*
-- **Focus Depth (Portal Scale-In)**: Pushes inactive windows into the background in 3D while scaling the active one forward. *(Newly Added: FocusDepthFeature)*
-- **Spark Typing & Acoustic Keystrokes**: Generates MIDI ASMR clicks, neon cursor trails, and equalizers while typing. *(Exists: AcousticKeyboardFeature)*
-- **Carousel Alt-Tab**: Replaces the flat Alt-Tab switcher with a rotating 3D carousel of windows. *(Newly Added: CarouselAltTabFeature)*
-- **Dynamic Notch (OSD)**: Drops an iOS-style Dynamic Island from the top of the screen for volume and brightness. *(Newly Added: DynamicNotchFeature)*
-- **Curtain Drop (Win+Alt+D)**: Drops all windows to the desktop using kinetic motion blur. *(Newly Added: CurtainDropFeature)*
-- **Motion Blur Scroll**: Applies a vertical motion blur effect while scrolling fast for extreme perceived smoothness. *(Newly Added: MotionBlurScrollFeature)*
-- **Overscroll Bounce**: Adds an Apple-style rubber-band bounce effect when reaching the top or bottom of a scrolling page. *(Newly Added: OverscrollBounceFeature)*
-- **Taskbar Icon Wave & Elastic Toasts**: Makes taskbar icons wave and notifications bounce elastically on mouse hover like macOS. *(Newly Added: TaskbarIconWaveFeature)*
-- **Start Menu Slide-Up Blur**: Generates a deep background blur effect transitioning smoothly as the Start Menu opens. *(Newly Added: StartMenuBlurFeature)*
-- **Window Throw & Catch**: Allows throwing a window kinetically across monitors so it flies and lands on the other screen. *(Newly Added: WindowThrowCatchFeature)*
-- **Shatter to Close (Shift+Alt+F4)**: Smashes the window into 3D glass shards when closing it. *(Exists: ShatterCloseFeature)*
-- **Lightsaber Seam Glow**: Illuminates a glowing Jedi lightsaber edge when hovering over the seam of snapped windows. *(Newly Added: LightsaberSeamGlowFeature)*
-- **Privacy Blur on Unfocus (Win+Alt+B)**: Overlays an unreadable frosted glass blur over private windows when they lose focus. *(Newly Added: PrivacyBlurFeature)*
+## Window Management
 
-## 📐 5. Layout & Tiling
-- **Numpad Tiling**: Places windows into specific screen corners in a grid format using Shift+Alt+Numpad1..9. *(Exists: TileWindowFeature)*
-- **Centre / Cycle Size**: Centers a window perfectly or cycles its size between 50/75/90%. *(Exists: CenterWindowFeature, CycleWindowSizeFeature)*
-- **Next Monitor Move**: Moves a window to the next monitor while preserving its relative size. *(Exists: NextMonitorFeature)*
-- **Restore Everything (Shift+Alt+Y)**: Restores all hidden, closed, or ghosted windows (including Panic Mode) with a single key. *(Exists: RestoreAllFeature)*
+| Feature | Hotkey | Default | Status |
+|---|---|---|---|
+| Linux-style Alt-Drag — move a window from anywhere in it, not just the title bar | Alt+Drag | on | ✅ |
+| Magnetic window snapping — windows attract to each other's edges, with velocity-scaled reach and a glide | Shift+Alt+S | off | ✅ |
+| Magnetic window groups — snapped windows move together | Shift+Alt+J | off | ✅ |
+| Middle-click title bar to close | — | off | ✅ |
+| Position memory — restores a window's rect by exe + window class | Shift+Alt+M | off | ✅ |
+| Window roll-up — collapses a window to its title bar | Shift+Alt+R | on | ✅ |
+| Minimize to tray | Shift+Alt+H | on | ✅ |
+| Always on top | Shift+Alt+O | on | ✅ |
+| Always on bottom — re-parents the window to `WorkerW` | Shift+Alt+B | on | ✅ |
+| Live picture-in-picture — a live always-on-top copy of any window | Shift+Alt+P | on | ✅ |
+| Smart Active Border — a border around the active window | — | off | **stub** |
 
-## 💼 6. Remaining Management Functions
-- **Transparency Control**: Adjusts the transparency of the active window using the mouse wheel. *(Exists: ChangeTransparencyFeature)*
-- **Window Shade / Roll-Up**: Rolls a window up like a blind with a middle-click, leaving only its title bar visible. *(Exists: RollUpFeature)*
-- **Minimize to Tray**: Hides any application from the taskbar into the system tray (clock area). *(Exists: TrayMinimizeFeature)*
-- **Stealth Panic Mode (Boss Key)**: Instantly locks the system, mutes audio, and opens a safe application by pressing ESC 3 times. *(Exists: BossKeyFeature)*
+## Opacity & Effects
 
+| Feature | Hotkey | Default | Status |
+|---|---|---|---|
+| Transparency wheel — sets a window's base opacity, clamped 25–255 | Shift+Alt+Wheel | on | ✅ |
+| Parallax dragging — a window fades in proportion to drag speed | — | off | ✅ |
+| Proximity ghost — a window stays transparent until the cursor approaches | Shift+Alt+G | on | ✅ |
+| Breathing windows — inactive windows fade after an idle delay | Shift+Alt+E | off | ✅ |
+| Multi-monitor focus dimmer — dims the monitors you are not on | Shift+Alt+D | off | ✅ |
+| Focus / cinema mode — dims everything but the active window | Shift+Alt+F | on | ✅ |
+| Theater Spotlight — a spotlight following the cursor | — | off | **stub** |
+| Focus Depth — inactive windows pushed back in 3D | — | off | **stub** |
+| Start Menu Slide-Up Blur | — | off | **stub** |
+| Privacy Blur — frosted glass over private windows on unfocus | — | off | **stub** |
+
+All four implemented opacity effects compose through `Core/AlphaCompositor.cs` rather than writing a
+final alpha, so a transparency the user chose survives a feature dimming the same window.
+
+## Animation
+
+| Feature | Hotkey | Default | Status |
+|---|---|---|---|
+| Ripple click — a ripple at the pointer on every click | — | off | ✅ |
+| Gravity-drop close — the window falls before closing | Alt+F4 | off | ✅ |
+| Shatter to close | Shift+Alt+F4 | on | ✅ |
+| Fade In / Ease-Out | — | off | **stub** |
+| Bouncy Snapping | — | off | **stub** |
+| Focus Pulse | — | off | **stub** |
+| Ghost Slide-In | — | off | **stub** |
+| Magnetic Seam Flash | — | off | **stub** |
+| Fly-to-Mouse Minimize | — | off | **stub** |
+| Window Unrolling | — | off | **stub** |
+| Context Menu Unfold | — | off | **stub** |
+| Elastic Drag | — | off | **stub** |
+| Cursor Yawn & Breathe | — | off | **stub** |
+| Momentum Tilt | — | off | **stub** |
+| Black Hole Minimize | — | off | **stub** |
+| Resistance Edge | — | off | **stub** |
+| Carousel Alt-Tab | — | off | **stub** |
+| Curtain Drop | — | off | **stub** |
+| Motion Blur Scroll | — | off | **stub** |
+| Overscroll Bounce | — | off | **stub** |
+| Taskbar Icon Wave | — | off | **stub** |
+| Window Throw & Catch | — | off | **stub** |
+| Lightsaber Seam Glow | — | off | **stub** |
+
+Alt+F4 stays registered whether or not the gravity animation is on; with it off, the hotkey closes
+the window normally. A close chord cannot simply stop working.
+
+## Power Features
+
+| Feature | Hotkey | Default | Status |
+|---|---|---|---|
+| Plain-text paste | Ctrl+Alt+V | on | ✅ |
+| camelCase the selection | Ctrl+Alt+C | on | ✅ |
+| Quick folder jump — **needs a restart to take effect**, because Ctrl+G belongs to other apps | Ctrl+G | off | ✅ |
+| Quick Look preview — Space previews the selected file in Explorer | Shift+Alt+Q | on | ✅ |
+| Spotlight launcher | Shift+Alt+L | on | ✅ |
+| Double-tap Ctrl for Spotlight | Ctrl, Ctrl | on | ✅ |
+| Microphone kill-switch | Shift+Alt+A | on | ✅ |
+| Double-tap Alt to mute the mic | Alt, Alt | on | ✅ |
+| Smart Caps Lock — a tap sends Escape or Backspace | — | on | ✅ |
+| Universal grab & pan — hold the middle button and drag to pan any window | Shift+Alt+Space | off | ✅ |
+| Stealth panic — triple Escape | Esc Esc Esc | on | ✅ |
+| Shake to find the cursor | — | on | ✅ |
+| Magnifier while selecting text | — | on | ✅ |
+| Keyboard sounds — a synthesised click per keystroke | — | off | ✅ |
+| Copy, paste and undo feedback — Ctrl+C/V/X/A/Z/Y get a sound and a ring at the cursor | — | on | ✅ |
+| Windows shortcut sounds — one sound per Windows chord | — | on | ✅ |
+| Taskbar volume wheel — scroll over the taskbar to change volume, middle-click to mute | — | on | ✅ |
+| Global Text Expander | — | off | **stub** |
+| Zero-delay Menus | — | off | **stub** |
+| Smooth Scrolling | — | off | **stub** |
+| Custom Text Caret | — | off | **stub** |
+
+Every sound in the app is synthesised as PCM in memory by `Core/SoundEngine.cs` — no audio files,
+and nothing is read from disk while you type. Sounds are told apart by **shape** (rising, falling,
+ticking, clacking), not by pitch. Profile and per-group volumes are on the Tuning page.
+
+## Screen & Shell
+
+| Feature | Hotkey | Default | Status |
+|---|---|---|---|
+| Hot corners | Shift+Alt+C | off | ✅ |
+| Infinite cursor wrap | Shift+Alt+I | off | ✅ |
+| Smart auto-hide taskbar | Shift+Alt+T | off | ✅ |
+| Custom taskbar clock — two rows, positioned relative to the tray rather than at a fixed coordinate | — | off | ✅ |
+| Clock weather — **the only part of the app that uses the network.** Off by default, and makes no request until a city is set | — | off | ✅ |
+| Snappy Taskbar Previews | — | off | **stub** |
+| Dynamic Notch (OSD) | — | off | **stub** |
+
+## General
+
+| Feature | Default | Status |
+|---|---|---|
+| Start with Windows — the default is read from the Startup folder, not from `settings.json` | (actual state) | ✅ |
+
+---
+
+## Commands with no switch
+
+Always registered; they act when pressed and hold no state.
+
+| Hotkey | Command |
+|---|---|
+| Shift+Alt+W | Open the settings window |
+| Shift+Alt+F5 / F6 | Restart / exit the app |
+| Shift+Alt+F12 | Game Mode — suspend interfering features **in memory only**, never persisted |
+| Shift+Alt+Esc | Boss key |
+| Shift+Alt+Y | Restore everything — un-rolls, un-hides, un-ghosts and clears leftover opacity |
+| Shift+Alt+K / U / N | Centre / cycle size / move to the next monitor |
+| Shift+Alt+Z / X | Undo the last layout change / reset transparency |
+| Shift+Alt+Numpad0 | Maximize / restore |
+| Shift+Alt+Numpad1..9 | Tile to that cell of a 3×3 grid, keypad-shaped |
+| Shift+Alt+Up / Down | Top half / bottom half — the only NumLock-independent layout keys |
+
+With NumLock **off** the keypad sends navigation names, so every `Shift+Alt+Numpad` binding is dead.
+Shift+Alt+Up and Shift+Alt+Down are the exception.
+
+## Gestures
+
+Answered by the two shared hooks rather than by `RegisterHotKey`.
+
+| Gesture | Effect |
+|---|---|
+| Triple `Esc` | Boss key |
+| Double-tap `Alt` | Mic mute |
+| Double-tap `Ctrl` | Spotlight |
+| `Shift+Alt+Wheel` | Window transparency |
+| Tap `Caps Lock` | Escape, or Backspace |
+| Hold the middle button and drag | Grab & pan |
+| Wheel over the taskbar | Volume |
+| Middle-click the taskbar | Mute |
+| Shake the mouse | Find the cursor |
+| Drag sideways across text | Magnifier |
+
+## Windows chords that get a sound
+
+`ShortcutSoundsFeature` watches the shared keyboard hook and plays one sound per chord. **It never
+suppresses a key** — every handler returns false, so Win+L in particular keeps working.
+
+Alt+Tab · Alt+Shift+Tab · Ctrl+Alt+Tab · Win+Tab · Win+Shift+S · Win+PrintScreen · Win+V · Win+. ·
+Win+; · Win+D · Win+M · Win+L · Win+E · Win+R · Win+S · Win+A · Win+I · Win+N · Win+K ·
+Win+Left/Right/Up/Down · Win+Shift+Left/Right · Win+Shift+T · Win+Ctrl+Left/Right · Win+Ctrl+D ·
+Win+Ctrl+F4
+
+The keyboard-layout switch is the one gesture with no third key, so it is decided on **release** —
+the pair is armed when its two modifiers meet and disarmed by anything else pressed in between.
+Windows ships Alt+Shift but can be set to Ctrl+Shift and offers no way to ask which is live, so
+`sound.layoutHotkey` asks instead (`altShift` / `ctrlShift` / `both` / `off`).

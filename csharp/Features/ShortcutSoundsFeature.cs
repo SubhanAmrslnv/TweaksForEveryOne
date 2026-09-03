@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using WindowTweaks.Core;
 
@@ -180,6 +180,13 @@ public class ShortcutSoundsFeature : IDisposable
     /// else is pressed - which is what keeps Shift+Alt+W, Shift+Alt+Tab, Ctrl+Shift+T and every
     /// other chord that starts the same way from being heard as a layout switch when the modifiers
     /// are finally released.
+    ///
+    /// "Anything else" includes a THIRD MODIFIER, and that is a separate step from declining to arm.
+    /// Blocking the arm is not enough once a pair is already armed: Shift, then Alt, then Ctrl left
+    /// the alt+shift flag standing, so releasing Ctrl announced a layout switch that never happened.
+    /// AltGr is the case that made it more than a curiosity - on a non-US layout it emits LCtrl down
+    /// followed by RMenu down, so a hand resting on Shift+AltGr armed ctrl+shift and then fired it
+    /// on release, in the one place a spurious layout sound is most confusing.
     /// </summary>
     private void UpdateLayoutToggle(bool isAlt, bool isShift, bool isCtrl)
     {
@@ -195,6 +202,13 @@ public class ShortcutSoundsFeature : IDisposable
         // pair is what gets tested, never the one going down - the state of a key at the instant its
         // own low-level hook callback runs is not something to depend on.
         if (Down(VK_LWIN) || Down(VK_RWIN)) return;
+
+        // Disarm before arming. The same condition that stops a pair being armed has to UNDO it when
+        // the third modifier arrives late; see the note above. The key GOING DOWN is tested here as
+        // well as the live state, because those are the two ways a third modifier can present and
+        // GetAsyncKeyState has not necessarily caught up with the event being delivered right now.
+        if (isCtrl || Down(VK_CONTROL)) _altShiftArmed = false;
+        if (isAlt || Down(VK_MENU)) _ctrlShiftArmed = false;
 
         if (WantsAltShift && !Down(VK_CONTROL))
         {

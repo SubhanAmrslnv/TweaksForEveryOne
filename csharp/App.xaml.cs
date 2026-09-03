@@ -393,7 +393,12 @@ public partial class App : System.Windows.Application
                 if (on) WeatherService.InvalidateLocation();
             });
 
-                // --- New Features ----------------------------------------------------------------------
+        // --- Stubs ------------------------------------------------------------------------------
+        // Registered, switchable and persisted, but the feature classes are empty: SetEnabled flips
+        // a flag and calls a Start/Stop that do nothing yet. They are wired up front so that the
+        // settings key, the page, the group and the Game Mode entry are all decided once, and
+        // implementing one is a change to that one class rather than another round of wiring.
+        // Kept on one line each deliberately - there are thirty-one of them and nothing to read.
         Add(FeatureKeys.SmartActiveBorder, "Smart Active Border", PageWindow, "Layout & States", "Draws a colorful, elegant border exclusively around the active window.", null, false, on => _smartActiveBorderFeature.SetEnabled(on));
         Add(FeatureKeys.GlobalTextExpander, "Global Text Expander", PagePower, "Workflow", "Automatically expands abbreviations like @@mail or @@date into full text snippets.", null, false, on => _globalTextExpanderFeature.SetEnabled(on));
         Add(FeatureKeys.ZeroDelayMenus, "Zero-delay Menus", PagePower, "Workflow", "Opens context menus instantly (0-50ms) mimicking macOS responsiveness.", null, false, on => _zeroDelayMenusFeature.SetEnabled(on));

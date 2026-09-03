@@ -8,7 +8,7 @@ A Windows 11 tray utility — magnetic window snapping, inertial glide, window a
 
 | Tree | What it is | State | Governed by |
 |---|---|---|---|
-| `csharp\` | **.NET 10 / WPF** tray app. 74 features, ~9,300 lines | The active implementation. Settings persist, the settings window is real, and the binary carries publisher metadata and a manifest | this file |
+| `csharp\` | **.NET 10 / WPF** tray app. 73 switches — **42 implemented, 31 empty stubs** — plus ~20 hotkey-only commands, ~9,300 lines | The active implementation. Settings persist, the settings window is real, and the binary carries publisher metadata and a manifest | this file |
 | `linux\` | **C++20 / Qt6 / CMake** port | Early scaffold that **does not manage windows** and has never been compiled on a real Linux box | **`linux\CLAUDE.md`** — read it before touching anything under `linux\` |
 
 **No AutoHotkey.** `GEMINI.md` bans it outright: AV vendors (Bitdefender is named) flag AHK as a false positive, so all system-hook and window-manipulation work goes to C++ (preferred) or C# (acceptable where a WPF UI is needed). Do not suggest, write, or reintroduce an `.ahk` file.
@@ -55,7 +55,7 @@ dotnet publish .\csharp\WindowTweaks.csproj -c Release -r win-x64 --self-contain
 | `Core\KeyboardHook.cs` | **The one low-level keyboard hook in the process**, shared and reference-counted, installed on `HookThread`. Read its header before adding a subscriber |
 | `Core\MouseHook.cs` | **The one low-level mouse hook**, same arrangement. Subscribers declare an event mask (`Move` / `Buttons` / `Wheel`), and events the app injected itself arrive with `IsOurs` set |
 | `Core\SyntheticInput.cs` | **The only place allowed to inject keys or mouse events.** Everything it sends is tagged with `NativeMethods.SyntheticTag`, which is what makes `IsOurs` work |
-| `Core\SoundEngine.cs` | **Every sound the app makes** - keystrokes, the editing confirmations and the Windows shortcut chords - synthesised as PCM in memory. Sounds differ by **shape** (rising, falling, ticking, clacking), not by pitch; a clip larger than `SlotBytes` is dropped **silently**, so check the arithmetic before adding a long one and written to a winmm `waveOut` device from its own thread. No audio files, no disk, no dispatcher. The device is opened once and held while sounds keep arriving - `PlaySound` opened and tore down a stream per click, which is what made the keyboard sound cut out for stretches and come back on its own |
+| `Core\SoundEngine.cs` | **Every sound the app makes** - keystrokes, the editing confirmations and the Windows shortcut chords - synthesised as PCM in memory and written to a winmm `waveOut` device from its own thread. No audio files, no disk, no dispatcher. Sounds differ by **shape** (rising, falling, ticking, clacking), not by pitch. A clip larger than `SlotBytes` is dropped **silently**, so check the arithmetic before adding a long one — the longest today is the lock chord at ~245 ms. The device is opened once and held while sounds keep arriving - `PlaySound` opened and tore down a stream per click, which is what made the keyboard sound cut out for stretches and come back on its own |
 | `Core\OverlayPlacement.cs` | **The only correct way to place an overlay from hook coordinates.** Hooks report physical pixels; `Window.Left` is in WPF units. Position via here, size via `ScaleAt` |
 | `Core\OsdWindow.cs` | A reusable on-screen readout (a line of text, optionally a meter). Click-through, reused rather than recreated, and its `Post` refuses work while the app is exiting |
 | `Core\WeatherService.cs` | **The only code in the app that touches the network.** open-meteo, off by default, inert until a city is set |
@@ -292,7 +292,15 @@ One divergence that remains: its glide is a per-feature `async` loop over `Task.
 
 ### Missing Tweaks (Stubs)
 
-The following 31 features have been generated as `IDisposable` stubs and integrated into `FeatureKeys.cs`, `App.xaml.cs`, and the Settings Window. They are currently inactive and await concrete implementation:
+The following 31 features exist as `IDisposable` stubs wired into `FeatureKeys.cs`, `App.xaml.cs`, `FeatureKeys.GameModeSuspends` and the settings window. **Each one is a switch a user can see, flip and persist, and flipping it does nothing** — `SetEnabled` flips a flag and calls a `Start`/`Stop` pair that are both empty. That is a deliberate choice: the settings key, the page, the group and the Game Mode entry are decided once, up front, so implementing one is a change to a single class rather than another round of wiring.
+
+Three things that follow, and that the next person to touch this list needs:
+
+- **The keys are prefixed by page, like every other key** (`anim.focusPulse`, `opacity.privacyBlur`, `power.zeroDelayMenus`). They carried a `new.` prefix for one commit; it was corrected before any of them shipped, because a settings key is a stored format and "new" stops being true. See the note on the two `hotkey.` keys in `FeatureKeys.cs` for what it costs to leave one wrong.
+- **Nine of them are in classes the taste section used to forbid** — pulse, neon, 3D carousel, depth scaling, blur. That ban was lifted deliberately; see **The owner's taste** below before removing any of them.
+- **Every one defaults to off, and must stay that way** until it does something. A switch that is on and inert is indistinguishable from a broken feature.
+
+Implementing one means: fill in `Start`/`Stop`, confirm its `GameModeSuspends` entry is still right (a feature that ends up holding an input hook or drawing a top-most window must be in that list), and add any tunable values to `TuningRegistry`.
 
 - `SmartActiveBorderFeature`: Draws a colorful, elegant border exclusively around the active window.
 - `GlobalTextExpanderFeature`: Automatically expands abbreviations like @@mail or @@date into full text snippets.
@@ -370,7 +378,12 @@ Everything in this section was **measured against the removed AutoHotkey impleme
 
 **Wanted: opacity.** Transparency, breathing and fading windows, ghosting, monitor dimming, drag parallax — anything whose whole expression is an alpha value.
 
-**Not wanted:** heartbeat / pulse effects, neon, 3D carousel Alt-Tab, depth-of-field background scaling, and blur generally. Nine features were *deleted* over this rather than switched off. Do not propose a new effect in those classes and do not enable one by default. When something needs visual feedback, reach for a fade first. Ripple Click was deliberately kept.
+**Previously not wanted, and now allowed again:** heartbeat / pulse effects, neon, 3D carousel Alt-Tab, depth-of-field background scaling, and blur generally. Nine features in exactly these classes were once *deleted* rather than switched off — and nine more in the same classes were deliberately re-admitted as stubs in `751b38a`: `FocusPulse`, `MagneticSeamFlash`, `LightsaberSeamGlow`, `CarouselAltTab`, `FocusDepth`, `StartMenuBlur`, `PrivacyBlur`, `MotionBlurScroll`, `CurtainDrop`. **The ban is lifted; this paragraph records that it was lifted on purpose**, so nobody re-derives the old rule from the deletions in git history and removes them a second time.
+
+Two things did *not* change with it:
+
+- **Opacity is still the preferred idiom.** Transparency, breathing, ghosting, dimming and parallax are what this app is for. When something needs visual feedback and a fade would do, use the fade — reach for a glow or a blur only when the effect genuinely has no alpha-only expression.
+- **None of these may default to on.** Every one of the nine is registered `false`, and a taste-dependent effect that arrives switched on is the thing that got the first nine deleted. Ripple Click — kept through the original cull — is the model: available, off, and no one's problem until they ask for it.
 
 ### Compose opacity, never write it absolutely
 

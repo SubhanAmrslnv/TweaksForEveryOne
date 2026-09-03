@@ -585,11 +585,17 @@ internal static class SoundEngine
             SoundId.Transform => Sequence(new[] { (740.0, 0.05), (1108.0, 0.05), (1480.0, 0.08) }),
 
             // Undo runs the work backwards and redo runs it forwards, so the pair is one glide in
-            // two directions. Clean and high on purpose: DesktopNext below is also a rising sweep,
-            // and the two are kept apart by register and by texture rather than by luck - this pair
-            // is almost pure tone, that one is almost all air.
-            SoundId.Undo => Sweep(1050, 590, 0.09, 16, 0.08),
-            SoundId.Redo => Sweep(590, 1050, 0.09, 16, 0.08),
+            // two directions. There are two other rising sweeps in this table and this pair has to
+            // clear BOTH of them, which is what sets the numbers:
+            //
+            //   - DesktopNext is a low whoosh at 420-760 and almost all air (0.45). Separated by
+            //     register and by texture - this pair is nearly a pure tone.
+            //   - SwitchWindow is the close one. It rises 520-1180 in 0.075 s with a little air,
+            //     which is near enough to a rising glide at 590-1050 that the two were hard to tell
+            //     apart. So this pair sits ABOVE it rather than inside it: Redo now starts where the
+            //     switcher finishes, and the air is turned down almost to nothing.
+            SoundId.Undo => Sweep(1480, 920, 0.075, 22, 0.02),
+            SoundId.Redo => Sweep(920, 1480, 0.075, 22, 0.02),
 
             SoundId.VolumeTick => Chord(new[] { 1600.0 }, 0.028),
 
