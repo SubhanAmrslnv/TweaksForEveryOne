@@ -8,7 +8,7 @@ A Windows 11 tray utility — magnetic window snapping, inertial glide, window a
 
 | Tree | What it is | State | Governed by |
 |---|---|---|---|
-| `csharp\` | **.NET 10 / WPF** tray app. 43 features, ~9,300 lines | The active implementation. Settings persist, the settings window is real, and the binary carries publisher metadata and a manifest | this file |
+| `csharp\` | **.NET 10 / WPF** tray app. 74 features, ~9,300 lines | The active implementation. Settings persist, the settings window is real, and the binary carries publisher metadata and a manifest | this file |
 | `linux\` | **C++20 / Qt6 / CMake** port | Early scaffold that **does not manage windows** and has never been compiled on a real Linux box | **`linux\CLAUDE.md`** — read it before touching anything under `linux\` |
 
 **No AutoHotkey.** `GEMINI.md` bans it outright: AV vendors (Bitdefender is named) flag AHK as a false positive, so all system-hook and window-manipulation work goes to C++ (preferred) or C# (acceptable where a WPF UI is needed). Do not suggest, write, or reintroduce an `.ahk` file.
@@ -55,7 +55,7 @@ dotnet publish .\csharp\WindowTweaks.csproj -c Release -r win-x64 --self-contain
 | `Core\KeyboardHook.cs` | **The one low-level keyboard hook in the process**, shared and reference-counted, installed on `HookThread`. Read its header before adding a subscriber |
 | `Core\MouseHook.cs` | **The one low-level mouse hook**, same arrangement. Subscribers declare an event mask (`Move` / `Buttons` / `Wheel`), and events the app injected itself arrive with `IsOurs` set |
 | `Core\SyntheticInput.cs` | **The only place allowed to inject keys or mouse events.** Everything it sends is tagged with `NativeMethods.SyntheticTag`, which is what makes `IsOurs` work |
-| `Core\SoundEngine.cs` | **Every sound the app makes**, synthesised as PCM in memory and written to a winmm `waveOut` device from its own thread. No audio files, no disk, no dispatcher. The device is opened once and held while sounds keep arriving - `PlaySound` opened and tore down a stream per click, which is what made the keyboard sound cut out for stretches and come back on its own |
+| `Core\SoundEngine.cs` | **Every sound the app makes** - keystrokes, the editing confirmations and the Windows shortcut chords - synthesised as PCM in memory. Sounds differ by **shape** (rising, falling, ticking, clacking), not by pitch; a clip larger than `SlotBytes` is dropped **silently**, so check the arithmetic before adding a long one and written to a winmm `waveOut` device from its own thread. No audio files, no disk, no dispatcher. The device is opened once and held while sounds keep arriving - `PlaySound` opened and tore down a stream per click, which is what made the keyboard sound cut out for stretches and come back on its own |
 | `Core\OverlayPlacement.cs` | **The only correct way to place an overlay from hook coordinates.** Hooks report physical pixels; `Window.Left` is in WPF units. Position via here, size via `ScaleAt` |
 | `Core\OsdWindow.cs` | A reusable on-screen readout (a line of text, optionally a meter). Click-through, reused rather than recreated, and its `Post` refuses work while the app is exiting |
 | `Core\WeatherService.cs` | **The only code in the app that touches the network.** open-meteo, off by default, inert until a city is set |
@@ -255,6 +255,31 @@ Read from `App.OnStartup`, which is the only place they are declared. `Shift+Alt
 
 Not hotkeys — gestures answered by the two shared hooks: **triple `Esc`** → boss key, **double-tap `Alt`** → mic mute, **double-tap `Ctrl`** → spotlight, **`Shift+Alt+Wheel`** → transparency (gated on `GetAsyncKeyState` for Shift and Alt, clamping alpha to 25..255), **tap `Caps Lock`** → Escape or Backspace, **hold the middle button and drag** → grab & pan, **wheel over the taskbar** → volume, **middle-click the taskbar** → mute, **shake the mouse** → find the cursor, **drag sideways across text** → magnifier.
 
+**Windows' own chords get sounds, not behaviour.** `ShortcutSoundsFeature` watches the shared keyboard
+hook for Alt+Tab, Alt+Shift, Win+Tab, Win+Shift+S, Win+V, Win+`.`, Win+D, Win+L, Win+arrows,
+Win+Ctrl+arrows and the rest, and plays one synthesised sound per chord. It never suppresses a key -
+it comments on the user's shortcut, and Win+L in particular has to keep working. Three rules inside
+it are load-bearing:
+
+- **The layout switch is decided on RELEASE.** Pressing Alt while Shift is held is also the first
+  half of every `Shift+Alt+` hotkey this app owns, and Ctrl+Shift opens a great many application
+  shortcuts, so neither key-down can be the trigger. Each pair is armed when its two modifiers meet
+  and disarmed by any third key; the release of any modifier fires the sound only if a pair is still
+  armed. The cost is **two booleans - no keystroke is retained** (`docs/ANTIVIRUS.md`).
+- **Which pair means "layout" is asked, not inferred.** Windows ships Alt+Shift but can be set to
+  Ctrl+Shift, and there is no supported way to read which is live, so `sound.layoutHotkey` offers
+  `altShift` / `ctrlShift` / `both` / `off`. Guessing is audible in both directions: a layout change
+  with no sound, or a sound with no layout change.
+- **`ClaimsKey` is a pure query over live modifier state**, which is how `AcousticKeyboardFeature`
+  knows to stay silent on Win+V rather than stacking a letter click on top of the chord sound. A flag
+  set by one hook subscriber for the other to read would depend on their subscription order, and that
+  order follows whichever feature was switched on first.
+
+**Undo and redo belong to `ClipboardOsdFeature`, not to the shortcut feature.** Ctrl+Z and Ctrl+Y are
+editing commands the focused application carries out, the same kind of thing as Ctrl+C - and that
+feature already owns `Announce`, which plays the sound off the dispatcher and draws the ring and the
+word at the cursor. Ctrl+Shift+Z is redo, so the same key means opposite things depending on Shift.
+
 `Shift+Alt+Numpad*` is bound only under the digit names, so with NumLock **off** the keypad sends the navigation names and the whole tiling gesture is dead.
 
 ### `MagneticSnappingFeature` — the one deep feature
@@ -263,15 +288,43 @@ The model to copy for fidelity, and the only feature that carries the original p
 
 One divergence that remains: its glide is a per-feature `async` loop over `Task.Delay(15)` rather than one shared clock — so two features animating one window will fight, and there is no ownership claim to stop them.
 
-**It defers to Windows' own snap, and that deference is load-bearing.** Dragging a window to a screen
-edge triggers Aero Snap, which *resizes* the window, and that resize is not always finished when
-`EVENT_SYSTEM_MOVESIZEEND` arrives — so reading the rectangle immediately still showed the pre-snap
-size, a magnetic snap was computed from stale geometry, and the glide put the window somewhere in the
-middle of the screen at its original size. Two rules follow: the decision waits `SettleMs` (45 ms)
-and then bails out if the window was resized during the drag or is now maximised, and **the glide is
-move-only — `SWP_NOSIZE`, with no width or height passed in at all.** The glide used to re-apply the
-size it captured before the animation started, which silently undid anything that resized the window
-mid-glide. A magnetic snap has no business changing a window's size.
+**It defers to Windows' own snap, and that deference is load-bearing.** Dragging a window to a screen edge triggers Aero Snap, which *resizes* the window, and that resize is not always finished when `EVENT_SYSTEM_MOVESIZEEND` arrives — so reading the rectangle immediately still showed the pre-snap size, a magnetic snap was computed from stale geometry, and the glide put the window somewhere in the middle of the screen at its original size. Two rules follow: the decision waits `SettleMs` (45 ms) and then bails out if the window was resized during the drag or is now maximised, and **the glide is move-only — `SWP_NOSIZE`, with no width or height passed in at all.** The glide used to re-apply the size it captured before the animation started, which silently undid anything that resized the window mid-glide. A magnetic snap has no business changing a window's size.
+
+### Missing Tweaks (Stubs)
+
+The following 31 features have been generated as `IDisposable` stubs and integrated into `FeatureKeys.cs`, `App.xaml.cs`, and the Settings Window. They are currently inactive and await concrete implementation:
+
+- `SmartActiveBorderFeature`: Draws a colorful, elegant border exclusively around the active window.
+- `GlobalTextExpanderFeature`: Automatically expands abbreviations like @@mail or @@date into full text snippets.
+- `ZeroDelayMenusFeature`: Opens context menus instantly (0-50ms) mimicking macOS responsiveness.
+- `SnappyTaskbarPreviewsFeature`: Accelerates taskbar window previews from the default 400ms down to 100ms.
+- `SmoothScrollingFeature`: Applies interpolated, buttery-smooth scrolling globally across all applications.
+- `FadeInEaseOutFeature`: Replaces abrupt window disappearance in Focus Mode with cinematic fade-in/out transitions.
+- `CustomTextCaretFeature`: Overrides the default text cursor with a thicker, smoother, eye-friendly caret.
+- `BouncySnappingFeature`: Adds a rubber-band bounce effect when snapping windows to screen edges.
+- `FocusPulseFeature`: Gently swells and shrinks (2-3% scale) a window when focused via Alt+Tab to draw attention.
+- `GhostSlideInFeature`: Animates new application windows sliding up smoothly from the bottom like a smartphone app.
+- `MagneticSeamFlashFeature`: Emits a brief neon flash effect where the borders of two windows magnetically snap together.
+- `TheaterSpotlightFeature`: Darkens the background and creates a spotlight effect following the cursor over the active window.
+- `FlyToMouseMinimizeFeature`: Sucks minimizing windows directly into the mouse cursor rather than the taskbar.
+- `WindowUnrollingFeature`: Unrolls new windows vertically from top to bottom like a window blind in 0.2 seconds.
+- `ContextMenuUnfoldFeature`: Unfolds context menus downwards like origami instead of appearing instantly.
+- `ElasticDragFeature`: Creates a rubber-band stretching effect when dragging files and snaps back on release.
+- `CursorYawnBreatheFeature`: Makes an idle cursor subtly "breathe" and "yawn" when left untouched.
+- `MomentumTiltFeature`: Slightly tilts windows in the direction of movement while dragging and settles with inertia.
+- `BlackHoleMinimizeFeature`: Sucks minimizing windows and deleted files into a gravitational black hole effect.
+- `ResistanceEdgeFeature`: Simulates tactile rubber-like resistance when dragging a window against screen edges.
+- `FocusDepthFeature`: Pushes inactive windows into the background in 3D while scaling the active one forward.
+- `CarouselAltTabFeature`: Replaces the flat Alt-Tab switcher with a rotating 3D carousel of windows.
+- `DynamicNotchFeature`: Drops an iOS-style "Dynamic Island" from the top of the screen for volume and brightness.
+- `CurtainDropFeature`: Drops all windows to the desktop using kinetic motion blur.
+- `MotionBlurScrollFeature`: Applies a vertical motion blur effect while scrolling fast for extreme perceived smoothness.
+- `OverscrollBounceFeature`: Adds an Apple-style rubber-band bounce effect when reaching the end of a scrolling page.
+- `TaskbarIconWaveFeature`: Makes taskbar icons wave and notifications bounce elastically on mouse hover like macOS.
+- `StartMenuBlurFeature`: Generates a deep background blur effect transitioning smoothly as the Start Menu opens.
+- `WindowThrowCatchFeature`: Allows throwing a window kinetically across monitors so it flies and lands on the other screen.
+- `LightsaberSeamGlowFeature`: Illuminates a glowing Jedi lightsaber edge when hovering over the seam of snapped windows.
+- `PrivacyBlurFeature`: Overlays an unreadable frosted glass blur over private windows when they lose focus.
 
 ## Antivirus false positives — a first-class constraint
 

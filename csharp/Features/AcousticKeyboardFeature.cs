@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using WindowTweaks.Core;
 
@@ -19,7 +19,9 @@ namespace WindowTweaks.Features;
 ///
 /// Now: the click is synthesised once and cached (see Core/SoundEngine.cs) and started from the hook
 /// thread with no dispatcher involvement at all. Different key groups get different sounds, because
-/// a real keyboard does: space and enter are deeper, backspace is drier, modifiers are quieter.
+/// a real keyboard does: space is a deep flat thock, enter falls, backspace falls fast and delete
+/// rises, and modifiers are quieter than everything else. Space and enter used to share one sound
+/// and so did backspace and delete, which made the four of them two.
 ///
 /// NO KEYSTROKE IS RETAINED. The virtual key is used to choose a sound and then discarded within the
 /// callback; nothing is stored, counted or ordered. The only state is one timestamp, for throttling.
@@ -41,6 +43,13 @@ public class AcousticKeyboardFeature : IDisposable
 
     private long _lastPlayed;
 
+    /// <summary>
+    /// Consulted, never driven. When the shortcut sounds own the chord a key is part of - Win+V,
+    /// Alt+Tab - that chord gets its own sound and this feature stays out of the way, rather than
+    /// putting a letter click on top of it. See ShortcutSoundsFeature.ClaimsKey.
+    /// </summary>
+    private readonly ShortcutSoundsFeature _shortcuts;
+
     // The profile and volume are CACHED, not read per keystroke. Each read takes the settings lock
     // and parses a string, and this runs on the hook thread for every key a person types - the rule
     // in CLAUDE.md is to read a tuning value once per operation and never on a hot path. Half a
@@ -50,6 +59,11 @@ public class AcousticKeyboardFeature : IDisposable
     private int _volume = 35;
 
     public bool IsEnabled { get; private set; }
+
+    public AcousticKeyboardFeature(ShortcutSoundsFeature shortcuts)
+    {
+        _shortcuts = shortcuts;
+    }
 
     public void SetEnabled(bool enabled)
     {
@@ -63,7 +77,8 @@ public class AcousticKeyboardFeature : IDisposable
             // Build the four key sounds off the input path, so the first keystroke of the session
             // does not pay for synthesising one on the hook thread.
             SoundEngine.Prewarm(_profile, _volume,
-                SoundId.Key, SoundId.KeyDeep, SoundId.KeyErase, SoundId.KeySoft);
+                SoundId.Key, SoundId.KeySpace, SoundId.KeyEnter,
+                SoundId.KeyBackspace, SoundId.KeyDelete, SoundId.KeySoft);
 
             KeyboardHook.Subscribe(HookOwner, OnKey);
         }
@@ -87,6 +102,10 @@ public class AcousticKeyboardFeature : IDisposable
         // Key-down only, and hardware only: a feature that sounded on its own synthetic keys would
         // click at every Smart Caps escape and every plain-text paste.
         if (!e.IsKeyDown || e.IsInjected) return false;
+
+        // Tested BEFORE the throttle, so a chord neither makes a click of its own nor spends the
+        // throttle window that the next real keystroke needs.
+        if (_shortcuts.ClaimsKey(e.VirtualKey)) return false;
 
         long now = Stopwatch.GetTimestamp();
         double ticksPerMs = Stopwatch.Frequency / 1000.0;
@@ -116,14 +135,22 @@ public class AcousticKeyboardFeature : IDisposable
 
         switch (virtualKey)
         {
-            // The wide keys. On a real board these are the two that thock.
+            // The two wide keys. On a real board these are the ones that thock - but they are not
+            // the SAME thock, and giving them one was the thing that made a sentence and a new
+            // paragraph sound identical. Space is flat; enter falls, the way a commit does.
             case VK_SPACE:
-            case VK_RETURN:
-                return SoundId.KeyDeep;
+                return SoundId.KeySpace;
 
+            case VK_RETURN:
+                return SoundId.KeyEnter;
+
+            // Backspace and delete do almost the same thing in opposite directions, so their sounds
+            // move in opposite directions too: backspace falls, delete rises.
             case VK_BACK:
+                return SoundId.KeyBackspace;
+
             case VK_DELETE:
-                return SoundId.KeyErase;
+                return SoundId.KeyDelete;
 
             // Modifiers and navigation: present but out of the way, so holding shift or arrowing
             // through a document is not the loudest thing on the desk.

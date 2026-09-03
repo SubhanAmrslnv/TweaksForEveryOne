@@ -45,19 +45,56 @@ public partial class App : System.Windows.Application
     private readonly DragParallaxFeature _dragParallaxFeature = new();
     private readonly RippleClickFeature _rippleClickFeature = new();
     private readonly MiddleClickCloseFeature _middleClickCloseFeature = new();
-    private readonly AcousticKeyboardFeature _acousticKeyboardFeature = new();
+    private readonly ShortcutSoundsFeature _shortcutSoundsFeature = new();
     private readonly TaskbarVolumeFeature _taskbarVolumeFeature = new();
     private readonly ClipboardOsdFeature _clipboardOsdFeature = new();
 
-    // Built in the constructor, not in a field initialiser: it takes the clipboard feature above,
-    // and C# forbids one instance field initialiser from referring to another (CS0236). Not in
+    // Built in the constructor, not in a field initialiser: they take one of the features above, and
+    // C# forbids one instance field initialiser from referring to another (CS0236). Not in
     // OnStartup either - a readonly field assigned there would have to be nullable, and every use
     // site would then carry a null-forgiving operator for a field that is never null.
     private readonly TextFormatFeature _textFormatFeature;
 
+    // Takes the shortcut sounds so it can stand aside for a chord that has a sound of its own -
+    // otherwise Win+V is a clipboard-history sound with a letter click on top of it.
+    private readonly AcousticKeyboardFeature _acousticKeyboardFeature;
+
     private readonly CursorLocatorFeature _cursorLocatorFeature = new();
 
     private readonly TextMagnifierFeature _textMagnifierFeature = new();
+
+    // --- New Features ---
+    private readonly SmartActiveBorderFeature _smartActiveBorderFeature = new();
+    private readonly GlobalTextExpanderFeature _globalTextExpanderFeature = new();
+    private readonly ZeroDelayMenusFeature _zeroDelayMenusFeature = new();
+    private readonly SnappyTaskbarPreviewsFeature _snappyTaskbarPreviewsFeature = new();
+    private readonly SmoothScrollingFeature _smoothScrollingFeature = new();
+    private readonly FadeInEaseOutFeature _fadeInEaseOutFeature = new();
+    private readonly CustomTextCaretFeature _customTextCaretFeature = new();
+    private readonly BouncySnappingFeature _bouncySnappingFeature = new();
+    private readonly FocusPulseFeature _focusPulseFeature = new();
+    private readonly GhostSlideInFeature _ghostSlideInFeature = new();
+    private readonly MagneticSeamFlashFeature _magneticSeamFlashFeature = new();
+    private readonly TheaterSpotlightFeature _theaterSpotlightFeature = new();
+    private readonly FlyToMouseMinimizeFeature _flyToMouseMinimizeFeature = new();
+    private readonly WindowUnrollingFeature _windowUnrollingFeature = new();
+    private readonly ContextMenuUnfoldFeature _contextMenuUnfoldFeature = new();
+    private readonly ElasticDragFeature _elasticDragFeature = new();
+    private readonly CursorYawnBreatheFeature _cursorYawnBreatheFeature = new();
+    private readonly MomentumTiltFeature _momentumTiltFeature = new();
+    private readonly BlackHoleMinimizeFeature _blackHoleMinimizeFeature = new();
+    private readonly ResistanceEdgeFeature _resistanceEdgeFeature = new();
+    private readonly FocusDepthFeature _focusDepthFeature = new();
+    private readonly CarouselAltTabFeature _carouselAltTabFeature = new();
+    private readonly DynamicNotchFeature _dynamicNotchFeature = new();
+    private readonly CurtainDropFeature _curtainDropFeature = new();
+    private readonly MotionBlurScrollFeature _motionBlurScrollFeature = new();
+    private readonly OverscrollBounceFeature _overscrollBounceFeature = new();
+    private readonly TaskbarIconWaveFeature _taskbarIconWaveFeature = new();
+    private readonly StartMenuBlurFeature _startMenuBlurFeature = new();
+    private readonly WindowThrowCatchFeature _windowThrowCatchFeature = new();
+    private readonly LightsaberSeamGlowFeature _lightsaberSeamGlowFeature = new();
+    private readonly PrivacyBlurFeature _privacyBlurFeature = new();
 
     // --- Hotkey commands ---
     private readonly FocusModeFeature _focusModeFeature = new();
@@ -106,8 +143,9 @@ public partial class App : System.Windows.Application
 
     public App()
     {
-        // The one feature that takes a collaborator. See the field's comment for why it is here.
+        // The two features that take a collaborator. See the fields' comments for why they are here.
         _textFormatFeature = new TextFormatFeature(_clipboardOsdFeature);
+        _acousticKeyboardFeature = new AcousticKeyboardFeature(_shortcutSoundsFeature);
     }
 
     protected override void OnStartup(StartupEventArgs e)
@@ -289,12 +327,16 @@ public partial class App : System.Windows.Application
             "Alt, Alt", true, on => _doubleAltTrigger!.SetEnabled(on));
 
         Add(FeatureKeys.AcousticKeyboard, "Keyboard sounds", PagePower, "Sound",
-            "A mechanical keyboard click on every keystroke. Space and Enter sound deeper, backspace drier, modifiers quieter. Pick the instrument and the volume on the Tuning page - every sound is generated in memory, so nothing is read from disk while you type.",
+            "A mechanical keyboard click on every keystroke. Space is a deep flat thock, Enter falls, Backspace falls fast and Delete rises, so the four are told apart by ear; modifiers are quieter than the rest. Pick the instrument and the volume on the Tuning page - every sound is generated in memory, so nothing is read from disk while you type.",
             null, false, on => _acousticKeyboardFeature.SetEnabled(on));
 
-        Add(FeatureKeys.ClipboardOsd, "Copy and paste feedback", PagePower, "Sound",
-            "Ctrl+C, Ctrl+V, Ctrl+X and Ctrl+A each get their own sound and their own coloured ring at the pointer, so you can tell a copy from a cut without looking. Never intercepts the chord.",
+        Add(FeatureKeys.ClipboardOsd, "Copy, paste and undo feedback", PagePower, "Sound",
+            "Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+A, Ctrl+Z and Ctrl+Y each get their own sound and their own coloured ring at the pointer, so you can tell a copy from a cut - or an undo from a redo - without looking. Never intercepts the chord.",
             null, true, on => _clipboardOsdFeature.SetEnabled(on));
+
+        Add(FeatureKeys.ShortcutSounds, "Windows shortcut sounds", PagePower, "Sound",
+            "A sound for the Windows chords that confirm nothing on their own: Alt+Tab, Alt+Shift, Win+Tab, Win+Shift+S, Win+V, Win+., Win+D, Win+L and the rest. Each one has its own shape rather than its own pitch - the switcher rises, show-desktop falls, the snip clacks - so you learn them without trying. Never intercepts the chord.",
+            null, true, on => _shortcutSoundsFeature.SetEnabled(on));
 
         Add(FeatureKeys.TaskbarVolume, "Taskbar volume wheel", PagePower, "Sound",
             "Scroll the wheel over the taskbar to change the volume, with a readout showing the new level - including on a second monitor, where Windows' own flyout appears on the primary. Middle-click the taskbar to mute.",
@@ -350,6 +392,39 @@ public partial class App : System.Windows.Application
                 CustomClockFeature.WeatherEnabled = on;
                 if (on) WeatherService.InvalidateLocation();
             });
+
+                // --- New Features ----------------------------------------------------------------------
+        Add(FeatureKeys.SmartActiveBorder, "Smart Active Border", PageWindow, "Layout & States", "Draws a colorful, elegant border exclusively around the active window.", null, false, on => _smartActiveBorderFeature.SetEnabled(on));
+        Add(FeatureKeys.GlobalTextExpander, "Global Text Expander", PagePower, "Workflow", "Automatically expands abbreviations like @@mail or @@date into full text snippets.", null, false, on => _globalTextExpanderFeature.SetEnabled(on));
+        Add(FeatureKeys.ZeroDelayMenus, "Zero-delay Menus", PagePower, "Workflow", "Opens context menus instantly (0-50ms) mimicking macOS responsiveness.", null, false, on => _zeroDelayMenusFeature.SetEnabled(on));
+        Add(FeatureKeys.SnappyTaskbarPreviews, "Snappy Taskbar Previews", PageScreen, "Taskbar", "Accelerates taskbar window previews from the default 400ms down to 100ms.", null, false, on => _snappyTaskbarPreviewsFeature.SetEnabled(on));
+        Add(FeatureKeys.SmoothScrolling, "Smooth Scrolling", PagePower, "Pointer", "Applies interpolated, buttery-smooth scrolling globally across all applications.", null, false, on => _smoothScrollingFeature.SetEnabled(on));
+        Add(FeatureKeys.FadeInEaseOut, "Fade In / Ease-Out", PageAnimation, "Ambient", "Replaces abrupt window disappearance with cinematic fade-in/out transitions.", null, false, on => _fadeInEaseOutFeature.SetEnabled(on));
+        Add(FeatureKeys.CustomTextCaret, "Custom Text Caret", PagePower, "Pointer", "Overrides the default text cursor with a thicker, smoother, eye-friendly caret.", null, false, on => _customTextCaretFeature.SetEnabled(on));
+        Add(FeatureKeys.BouncySnapping, "Bouncy Snapping", PageAnimation, "Movement & Dragging", "Adds a rubber-band bounce effect when snapping windows to screen edges.", null, false, on => _bouncySnappingFeature.SetEnabled(on));
+        Add(FeatureKeys.FocusPulse, "Focus Pulse", PageAnimation, "Ambient", "Gently swells and shrinks a window when focused via Alt+Tab to draw attention.", null, false, on => _focusPulseFeature.SetEnabled(on));
+        Add(FeatureKeys.GhostSlideIn, "Ghost Slide-In", PageAnimation, "Ambient", "Animates new application windows sliding up smoothly from the bottom.", null, false, on => _ghostSlideInFeature.SetEnabled(on));
+        Add(FeatureKeys.MagneticSeamFlash, "Magnetic Seam Flash", PageAnimation, "Movement & Dragging", "Emits a brief neon flash effect where the borders of two windows magnetically snap together.", null, false, on => _magneticSeamFlashFeature.SetEnabled(on));
+        Add(FeatureKeys.TheaterSpotlight, "Theater Spotlight", PageOpacity, "Ambient", "Darkens the background and creates a spotlight effect following the cursor.", null, false, on => _theaterSpotlightFeature.SetEnabled(on));
+        Add(FeatureKeys.FlyToMouseMinimize, "Fly-to-Mouse Minimize", PageAnimation, "Window closing", "Sucks minimizing windows directly into the mouse cursor rather than the taskbar.", null, false, on => _flyToMouseMinimizeFeature.SetEnabled(on));
+        Add(FeatureKeys.WindowUnrolling, "Window Unrolling", PageAnimation, "Ambient", "Unrolls new windows vertically from top to bottom like a window blind in 0.2 seconds.", null, false, on => _windowUnrollingFeature.SetEnabled(on));
+        Add(FeatureKeys.ContextMenuUnfold, "Context Menu Unfold", PageAnimation, "Pointer", "Unfolds context menus downwards like origami instead of appearing instantly.", null, false, on => _contextMenuUnfoldFeature.SetEnabled(on));
+        Add(FeatureKeys.ElasticDrag, "Elastic Drag", PageAnimation, "Movement & Dragging", "Creates a rubber-band stretching effect when dragging files and snaps back on release.", null, false, on => _elasticDragFeature.SetEnabled(on));
+        Add(FeatureKeys.CursorYawnBreathe, "Cursor Yawn & Breathe", PageAnimation, "Pointer", "Makes an idle cursor subtly breathe and yawn when left untouched.", null, false, on => _cursorYawnBreatheFeature.SetEnabled(on));
+        Add(FeatureKeys.MomentumTilt, "Momentum Tilt", PageAnimation, "Movement & Dragging", "Slightly tilts windows in the direction of movement while dragging and settles with inertia.", null, false, on => _momentumTiltFeature.SetEnabled(on));
+        Add(FeatureKeys.BlackHoleMinimize, "Black Hole Minimize", PageAnimation, "Window closing", "Sucks minimizing windows and deleted files into a gravitational black hole effect.", null, false, on => _blackHoleMinimizeFeature.SetEnabled(on));
+        Add(FeatureKeys.ResistanceEdge, "Resistance Edge", PageAnimation, "Movement & Dragging", "Simulates tactile rubber-like resistance when dragging a window against screen edges.", null, false, on => _resistanceEdgeFeature.SetEnabled(on));
+        Add(FeatureKeys.FocusDepth, "Focus Depth", PageOpacity, "Ambient", "Pushes inactive windows into the background in 3D while scaling the active one forward.", null, false, on => _focusDepthFeature.SetEnabled(on));
+        Add(FeatureKeys.CarouselAltTab, "Carousel Alt-Tab", PageAnimation, "Ambient", "Replaces the flat Alt-Tab switcher with a rotating 3D carousel of windows.", null, false, on => _carouselAltTabFeature.SetEnabled(on));
+        Add(FeatureKeys.DynamicNotch, "Dynamic Notch (OSD)", PageScreen, "Taskbar", "Drops an iOS-style Dynamic Island from the top of the screen for volume and brightness.", null, false, on => _dynamicNotchFeature.SetEnabled(on));
+        Add(FeatureKeys.CurtainDrop, "Curtain Drop", PageAnimation, "Ambient", "Drops all windows to the desktop using kinetic motion blur.", null, false, on => _curtainDropFeature.SetEnabled(on));
+        Add(FeatureKeys.MotionBlurScroll, "Motion Blur Scroll", PageAnimation, "Pointer", "Applies a vertical motion blur effect while scrolling fast for extreme perceived smoothness.", null, false, on => _motionBlurScrollFeature.SetEnabled(on));
+        Add(FeatureKeys.OverscrollBounce, "Overscroll Bounce", PageAnimation, "Pointer", "Adds an Apple-style rubber-band bounce effect when reaching the end of a scrolling page.", null, false, on => _overscrollBounceFeature.SetEnabled(on));
+        Add(FeatureKeys.TaskbarIconWave, "Taskbar Icon Wave", PageAnimation, "Pointer", "Makes taskbar icons wave and notifications bounce elastically on mouse hover.", null, false, on => _taskbarIconWaveFeature.SetEnabled(on));
+        Add(FeatureKeys.StartMenuBlur, "Start Menu Slide-Up Blur", PageOpacity, "Ambient", "Generates a deep background blur effect transitioning smoothly as the Start Menu opens.", null, false, on => _startMenuBlurFeature.SetEnabled(on));
+        Add(FeatureKeys.WindowThrowCatch, "Window Throw & Catch", PageAnimation, "Movement & Dragging", "Allows throwing a window kinetically across monitors so it flies and lands on the other screen.", null, false, on => _windowThrowCatchFeature.SetEnabled(on));
+        Add(FeatureKeys.LightsaberSeamGlow, "Lightsaber Seam Glow", PageAnimation, "Movement & Dragging", "Illuminates a glowing Jedi lightsaber edge when hovering over the seam of snapped windows.", null, false, on => _lightsaberSeamGlowFeature.SetEnabled(on));
+        Add(FeatureKeys.PrivacyBlur, "Privacy Blur", PageOpacity, "Ambient", "Overlays an unreadable frosted glass blur over private windows when they lose focus.", null, false, on => _privacyBlurFeature.SetEnabled(on));
 
         // --- General ---------------------------------------------------------------------------
         // The default is read from the filesystem, not from settings.json: the shortcut is the
@@ -634,6 +709,8 @@ public partial class App : System.Windows.Application
         Dispose(_smartTaskbarFeature);
         Dispose(_taskbarVolumeFeature);
         Dispose(_clipboardOsdFeature);
+        Dispose(_acousticKeyboardFeature);
+        Dispose(_shortcutSoundsFeature);
         Dispose(_textFormatFeature);
         Dispose(_cursorLocatorFeature);
         Dispose(_textMagnifierFeature);
@@ -652,6 +729,39 @@ public partial class App : System.Windows.Application
         Dispose(_micMuteFeature);
         Dispose(_doubleAltTrigger);
         Dispose(_doubleCtrlTrigger);
+
+        // New features
+        Dispose(_smartActiveBorderFeature);
+        Dispose(_globalTextExpanderFeature);
+        Dispose(_zeroDelayMenusFeature);
+        Dispose(_snappyTaskbarPreviewsFeature);
+        Dispose(_smoothScrollingFeature);
+        Dispose(_fadeInEaseOutFeature);
+        Dispose(_customTextCaretFeature);
+        Dispose(_bouncySnappingFeature);
+        Dispose(_focusPulseFeature);
+        Dispose(_ghostSlideInFeature);
+        Dispose(_magneticSeamFlashFeature);
+        Dispose(_theaterSpotlightFeature);
+        Dispose(_flyToMouseMinimizeFeature);
+        Dispose(_windowUnrollingFeature);
+        Dispose(_contextMenuUnfoldFeature);
+        Dispose(_elasticDragFeature);
+        Dispose(_cursorYawnBreatheFeature);
+        Dispose(_momentumTiltFeature);
+        Dispose(_blackHoleMinimizeFeature);
+        Dispose(_resistanceEdgeFeature);
+        Dispose(_focusDepthFeature);
+        Dispose(_carouselAltTabFeature);
+        Dispose(_dynamicNotchFeature);
+        Dispose(_curtainDropFeature);
+        Dispose(_motionBlurScrollFeature);
+        Dispose(_overscrollBounceFeature);
+        Dispose(_taskbarIconWaveFeature);
+        Dispose(_startMenuBlurFeature);
+        Dispose(_windowThrowCatchFeature);
+        Dispose(_lightsaberSeamGlowFeature);
+        Dispose(_privacyBlurFeature);
 
         // Nothing should still be dimmed, but a crashed feature could have left a record behind.
         AlphaCompositor.ResetAll();

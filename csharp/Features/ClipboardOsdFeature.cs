@@ -13,8 +13,14 @@ using VerticalAlignment = System.Windows.VerticalAlignment;
 namespace WindowTweaks.Features;
 
 /// <summary>
-/// Feedback for the clipboard chords: Ctrl+C, Ctrl+V, Ctrl+X and Ctrl+A each get their own sound and
-/// their own coloured pulse at the cursor.
+/// Feedback for the editing chords: Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+A, Ctrl+Z and Ctrl+Y each get their
+/// own sound and their own coloured pulse at the cursor.
+///
+/// Undo and redo live HERE rather than in ShortcutSoundsFeature, which owns the Windows chords,
+/// because they are the same kind of thing as copy and paste: an editing command the focused
+/// application carries out, not a shell gesture. They also want the ring and the word at the cursor,
+/// which this feature already builds - a second implementation of Announce would be the whole point
+/// of that method wasted.
 ///
 /// THE POINT IS THAT THE FOUR ARE DISTINGUISHABLE. The first version played one sound - the shared
 /// Windows asterisk - for all four, and showed a label, so the only way to tell a copy from a cut was
@@ -39,6 +45,10 @@ public class ClipboardOsdFeature : IDisposable
 
     private const int VK_CONTROL = 0x11;
     private const int VK_C = 0x43, VK_V = 0x56, VK_X = 0x58, VK_A = 0x41;
+    private const int VK_Z = 0x5A, VK_Y = 0x59;
+
+    /// <summary>Ctrl+Shift+Z is redo wherever Ctrl+Y is not.</summary>
+    private const int VK_SHIFT = 0x10;
 
     /// <summary>
     /// Ctrl+C twice in quick succession is one gesture to a person, not two. Without this a held
@@ -66,7 +76,8 @@ public class ClipboardOsdFeature : IDisposable
             SoundEngine.Prewarm(
                 TuningRegistry.Choice(TuningRegistry.KeyboardSoundProfile),
                 TuningRegistry.Int(TuningRegistry.ClipboardSoundVolume),
-                SoundId.Copy, SoundId.Paste, SoundId.Cut, SoundId.SelectAll, SoundId.Transform);
+                SoundId.Copy, SoundId.Paste, SoundId.Cut, SoundId.SelectAll, SoundId.Transform,
+                SoundId.Undo, SoundId.Redo);
 
             KeyboardHook.Subscribe(HookOwner, OnKey);
         }
@@ -87,8 +98,8 @@ public class ClipboardOsdFeature : IDisposable
     {
         if (!e.IsKeyDown || e.IsInjected) return false;
 
-        // Cheapest test first: four keys out of a hundred and five.
-        if (e.VirtualKey is not (VK_C or VK_V or VK_X or VK_A)) return false;
+        // Cheapest test first: six keys out of a hundred and five.
+        if (e.VirtualKey is not (VK_C or VK_V or VK_X or VK_A or VK_Z or VK_Y)) return false;
 
         if ((NativeMethods.GetAsyncKeyState(VK_CONTROL) & 0x8000) == 0) return false;
 
@@ -97,12 +108,22 @@ public class ClipboardOsdFeature : IDisposable
         if (_lastShown != 0 && sinceMs < MinIntervalMs) return false;
         _lastShown = now;
 
+        // Ctrl+Shift+Z is redo in the applications that do not use Ctrl+Y, so the same key means
+        // opposite things depending on Shift. Read, not tracked, like every other modifier here.
+        bool shift = (NativeMethods.GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+
         (string label, SoundId sound, Color colour) = e.VirtualKey switch
         {
             VK_C => ("Copied", SoundId.Copy, Color.FromRgb(0x9A, 0xD4, 0xFF)),
             VK_V => ("Pasted", SoundId.Paste, Color.FromRgb(0xA8, 0xE6, 0xA0)),
             VK_X => ("Cut", SoundId.Cut, Color.FromRgb(0xFF, 0xC1, 0x8A)),
-            _ => ("All selected", SoundId.SelectAll, Color.FromRgb(0xD8, 0xB4, 0xFF))
+            VK_A => ("All selected", SoundId.SelectAll, Color.FromRgb(0xD8, 0xB4, 0xFF)),
+
+            // The pair reads as one axis: undo is the cooler colour, redo the warmer one, and their
+            // sounds are the same glide in opposite directions.
+            VK_Z when shift => ("Redone", SoundId.Redo, Color.FromRgb(0xC7, 0xE8, 0xB0)),
+            VK_Z => ("Undone", SoundId.Undo, Color.FromRgb(0xB6, 0xC6, 0xE8)),
+            _ => ("Redone", SoundId.Redo, Color.FromRgb(0xC7, 0xE8, 0xB0))
         };
 
         Announce(label, sound, colour);

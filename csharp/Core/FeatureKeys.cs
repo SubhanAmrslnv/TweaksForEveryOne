@@ -1,4 +1,4 @@
-namespace WindowTweaks.Core;
+﻿namespace WindowTweaks.Core;
 
 /// <summary>
 /// Every settings key in one place. They are persisted strings, so renaming one silently discards
@@ -46,6 +46,7 @@ internal static class FeatureKeys
     public const string TaskbarVolume = "hotkey.taskbarVolume";
 
     public const string ClipboardOsd = "power.clipboardOsd";
+    public const string ShortcutSounds = "power.shortcutSounds";
     public const string TextFormat = "power.textFormat";
     public const string CursorLocator = "power.cursorLocator";
     public const string TextMagnifier = "power.textMagnifier";
@@ -70,6 +71,38 @@ internal static class FeatureKeys
 
     // General
     public const string StartWithWindows = "general.startWithWindows";
+
+    public const string SmartActiveBorder = "new.smartactiveborder";
+    public const string GlobalTextExpander = "new.globaltextexpander";
+    public const string ZeroDelayMenus = "new.zerodelaymenus";
+    public const string SnappyTaskbarPreviews = "new.snappytaskbarpreviews";
+    public const string SmoothScrolling = "new.smoothscrolling";
+    public const string FadeInEaseOut = "new.fadeineaseout";
+    public const string CustomTextCaret = "new.customtextcaret";
+    public const string BouncySnapping = "new.bouncysnapping";
+    public const string FocusPulse = "new.focuspulse";
+    public const string GhostSlideIn = "new.ghostslidein";
+    public const string MagneticSeamFlash = "new.magneticseamflash";
+    public const string TheaterSpotlight = "new.theaterspotlight";
+    public const string FlyToMouseMinimize = "new.flytomouseminimize";
+    public const string WindowUnrolling = "new.windowunrolling";
+    public const string ContextMenuUnfold = "new.contextmenuunfold";
+    public const string ElasticDrag = "new.elasticdrag";
+    public const string CursorYawnBreathe = "new.cursoryawnbreathe";
+    public const string MomentumTilt = "new.momentumtilt";
+    public const string BlackHoleMinimize = "new.blackholeminimize";
+    public const string ResistanceEdge = "new.resistanceedge";
+    public const string FocusDepth = "new.focusdepth";
+    public const string CarouselAltTab = "new.carouselalttab";
+    public const string DynamicNotch = "new.dynamicnotch";
+    public const string CurtainDrop = "new.curtaindrop";
+    public const string MotionBlurScroll = "new.motionblurscroll";
+    public const string OverscrollBounce = "new.overscrollbounce";
+    public const string TaskbarIconWave = "new.taskbariconwave";
+    public const string StartMenuBlur = "new.startmenublur";
+    public const string WindowThrowCatch = "new.windowthrowcatch";
+    public const string LightsaberSeamGlow = "new.lightsaberseamglow";
+    public const string PrivacyBlur = "new.privacyblur";
 
     /// <summary>
     /// What Game Mode switches off. Anything that steals focus, dims a window, animates, makes a
@@ -113,9 +146,43 @@ internal static class FeatureKeys
         // also make a sound or draw an overlay.
         AcousticKeyboard,
         ClipboardOsd,
+        ShortcutSounds,
         CursorLocator,
         TextMagnifier,
         TaskbarVolume,
-        TextFormat
+        TextFormat,
+
+        // Stubs added
+        SmartActiveBorder,
+        GlobalTextExpander,
+        ZeroDelayMenus,
+        SnappyTaskbarPreviews,
+        SmoothScrolling,
+        FadeInEaseOut,
+        CustomTextCaret,
+        BouncySnapping,
+        FocusPulse,
+        GhostSlideIn,
+        MagneticSeamFlash,
+        TheaterSpotlight,
+        FlyToMouseMinimize,
+        WindowUnrolling,
+        ContextMenuUnfold,
+        ElasticDrag,
+        CursorYawnBreathe,
+        MomentumTilt,
+        BlackHoleMinimize,
+        ResistanceEdge,
+        FocusDepth,
+        CarouselAltTab,
+        DynamicNotch,
+        CurtainDrop,
+        MotionBlurScroll,
+        OverscrollBounce,
+        TaskbarIconWave,
+        StartMenuBlur,
+        WindowThrowCatch,
+        LightsaberSeamGlow,
+        PrivacyBlur
     };
 }

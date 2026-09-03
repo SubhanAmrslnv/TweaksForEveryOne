@@ -126,6 +126,14 @@ internal static class TuningRegistry
     public const string KeyboardSoundVolume = "sound.keyboardVolume";
     public const string ClipboardSoundVolume = "sound.clipboardVolume";
     public const string ClipboardShowOsd = "sound.clipboardOsd";
+    public const string ShortcutSoundVolume = "sound.shortcutVolume";
+
+    /// <summary>
+    /// Which modifier pair this machine uses to switch keyboard layout. There is no supported way to
+    /// read it out of Windows, and guessing wrong is audible in both directions - a layout change
+    /// with no sound, or a sound with no layout change - so it is asked rather than inferred.
+    /// </summary>
+    public const string LayoutHotkey = "sound.layoutHotkey";
     public const string VolumeTickVolume = "sound.volumeTickVolume";
 
     // --- Taskbar volume wheel -----------------------------------------------------------------
@@ -368,19 +376,19 @@ internal static class TuningRegistry
             Title = "Sound profile", DefaultText = "click",
             Choices = new[] { "click", "typewriter", "soft" },
             ChoiceLabels = new[] { "Click - short and dry", "Typewriter - heavier thock", "Soft - a quiet tone" },
-            Description = "The instrument for every sound the app makes. Each sound is generated in memory, so there are no audio files and nothing is read from disk while you type."
+            Description = "The instrument for every sound the app makes - keystrokes, the clipboard confirmations and the Windows shortcut chords alike. Each sound is generated in memory, so there are no audio files and nothing is read from disk while you type."
         },
         new TuningDescriptor
         {
             Key = KeyboardSoundVolume, Page = PagePower, Group = "Sound", Kind = TuningKind.Percent,
             Title = "Keystroke volume", Unit = "%", Min = 0, Max = 100, Default = 35,
-            Description = "How loud a keystroke is. This is a sound you hear hundreds of times a minute, so it wants to be quieter than you first think. Zero silences it without switching the feature off."
+            Description = "How loud a keystroke is. Space, Enter, Backspace and Delete each have their own sound and modifiers are quieter, but this is the level they are all balanced against. It is a sound you hear hundreds of times a minute, so it wants to be quieter than you first think. Zero silences it without switching the feature off."
         },
         new TuningDescriptor
         {
             Key = ClipboardSoundVolume, Page = PagePower, Group = "Sound", Kind = TuningKind.Percent,
             Title = "Copy and paste volume", Unit = "%", Min = 0, Max = 100, Default = 55,
-            Description = "How loud the copy, paste, cut and select-all confirmations are."
+            Description = "How loud the copy, paste, cut, select-all, undo and redo confirmations are."
         },
         new TuningDescriptor
         {
@@ -388,7 +396,21 @@ internal static class TuningRegistry
             Title = "Show the clipboard label", DefaultText = "on",
             Choices = new[] { "on", "off" },
             ChoiceLabels = new[] { "Ring and label at the cursor", "Sound only" },
-            Description = "Whether copy, paste, cut and select-all also draw a coloured ring and a word at the pointer, or only make their sound."
+            Description = "Whether copy, paste, cut, select-all, undo and redo also draw a coloured ring and a word at the pointer, or only make their sound."
+        },
+        new TuningDescriptor
+        {
+            Key = ShortcutSoundVolume, Page = PagePower, Group = "Sound", Kind = TuningKind.Percent,
+            Title = "Windows shortcut volume", Unit = "%", Min = 0, Max = 100, Default = 45,
+            Description = "How loud the confirmations for Alt+Tab, Alt+Shift, Win+Shift+S, Win+V, Win+. and the rest are. These fire once per gesture rather than once per keystroke, so they can sit above the typing sound. Zero silences them without switching the feature off."
+        },
+        new TuningDescriptor
+        {
+            Key = LayoutHotkey, Page = PagePower, Group = "Sound", Kind = TuningKind.Choice,
+            Title = "Keyboard layout switch", DefaultText = "altShift",
+            Choices = new[] { "altShift", "ctrlShift", "both", "off" },
+            ChoiceLabels = new[] { "Alt+Shift", "Ctrl+Shift", "Either one", "No sound for it" },
+            Description = "Which pair of modifiers makes the layout-switch sound. Windows uses Alt+Shift out of the box but can be set to Ctrl+Shift instead, and there is no way to ask it which - so pick the one your machine actually uses. Either pair only counts when nothing else is pressed in between, so Ctrl+Shift+T and Shift+Alt+W stay silent."
         },
         new TuningDescriptor
         {
