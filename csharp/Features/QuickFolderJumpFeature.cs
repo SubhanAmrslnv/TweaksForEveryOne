@@ -107,7 +107,7 @@ public class QuickFolderJumpFeature
         });
     }
 
-    private string GetActiveExplorerPath()
+    private string? GetActiveExplorerPath()
     {
         try
         {
@@ -115,18 +115,21 @@ public class QuickFolderJumpFeature
             if (explorerHwnd == IntPtr.Zero)
                 return null;
 
-            Type shellAppType = Type.GetTypeFromProgID("Shell.Application");
+            Type? shellAppType = Type.GetTypeFromProgID("Shell.Application");
             if (shellAppType != null)
             {
-                dynamic shell = Activator.CreateInstance(shellAppType);
-                var windows = shell.Windows();
-                for (int i = 0; i < windows.Count; i++)
+                dynamic? shell = Activator.CreateInstance(shellAppType);
+                var windows = shell?.Windows();
+                if (windows != null)
                 {
-                    var window = windows.Item(i);
-                    if (window != null && (IntPtr)window.HWND == explorerHwnd)
+                    for (int i = 0; i < windows.Count; i++)
                     {
-                        string path = window.Document.Folder.Self.Path;
-                        return path;
+                        var window = windows.Item(i);
+                        if (window != null && (IntPtr)window.HWND == explorerHwnd)
+                        {
+                            string? path = window.Document?.Folder?.Self?.Path;
+                            return path;
+                        }
                     }
                 }
             }

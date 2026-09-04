@@ -122,7 +122,7 @@ public class PositionMemoryFeature : IDisposable
         }
     }
 
-    private string GetWindowKey(IntPtr hwnd)
+    private string? GetWindowKey(IntPtr hwnd)
     {
         // 1. Invisible windows
         if (!NativeMethods.IsWindowVisible(hwnd)) return null;
@@ -132,7 +132,7 @@ public class PositionMemoryFeature : IDisposable
 
         // 3. Process check
         NativeMethods.GetWindowThreadProcessId(hwnd, out uint pid);
-        if (pid == 0 || pid == Process.GetCurrentProcess().Id) return null;
+        if (pid == 0 || pid == Environment.ProcessId) return null;
 
         // 4. Style checks
         uint style = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_STYLE);
@@ -154,18 +154,12 @@ public class PositionMemoryFeature : IDisposable
         if (cls == "Shell_TrayWnd" || cls == "Progman" || cls == "WorkerW") return null;
 
         // Exe Name and PiP check
-        string exe = "";
-        try
-        {
-            using Process proc = Process.GetProcessById((int)pid);
-            exe = proc.ProcessName;
-        }
-        catch { return null; }
+        string exeLower = ProcessNameCache.ForPid(pid);
+        if (string.IsNullOrEmpty(exeLower)) return null;
 
         // PiP checks (WS_EX_TOPMOST but no WS_MAXIMIZEBOX, specific browsers)
         if ((exStyle & WS_EX_TOPMOST) == WS_EX_TOPMOST && (style & WS_MAXIMIZEBOX) == 0)
         {
-            string exeLower = exe.ToLowerInvariant();
             if (exeLower == "chrome" || exeLower == "msedge" || exeLower == "firefox" || exeLower == "brave" || exeLower == "opera" || exeLower == "vivaldi")
             {
                 return null;
@@ -182,12 +176,12 @@ public class PositionMemoryFeature : IDisposable
             return null;
         }
 
-        return $"{exe}:{cls}";
+        return $"{exeLower}:{cls}";
     }
 
     private void RememberPosition(IntPtr hwnd)
     {
-        string key = GetWindowKey(hwnd);
+        string? key = GetWindowKey(hwnd);
         if (key == null) return;
 
         if (NativeMethods.GetWindowRect(hwnd, out NativeMethods.RECT winRect))
@@ -206,7 +200,7 @@ public class PositionMemoryFeature : IDisposable
 
     private void RestorePosition(IntPtr hwnd)
     {
-        string key = GetWindowKey(hwnd);
+        string? key = GetWindowKey(hwnd);
         if (key == null) return;
 
         if (_positions.TryGetValue(key, out WindowRect rect))

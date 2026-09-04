@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Threading;
@@ -282,7 +282,7 @@ public partial class App : System.Windows.Application
 
         Add(FeatureKeys.FocusMode, "Focus / cinema mode", PageOpacity, "Ambient",
             "Blacks out everything except the active window.",
-            "Shift+Alt+F", true, null);
+            "Shift+Alt+F", true, on => _focusModeFeature.SetEnabled(on));
 
         // --- Animation -------------------------------------------------------------------------
         Add(FeatureKeys.RippleClick, "Ripple click", PageAnimation, "Pointer",
@@ -507,7 +507,7 @@ public partial class App : System.Windows.Application
         // Gated commands: the hotkey stays registered, but does nothing while the feature is off.
         HkGated(sa, VK_O, "Shift+Alt+O", FeatureKeys.AlwaysOnTop, () => _alwaysOnTopFeature.Toggle());
         HkGated(sa, VK_B, "Shift+Alt+B", FeatureKeys.AlwaysOnBottom, () => _alwaysOnBottomFeature.Toggle());
-        HkGated(sa, VK_F, "Shift+Alt+F", FeatureKeys.FocusMode, () => _focusModeFeature.Toggle());
+        Hk(sa, VK_F, "Shift+Alt+F", () => FeatureRegistry.Toggle(FeatureKeys.FocusMode));
         HkGated(sa, VK_R, "Shift+Alt+R", FeatureKeys.RollUp, () => _rollUpFeature.Toggle());
         HkGated(sa, VK_H, "Shift+Alt+H", FeatureKeys.TrayMinimize, () => _trayMinimizeFeature.Toggle());
         HkGated(sa, VK_G, "Shift+Alt+G", FeatureKeys.ProximityGhost, () => _proximityGhostFeature.Toggle());
@@ -723,6 +723,8 @@ public partial class App : System.Windows.Application
         Dispose(_customClockFeature);
         Dispose(_smartCapsFeature);
         Dispose(_alwaysOnBottomFeature);
+        Dispose(_focusModeFeature);
+        Dispose(_rollUpFeature);
         Dispose(_proximityGhostFeature);
         Dispose(_livePipFeature);
         Dispose(_spotlightFeature);

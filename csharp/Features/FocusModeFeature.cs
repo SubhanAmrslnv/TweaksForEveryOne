@@ -9,7 +9,7 @@ using WindowTweaks.Core;
 
 namespace WindowTweaks.Features;
 
-public class FocusModeFeature
+public class FocusModeFeature : IDisposable
 {
     private Window? _overlayWindow;
     private DispatcherTimer? _monitorTimer;
@@ -21,17 +21,14 @@ public class FocusModeFeature
 
     public bool IsEnabled => _overlayWindow != null;
 
-    public void Toggle()
+    public void SetEnabled(bool enabled)
     {
-        if (IsEnabled)
-        {
-            Disable();
-        }
-        else
-        {
-            Enable();
-        }
+        if (enabled == IsEnabled) return;
+        if (enabled) Enable();
+        else Disable();
     }
+
+    public void Toggle() => SetEnabled(!IsEnabled);
 
     private void Enable()
     {
@@ -174,6 +171,16 @@ public class FocusModeFeature
             double padding = 50;
             _spotlightMask.RadiusX = (_currentW / 2) + padding;
             _spotlightMask.RadiusY = (_currentH / 2) + padding;
+        }
+    }
+
+    public void Dispose()
+    {
+        _monitorTimer?.Stop();
+        if (_overlayWindow != null)
+        {
+            _overlayWindow.Close();
+            _overlayWindow = null;
         }
     }
 }

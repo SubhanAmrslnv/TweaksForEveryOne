@@ -12,7 +12,7 @@ public class AlwaysOnTopFeature
 
         // Self-exclude by PID
         NativeMethods.GetWindowThreadProcessId(activeWindow, out uint activePid);
-        uint ownPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+        uint ownPid = (uint)Environment.ProcessId;
         if (activePid == ownPid) return;
 
         uint exStyle = NativeMethods.GetWindowLong(activeWindow, NativeMethods.GWL_EXSTYLE);

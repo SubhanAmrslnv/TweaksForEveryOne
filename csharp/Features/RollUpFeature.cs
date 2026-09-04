@@ -6,7 +6,7 @@ using WindowTweaks.Core;
 
 namespace WindowTweaks.Features;
 
-public class RollUpFeature
+public class RollUpFeature : IDisposable
 {
     private Dictionary<IntPtr, int> _rolledUpWindows = new();
 
@@ -108,5 +108,17 @@ public class RollUpFeature
 
             await Task.Delay(16); // ~60 FPS
         }
+    }
+
+    public void Dispose()
+    {
+        foreach (var hwnd in new List<IntPtr>(_rolledUpWindows.Keys))
+        {
+            if (NativeMethods.IsWindow(hwnd))
+            {
+                NativeMethods.SetWindowRgn(hwnd, IntPtr.Zero, true);
+            }
+        }
+        _rolledUpWindows.Clear();
     }
 }

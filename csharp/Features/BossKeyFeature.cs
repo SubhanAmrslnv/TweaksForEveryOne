@@ -42,7 +42,7 @@ public class BossKeyFeature
                 AudioManager.SetMute(true);
 
                 _hiddenWindows.Clear();
-                uint ownPid = (uint)Process.GetCurrentProcess().Id;
+                uint ownPid = (uint)Environment.ProcessId;
 
                 NativeMethods.EnumWindows((IntPtr hwnd, IntPtr lParam) =>
                 {

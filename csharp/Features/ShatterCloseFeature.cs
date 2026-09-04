@@ -12,7 +12,6 @@ public class ShatterCloseFeature : IDisposable
 {
     private class Shard
     {
-        public IntPtr Hwnd;
         public IntPtr ThumbId;
         public double X, Y;
         public double W, H;
@@ -24,6 +23,7 @@ public class ShatterCloseFeature : IDisposable
     private class ActiveShatter
     {
         public IntPtr Hwnd;
+        public IntPtr OverlayHwnd;
         public int OrigX, OrigY;
         public List<Shard> Shards = new();
         public CancellationTokenSource Cts = new();
@@ -58,9 +58,12 @@ public class ShatterCloseFeature : IDisposable
         double pieceW = (double)ww / gridX;
         double pieceH = (double)wh / gridY;
 
+        IntPtr overlayHwnd = CreateOverlayWindow();
+
         ActiveShatter shatter = new ActiveShatter
         {
             Hwnd = hwnd,
+            OverlayHwnd = overlayHwnd,
             OrigX = wx,
             OrigY = wy
         };
@@ -71,10 +74,7 @@ public class ShatterCloseFeature : IDisposable
         {
             for (int row = 0; row < gridY; row++)
             {
-                // Create native window for shard
-                IntPtr shardHwnd = CreateShardWindow();
-
-                NativeMethods.DwmRegisterThumbnail(shardHwnd, hwnd, out IntPtr thumb);
+                NativeMethods.DwmRegisterThumbnail(overlayHwnd, hwnd, out IntPtr thumb);
 
                 double srcX = col * pieceW;
                 double srcY = row * pieceH;
@@ -93,7 +93,6 @@ public class ShatterCloseFeature : IDisposable
 
                 shatter.Shards.Add(new Shard
                 {
-                    Hwnd = shardHwnd,
                     ThumbId = thumb,
                     X = wx + srcX,
                     Y = wy + srcY,
@@ -118,7 +117,7 @@ public class ShatterCloseFeature : IDisposable
         Task.Run(() => AnimateShatter(shatter, shatter.Cts.Token));
     }
 
-    private IntPtr CreateShardWindow()
+    private IntPtr CreateOverlayWindow()
     {
         var window = new System.Windows.Window
         {
@@ -138,6 +137,10 @@ public class ShatterCloseFeature : IDisposable
         // Ensure WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW
         uint exStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
         NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, exStyle | NativeMethods.WS_EX_TRANSPARENT | 0x80);
+
+        // Make it cover a massive area in physical pixels so thumbnails don't clip
+        NativeMethods.SetWindowPos(hwnd, IntPtr.Zero, -30000, -30000, 60000, 60000,
+            NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
 
         return hwnd;
     }
@@ -177,18 +180,17 @@ public class ShatterCloseFeature : IDisposable
                 double curX = s.X + (s.W - curW) / 2;
                 double curY = s.Y + (s.H - curH) / 2;
 
-                // Move window
-                NativeMethods.SetWindowPos(s.Hwnd, IntPtr.Zero, (int)Math.Round(curX), (int)Math.Round(curY), (int)Math.Round(curW), (int)Math.Round(curH),
-                    NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+                // Update DWM. Overlay window is at -30000, -30000.
+                int destX = (int)Math.Round(curX) + 30000;
+                int destY = (int)Math.Round(curY) + 30000;
 
-                // Update DWM
                 NativeMethods.DWM_THUMBNAIL_PROPERTIES props = new NativeMethods.DWM_THUMBNAIL_PROPERTIES
                 {
                     dwFlags = NativeMethods.DWM_TNP_VISIBLE | NativeMethods.DWM_TNP_RECTDESTINATION | NativeMethods.DWM_TNP_RECTSOURCE | NativeMethods.DWM_TNP_OPACITY | NativeMethods.DWM_TNP_SOURCECLIENTAREAONLY,
                     fVisible = true,
                     fSourceClientAreaOnly = false, // We want the whole window frame, not just client area, to look like the whole window shattered
                     opacity = (byte)alpha,
-                    rcDestination = new NativeMethods.RECT { Left = 0, Top = 0, Right = (int)Math.Round(curW), Bottom = (int)Math.Round(curH) },
+                    rcDestination = new NativeMethods.RECT { Left = destX, Top = destY, Right = destX + (int)Math.Round(curW), Bottom = destY + (int)Math.Round(curH) },
                     rcSource = new NativeMethods.RECT { Left = (int)Math.Round(s.SrcX), Top = (int)Math.Round(s.SrcY), Right = (int)Math.Round(s.SrcX + s.W), Bottom = (int)Math.Round(s.SrcY + s.H) }
                 };
                 NativeMethods.DwmUpdateThumbnailProperties(s.ThumbId, ref props);
@@ -205,9 +207,9 @@ public class ShatterCloseFeature : IDisposable
         foreach (var s in shatter.Shards)
         {
             NativeMethods.DwmUnregisterThumbnail(s.ThumbId);
-            // We use PostMessage to properly close the WPF window we created to host the shard
-            NativeMethods.PostMessage(s.Hwnd, NativeMethods.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
         }
+
+        NativeMethods.PostMessage(shatter.OverlayHwnd, NativeMethods.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
 
         if (_activeShatters.ContainsKey(shatter.Hwnd))
         {
