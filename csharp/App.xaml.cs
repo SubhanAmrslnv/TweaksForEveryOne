@@ -805,7 +805,11 @@ public partial class App : System.Windows.Application
         // hook thread, an audio thread or a COM apartment mid-teardown can still keep the process
         // alive with no window and no tray icon - which is the "it does not exit at all" report.
         // Everything above has already run, so there is nothing left to lose here.
-        Environment.Exit(0);
+        //
+        // Must use Kill() rather than Environment.Exit(0) to avoid ExitProcess deadlocks where 
+        // a suspended background audio/COM thread holds a lock that DllMain needs, which creates
+        // an immortal zombie process that locks the .exe and breaks publishing.
+        System.Diagnostics.Process.GetCurrentProcess().Kill();
     }
 
     private static void Dispose(IDisposable? d)

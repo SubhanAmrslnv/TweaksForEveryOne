@@ -102,8 +102,16 @@ internal static class SyntheticInput
     /// <summary>A full middle-button click at the cursor's current position.</summary>
     public static void MiddleClick()
     {
-        NativeMethods.mouse_event(NativeMethods.MOUSEEVENTF_MIDDLEDOWN, 0, 0, 0, NativeMethods.SyntheticTag);
-        NativeMethods.mouse_event(NativeMethods.MOUSEEVENTF_MIDDLEUP, 0, 0, 0, NativeMethods.SyntheticTag);
+        // Must be asynchronous. This is frequently called by GrabPanFeature from INSIDE the
+        // WM_MBUTTONUP hook callback. Synthesizing a DOWN/UP for the very button that Windows
+        // is currently processing an UP for, before the hook has even returned, corrupts the
+        // OS's internal mouse state and causes the "middle click gets stuck, left/right clicks
+        // stop working" bug.
+        System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+        {
+            NativeMethods.mouse_event(NativeMethods.MOUSEEVENTF_MIDDLEDOWN, 0, 0, 0, NativeMethods.SyntheticTag);
+            NativeMethods.mouse_event(NativeMethods.MOUSEEVENTF_MIDDLEUP, 0, 0, 0, NativeMethods.SyntheticTag);
+        });
     }
 
     /// <summary>Vertical wheel. <paramref name="delta"/> is in WHEEL_DELTA units of 120.</summary>

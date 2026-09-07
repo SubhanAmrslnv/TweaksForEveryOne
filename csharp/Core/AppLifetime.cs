@@ -83,7 +83,13 @@ internal static class AppLifetime
             // process the user reported: no window, no tray icon, still running.
             try
             {
-                Environment.Exit(0);
+                // Must use Kill() rather than Environment.Exit(0). Environment.Exit calls ExitProcess,
+                // which suspends all threads and then calls DllMain(DLL_PROCESS_DETACH) on loaded DLLs.
+                // If a background thread was suspended while holding an unmanaged lock (like waveOut),
+                // ExitProcess will deadlock forever, leaving a zombie process with 1 thread that locks
+                // the executable and breaks future builds/updates. Kill() calls TerminateProcess and
+                // bypasses DllMain, guaranteeing the process object is destroyed.
+                System.Diagnostics.Process.GetCurrentProcess().Kill();
             }
             catch
             {
