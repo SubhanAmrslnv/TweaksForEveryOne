@@ -22,6 +22,7 @@ public class StealthPanicTrigger : IDisposable
     private readonly Stopwatch _timer = new();
 
     private int _escCount;
+    private bool _isEscDown;
 
     public bool IsEnabled { get; private set; }
 
@@ -43,33 +44,46 @@ public class StealthPanicTrigger : IDisposable
         {
             KeyboardHook.Unsubscribe(HookOwner);
             _escCount = 0;
+            _isEscDown = false;
             _timer.Reset();
         }
     }
 
     public void Toggle() => SetEnabled(!IsEnabled);
 
-    private bool OnKey(KeyboardHook.KeyEvent e)
+    internal bool OnKey(KeyboardHook.KeyEvent e)
     {
-        if (!e.IsKeyDown || e.VirtualKey != VK_ESCAPE) return false;
+        if (e.VirtualKey != VK_ESCAPE) return false;
 
-        int timeoutMs = TuningRegistry.Int(TuningRegistry.StealthTimeoutMs);
-
-        // A tap outside the window starts a fresh sequence rather than extending a stale one.
-        if (_escCount == 0 || _timer.ElapsedMilliseconds > timeoutMs)
+        if (e.IsKeyDown)
         {
-            _escCount = 1;
-            _timer.Restart();
-            return false;
+            // Auto-repeat while holding Escape must not count towards the triple-tap gesture.
+            // Holding Escape is ONE continuous press, not multiple taps.
+            if (_isEscDown || e.IsRepeat) return false;
+            _isEscDown = true;
+
+            int timeoutMs = TuningRegistry.Int(TuningRegistry.StealthTimeoutMs);
+
+            // A tap outside the window starts a fresh sequence rather than extending a stale one.
+            if (_escCount == 0 || _timer.ElapsedMilliseconds > timeoutMs)
+            {
+                _escCount = 1;
+                _timer.Restart();
+                return false;
+            }
+
+            _escCount++;
+
+            if (_escCount >= 3)
+            {
+                _escCount = 0;
+                _timer.Reset();
+                _onTripleEsc?.Invoke();
+            }
         }
-
-        _escCount++;
-
-        if (_escCount >= 3)
+        else
         {
-            _escCount = 0;
-            _timer.Reset();
-            _onTripleEsc?.Invoke();
+            _isEscDown = false;
         }
 
         return false;

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -32,11 +32,12 @@ internal static class KeyboardHook
     /// <summary>What a subscriber is told about one key event. Nothing is retained after dispatch.</summary>
     public readonly struct KeyEvent
     {
-        public KeyEvent(int virtualKey, bool isKeyDown, bool isInjected)
+        public KeyEvent(int virtualKey, bool isKeyDown, bool isInjected, bool isRepeat = false)
         {
             VirtualKey = virtualKey;
             IsKeyDown = isKeyDown;
             IsInjected = isInjected;
+            IsRepeat = isRepeat;
         }
 
         public int VirtualKey { get; }
@@ -47,6 +48,11 @@ internal static class KeyboardHook
         /// keys must ignore these or it will hook its own output in a loop.
         /// </summary>
         public bool IsInjected { get; }
+
+        /// <summary>
+        /// True when the key is being held down such that the OS is delivering auto-repeat key-down events.
+        /// </summary>
+        public bool IsRepeat { get; }
     }
 
     /// <summary>Return true to SUPPRESS the key, so it never reaches the focused application.</summary>
@@ -79,6 +85,10 @@ internal static class KeyboardHook
     // The delegate must be held in a field. If it is only passed to SetWindowsHookEx, the GC is free
     // to collect it and the callback becomes a dangling pointer - a crash that appears at random.
     private static NativeMethods.LowLevelKeyboardProc? _proc;
+
+    // Key state table for virtual keys 0..255 to track physical repeat state.
+    // HookCallback runs sequentially on HookThread so no thread synchronisation is needed for this array.
+    private static readonly bool[] KeyStates = new bool[256];
 
     public static void Subscribe(string owner, Handler handler)
     {
@@ -171,6 +181,7 @@ internal static class KeyboardHook
 
             _hook = IntPtr.Zero;
             _proc = null;
+            Array.Clear(KeyStates, 0, KeyStates.Length);
         });
     }
 
@@ -210,7 +221,21 @@ internal static class KeyboardHook
                 int vkCode = Marshal.ReadInt32(lParam);
                 bool injected = (Marshal.ReadInt32(lParam, OffsetFlags) & LLKHF_INJECTED) != 0;
 
-                KeyEvent e = new(vkCode, isDown, injected);
+                bool isRepeat = false;
+                if (vkCode is >= 0 and < 256)
+                {
+                    if (isDown)
+                    {
+                        isRepeat = KeyStates[vkCode];
+                        KeyStates[vkCode] = true;
+                    }
+                    else
+                    {
+                        KeyStates[vkCode] = false;
+                    }
+                }
+
+                KeyEvent e = new(vkCode, isDown, injected, isRepeat);
 
                 // The snapshot is read without the lock and never mutated in place: a handler may
                 // subscribe or unsubscribe in response (Stealth Panic suspends features), and

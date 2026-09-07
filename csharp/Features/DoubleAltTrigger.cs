@@ -26,6 +26,7 @@ public class DoubleAltTrigger : IDisposable
 
     private int _altCount;
     private bool _otherKeyPressed;
+    private bool _isAltDown;
 
     public bool IsEnabled { get; private set; }
 
@@ -56,10 +57,11 @@ public class DoubleAltTrigger : IDisposable
     {
         _altCount = 0;
         _otherKeyPressed = false;
+        _isAltDown = false;
         _timer.Reset();
     }
 
-    private bool OnKey(KeyboardHook.KeyEvent e)
+    internal bool OnKey(KeyboardHook.KeyEvent e)
     {
         int timeoutMs = TuningRegistry.Int(TuningRegistry.DoubleTapTimeoutMs);
 
@@ -73,6 +75,16 @@ public class DoubleAltTrigger : IDisposable
                 if (_altCount > 0) _otherKeyPressed = true;
                 return false;
             }
+
+            // Holding Alt delivers auto-repeat key-down events. Holding Alt must be treated
+            // as ONE continuous key press, not multiple taps. Repeated key-downs while Alt is
+            // held are ignored and must not advance or trigger double tap logic.
+            if (_isAltDown || e.IsRepeat)
+            {
+                return false;
+            }
+
+            _isAltDown = true;
 
             if (_altCount == 0 || _timer.ElapsedMilliseconds > timeoutMs)
             {
@@ -93,10 +105,17 @@ public class DoubleAltTrigger : IDisposable
                 _onDoubleAlt?.Invoke();
             }
         }
-        else if (isAlt && _otherKeyPressed)
+        else
         {
-            _altCount = 0;
-            _timer.Reset();
+            if (isAlt)
+            {
+                _isAltDown = false;
+                if (_otherKeyPressed)
+                {
+                    _altCount = 0;
+                    _timer.Reset();
+                }
+            }
         }
 
         // Never suppress: Alt has to keep working as Alt.

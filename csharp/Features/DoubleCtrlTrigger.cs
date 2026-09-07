@@ -25,6 +25,7 @@ public class DoubleCtrlTrigger : IDisposable
 
     private int _ctrlCount;
     private bool _otherKeyPressed;
+    private bool _isCtrlDown;
 
     public bool IsEnabled { get; private set; }
 
@@ -55,10 +56,11 @@ public class DoubleCtrlTrigger : IDisposable
     {
         _ctrlCount = 0;
         _otherKeyPressed = false;
+        _isCtrlDown = false;
         _timer.Reset();
     }
 
-    private bool OnKey(KeyboardHook.KeyEvent e)
+    internal bool OnKey(KeyboardHook.KeyEvent e)
     {
         int timeoutMs = TuningRegistry.Int(TuningRegistry.DoubleTapTimeoutMs);
 
@@ -72,6 +74,16 @@ public class DoubleCtrlTrigger : IDisposable
                 if (_ctrlCount > 0) _otherKeyPressed = true;
                 return false;
             }
+
+            // Holding Ctrl delivers auto-repeat key-down events. Holding Ctrl must be treated
+            // as ONE continuous key press, not multiple taps. Repeated key-downs while Ctrl is
+            // held are ignored and must not advance or trigger double/triple tap logic.
+            if (_isCtrlDown || e.IsRepeat)
+            {
+                return false;
+            }
+
+            _isCtrlDown = true;
 
             if (_ctrlCount == 0 || _timer.ElapsedMilliseconds > timeoutMs)
             {
@@ -92,10 +104,17 @@ public class DoubleCtrlTrigger : IDisposable
                 _onDoubleCtrl?.Invoke();
             }
         }
-        else if (isCtrl && _otherKeyPressed)
+        else
         {
-            _ctrlCount = 0;
-            _timer.Reset();
+            if (isCtrl)
+            {
+                _isCtrlDown = false;
+                if (_otherKeyPressed)
+                {
+                    _ctrlCount = 0;
+                    _timer.Reset();
+                }
+            }
         }
 
         return false;
