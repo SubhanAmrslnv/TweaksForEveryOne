@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 
@@ -93,8 +93,25 @@ internal static class TuningRegistry
     public const string ParallaxMinOpacity = "parallax.minOpacity";
 
     // --- Ripple -------------------------------------------------------------------------------
+    public const string RippleInitialRadius = "ripple.initialRadius";
     public const string RippleRadius = "ripple.radius";
     public const string RippleDurationMs = "ripple.durationMs";
+    public const string RippleMaxOpacity = "ripple.maxOpacity";
+
+    // --- Cursor movement scaling --------------------------------------------------------------
+    public const string CursorScaleMinPercent = "cursor.scaleMinPercent";
+    public const string CursorScaleMaxPercent = "cursor.scaleMaxPercent";
+    public const string CursorScaleSensitivity = "cursor.scaleSensitivity";
+    public const string CursorScaleDamping = "cursor.scaleDampingRate";
+
+    // --- Cursor idle breathing ----------------------------------------------------------------
+    public const string CursorBreatheIdleSeconds = "cursor.yawnIdleSeconds"; // Retains backward compatibility with existing settings
+    public const string CursorYawnIdleSeconds = CursorBreatheIdleSeconds;   // Alias for existing callers
+    public const string CursorBreatheScaleDelta = "cursor.breatheScaleDelta";
+    public const string CursorBreatheCycleDurationMs = "cursor.breatheCycleDurationMs";
+    public const string CursorBreatheAuraSize = "cursor.breatheAuraSize";
+    public const string CursorBreatheIntensity = "cursor.breatheIntensity";
+    public const string CursorYawnDeepEnabled = "cursor.yawnDeepEnabled";
 
     // --- Gestures -----------------------------------------------------------------------------
     public const string SmartCapsHoldMs = "smartcaps.holdMs";
@@ -276,15 +293,93 @@ internal static class TuningRegistry
         // --- Ripple ---------------------------------------------------------------------------
         new TuningDescriptor
         {
+            Key = RippleInitialRadius, Page = PageAnimation, Group = "Ripple click",
+            Title = "Initial radius", Unit = "px", Min = 2, Max = 30, Default = 6,
+            Description = "Starting radius of the water-drop ring at the moment of click."
+        },
+        new TuningDescriptor
+        {
             Key = RippleRadius, Page = PageAnimation, Group = "Ripple click",
-            Title = "Ring size", Unit = "px", Min = 10, Max = 200, Default = 22,
-            Description = "How far the ring expands from the cursor before it finishes fading."
+            Title = "Terminal radius", Unit = "px", Min = 10, Max = 200, Default = 24,
+            Description = "Terminal expansion radius the ring reaches before finishing its fade."
         },
         new TuningDescriptor
         {
             Key = RippleDurationMs, Page = PageAnimation, Group = "Ripple click",
-            Title = "Duration", Unit = "ms", Min = 100, Max = 2000, Default = 420,
-            Description = "How long one ripple takes. Longer values overlap more rings when clicking quickly."
+            Title = "Fade duration", Unit = "ms", Min = 100, Max = 1000, Default = 260,
+            Description = "How long one ripple takes to expand and fade (fast and snappy)."
+        },
+        new TuningDescriptor
+        {
+            Key = RippleMaxOpacity, Page = PageAnimation, Group = "Ripple click", Kind = TuningKind.Percent,
+            Title = "Maximum opacity", Unit = "%", Min = 10, Max = 100, Default = 80,
+            Description = "Peak starting opacity of the ripple ring at spawn (80% = 0.80)."
+        },
+
+        // --- Cursor movement scaling ----------------------------------------------------------
+        new TuningDescriptor
+        {
+            Key = CursorScaleMinPercent, Page = PageAnimation, Group = "Cursor scaling", Kind = TuningKind.Percent,
+            Title = "Resting scale", Unit = "%", Min = 80, Max = 100, Default = 100,
+            Description = "Baseline scale of the cursor when stationary (100% = 1.00x)."
+        },
+        new TuningDescriptor
+        {
+            Key = CursorScaleMaxPercent, Page = PageAnimation, Group = "Cursor scaling", Kind = TuningKind.Percent,
+            Title = "Maximum movement scale", Unit = "%", Min = 100, Max = 125, Default = 106,
+            Description = "Upper cap on cursor scaling when moving at high speeds (106% = 1.06x)."
+        },
+        new TuningDescriptor
+        {
+            Key = CursorScaleSensitivity, Page = PageAnimation, Group = "Cursor scaling",
+            Title = "Scale velocity sensitivity", Unit = "", Min = 10, Max = 100, Default = 35,
+            Description = "How responsively the cursor expands toward its maximum cap as hand speed increases."
+        },
+        new TuningDescriptor
+        {
+            Key = CursorScaleDamping, Page = PageAnimation, Group = "Cursor scaling", Kind = TuningKind.Percent,
+            Title = "Scale spring damping", Unit = "%", Min = 5, Max = 60, Default = 18,
+            Description = "Rate at which the cursor settles back to resting scale when movement stops."
+        },
+
+        // --- Cursor idle breathing ------------------------------------------------------------
+        new TuningDescriptor
+        {
+            Key = CursorBreatheIdleSeconds, Page = PageAnimation, Group = "Cursor breathe",
+            Title = "Idle before breathing", Unit = "s", Min = 1, Max = 30, Default = 4,
+            Description = "How long the mouse must stay completely untouched before the breathing cycle begins."
+        },
+        new TuningDescriptor
+        {
+            Key = CursorBreatheScaleDelta, Page = PageAnimation, Group = "Cursor breathe", Kind = TuningKind.Percent,
+            Title = "Breathing scale delta", Unit = "%", Min = 1, Max = 10, Default = 3,
+            Description = "Subtle expansion amount during the idle breathing cycle (+3% = 1.03x peak scale)."
+        },
+        new TuningDescriptor
+        {
+            Key = CursorBreatheCycleDurationMs, Page = PageAnimation, Group = "Cursor breathe",
+            Title = "Breathing cycle duration", Unit = "ms", Min = 1000, Max = 8000, Default = 3400,
+            Description = "Duration of one full expansion and contraction wave for a slow, calming sine rhythm."
+        },
+        new TuningDescriptor
+        {
+            Key = CursorBreatheAuraSize, Page = PageAnimation, Group = "Cursor breathe",
+            Title = "Halo size", Unit = "px", Min = 12, Max = 60, Default = 24,
+            Description = "The base radius of the soft breathing aura around the cursor tip."
+        },
+        new TuningDescriptor
+        {
+            Key = CursorBreatheIntensity, Page = PageAnimation, Group = "Cursor breathe", Kind = TuningKind.Percent,
+            Title = "Halo opacity", Unit = "%", Min = 5, Max = 80, Default = 25,
+            Description = "Peak opacity of the breathing aura at the height of each breath."
+        },
+        new TuningDescriptor
+        {
+            Key = CursorYawnDeepEnabled, Page = PageAnimation, Group = "Cursor breathe", Kind = TuningKind.Choice,
+            Title = "Deep idle stretch (yawn)", DefaultText = "on",
+            Choices = new[] { "on", "off" },
+            ChoiceLabels = new[] { "Play a gentle expansion stretch after extended idle", "Continuous soft breathing only" },
+            Description = "Whether to gently stretch and pulse after extended idle (18 seconds) like a yawning pointer."
         },
 
         // --- Gestures -------------------------------------------------------------------------
