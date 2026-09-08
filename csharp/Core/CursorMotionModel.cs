@@ -443,9 +443,8 @@ public sealed class CursorMotionModel : IDisposable
 
             TransitionTo(CursorMotionState.Dragging);
 
-            double vRef = 50000.0 / sensitivity;
-            double tFactor = 1.0 - Math.Exp(-Speed / vRef);
-            TargetScale = Math.Clamp(scaleMin + (scaleMax - scaleMin) * tFactor, scaleMin, scaleMax);
+            // Fix for duplicate cursor lag: disable movement scaling, restrict overlay to breathing
+            TargetScale = scaleMin;
 
             SolveSpring(TargetScale, damping, dtSec);
         }
@@ -458,9 +457,8 @@ public sealed class CursorMotionModel : IDisposable
 
             TransitionTo(CursorMotionState.Moving);
 
-            double vRef = 50000.0 / sensitivity;
-            double tFactor = 1.0 - Math.Exp(-Speed / vRef);
-            TargetScale = Math.Clamp(scaleMin + (scaleMax - scaleMin) * tFactor, scaleMin, scaleMax);
+            // Fix for duplicate cursor lag: disable movement scaling, restrict overlay to breathing
+            TargetScale = scaleMin;
 
             SolveSpring(TargetScale, damping, dtSec);
         }
