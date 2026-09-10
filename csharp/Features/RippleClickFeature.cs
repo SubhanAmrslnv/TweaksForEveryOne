@@ -114,7 +114,7 @@ public class RippleClickFeature : IDisposable
 
     private void EnsurePoolCreated()
     {
-        if (_initialized) return;
+        if (_disposed || _initialized) return;
 
         // Ensure windows are created on the UI thread
         if (!_dispatcher.CheckAccess())

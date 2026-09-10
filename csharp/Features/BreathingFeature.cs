@@ -197,8 +197,20 @@ public class BreathingFeature : IDisposable
                 continue;
             }
 
-            if (_dimmed.Add(hwnd))
-                AlphaCompositor.SetLayer(hwnd, AlphaCompositor.LayerBreathe, _dimFactor);
+            _dimmed.Add(hwnd);
+        }
+
+        // Apply organic 4.5-second sinusoidal breathing cycle (0.88 <-> 1.0)
+        double cycle = (_now.Ticks / (double)TimeSpan.TicksPerMillisecond) / 4500.0 * Math.PI * 2;
+        double breatheOsc = 0.88 + (0.12 * (0.5 * (1.0 + Math.Sin(cycle))));
+        double currentFactor = _dimFactor * breatheOsc;
+
+        foreach (IntPtr hwnd in _dimmed)
+        {
+            if (NativeMethods.IsWindow(hwnd))
+            {
+                AlphaCompositor.SetLayer(hwnd, AlphaCompositor.LayerBreathe, currentFactor);
+            }
         }
 
         foreach (IntPtr hwnd in _recheck)

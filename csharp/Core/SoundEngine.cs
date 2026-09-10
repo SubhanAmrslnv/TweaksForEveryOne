@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -90,7 +90,16 @@ internal enum SoundId
     WindowGrow,
 
     /// <summary>Win+Down: the same landing, then a fall.</summary>
-    WindowShrink
+    WindowShrink,
+
+    /// <summary>Apple Tactile Tick: ultra-fast attack (1.2ms), short exponential decay (18ms), 1400Hz resonance.</summary>
+    AppleTactileTick,
+
+    /// <summary>Ceramic Clack: double-impulse burst (3.2ms spacing) simulating physical keycap bottom-out and housing return.</summary>
+    CeramicClack,
+
+    /// <summary>Glass Confirmation: pure sine sweep (880Hz to 1760Hz) shaped by a 120ms bell curve envelope.</summary>
+    GlassConfirmation
 }
 
 /// <summary>
@@ -205,6 +214,14 @@ internal static class SoundEngine
         {
             // A sound is never worth an exception on an input path.
         }
+    }
+
+    /// <summary>
+    /// Plays a sound using default profile ("click") and volume.
+    /// </summary>
+    public static void Play(SoundId id, int volumePercent = 80)
+    {
+        Play(id, "click", volumePercent);
     }
 
     /// <summary>
@@ -646,6 +663,10 @@ internal static class SoundEngine
             SoundId.WindowGrow => Then(Impact(230, 0.045, 80), Sweep(600, 1000, 0.06, 20, 0.12)),
             SoundId.WindowShrink => Then(Impact(230, 0.045, 80), Sweep(1000, 600, 0.06, 20, 0.12)),
 
+            SoundId.AppleTactileTick => SynthesizeTactileTick(),
+            SoundId.CeramicClack => SynthesizeCeramicClack(),
+            SoundId.GlassConfirmation => SynthesizeGlassConfirmation(),
+
             _ => Keystroke(profile, 1.0, 1.0, 1.0)
         };
     }
@@ -667,6 +688,12 @@ internal static class SoundEngine
         // (length ms, click decay, body frequency, body decay, noise share)
         (double ms, double clickDecay, double bodyHz, double bodyDecay, double noise) p = profile switch
         {
+            // Apple Tactile Tick: ultra-fast attack (1.2ms), 1400Hz resonance, clean low-distortion envelope
+            "apple" => (22, 520, 1400, 180, 0.12),
+
+            // Ceramic Clack: tactile ceramic bottom-out and housing impulse
+            "ceramic" => (28, 420, 1600, 210, 0.30),
+
             // A dry, high, very short tick. The default, because it is the one that disappears into
             // typing instead of competing with it.
             "click" => (26, 420, 2100, 260, 0.55),
@@ -944,5 +971,83 @@ internal static class SoundEngine
     private static int Samples(double seconds)
     {
         return Math.Max(1, (int)(seconds * SampleRate));
+    }
+
+    /// <summary>Apple Tactile Tick: fast attack (1.2ms), exponential decay (18ms), fundamental resonance ~1400Hz.</summary>
+    private static double[] SynthesizeTactileTick()
+    {
+        int count = Samples(0.024);
+        double[] result = new double[count];
+        const double f0 = 1400.0;
+        const double tau = 0.006; // 18ms ~ 3 * tau
+
+        for (int i = 0; i < count; i++)
+        {
+            double t = i / (double)SampleRate;
+            double attack = t >= 0.0012 ? 1.0 : t / 0.0012;
+            double decay = Math.Exp(-t / tau);
+            double tone = Math.Sin(2.0 * Math.PI * f0 * t) + (0.15 * Math.Sin(2.0 * Math.PI * 2.0 * f0 * t));
+            result[i] = tone * attack * decay * Release(i, count);
+        }
+
+        return result;
+    }
+
+    /// <summary>Ceramic Clack: double-impulse burst (3.2ms spacing) simulating bottom-out and return.</summary>
+    private static double[] SynthesizeCeramicClack()
+    {
+        int count = Samples(0.028);
+        double[] result = new double[count];
+        double impulse2Offset = 0.0032;
+
+        for (int i = 0; i < count; i++)
+        {
+            double t = i / (double)SampleRate;
+
+            // Impulse 1: high click (2200Hz)
+            double env1 = Math.Exp(-t * 300.0);
+            double tone1 = Math.Sin(2.0 * Math.PI * 2200.0 * t) * env1;
+
+            // Impulse 2: ceramic return thud (1550Hz) starting at 3.2ms
+            double tone2 = 0;
+            if (t >= impulse2Offset)
+            {
+                double t2 = t - impulse2Offset;
+                double env2 = Math.Exp(-t2 * 180.0);
+                tone2 = Math.Sin(2.0 * Math.PI * 1550.0 * t2) * env2 * 0.85;
+            }
+
+            result[i] = (tone1 + tone2) * Attack(t) * Release(i, count);
+        }
+
+        return result;
+    }
+
+    /// <summary>Glass Confirmation: pure sine sweep (880Hz to 1760Hz) shaped by a 120ms bell curve envelope.</summary>
+    private static double[] SynthesizeGlassConfirmation()
+    {
+        const double duration = 0.120;
+        int count = Samples(duration);
+        double[] result = new double[count];
+        const double fStart = 880.0;
+        const double fEnd = 1760.0;
+        double sweepRate = (fEnd - fStart) / duration;
+
+        for (int i = 0; i < count; i++)
+        {
+            double t = i / (double)SampleRate;
+
+            // Exact phase integral of linear frequency sweep: phi(t) = 2*pi*(f0*t + 0.5*sweepRate*t^2)
+            double phase = 2.0 * Math.PI * ((fStart * t) + (0.5 * sweepRate * t * t));
+            double tone = Math.Sin(phase);
+
+            // Gaussian bell curve envelope with smooth tails (no clipping)
+            double window = Math.Sin(Math.PI * t / duration);
+            double bell = window * window;
+
+            result[i] = tone * bell * Release(i, count);
+        }
+
+        return result;
     }
 }

@@ -171,6 +171,11 @@ internal static class WeatherService
             if (current.TryGetProperty("weather_code", out JsonElement codeEl))
                 codeEl.TryGetInt32(out code);
 
+            // Guard against a race: the user may have changed cities while this request was in
+            // flight. If so, discard the now-stale response rather than overwriting Current with
+            // data for the wrong location.
+            if (!string.Equals(Location, city, StringComparison.OrdinalIgnoreCase)) return;
+
             Current = new Reading
             {
                 TemperatureC = temp,

@@ -165,8 +165,12 @@ elseif ($PfxPath) {
     # Read the password interactively. Never accept it as a plain parameter: it would land in the
     # shell history and in any transcript.
     $secure = Read-Host -Prompt "PFX password" -AsSecureString
-    $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try {
+        $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+    } finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    }
     $credential = @('/f', $PfxPath, '/p', $plain)
 }
 else {

@@ -24,8 +24,46 @@ namespace WindowTweaks.Core;
 internal static class SyntheticInput
 {
     private const uint KEYEVENTF_KEYUP = 0x0002;
+    private const uint KEYEVENTF_UNICODE = 0x0004;
 
     private static readonly int InputSize = Marshal.SizeOf(typeof(NativeMethods.INPUT));
+
+    /// <summary>Injects a sequence of characters via KEYEVENTF_UNICODE.</summary>
+    public static void Text(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+
+        NativeMethods.INPUT[] inputs = new NativeMethods.INPUT[text.Length * 2];
+        int at = 0;
+
+        foreach (char c in text)
+        {
+            inputs[at].type = NativeMethods.INPUT_KEYBOARD;
+            inputs[at].u.ki.wVk = 0;
+            inputs[at].u.ki.wScan = c;
+            inputs[at].u.ki.dwFlags = KEYEVENTF_UNICODE;
+            inputs[at].u.ki.dwExtraInfo = NativeMethods.SyntheticTag;
+            at++;
+
+            inputs[at].type = NativeMethods.INPUT_KEYBOARD;
+            inputs[at].u.ki.wVk = 0;
+            inputs[at].u.ki.wScan = c;
+            inputs[at].u.ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+            inputs[at].u.ki.dwExtraInfo = NativeMethods.SyntheticTag;
+            at++;
+        }
+
+        Send(inputs);
+    }
+
+    /// <summary>Taps backspace multiple times.</summary>
+    public static void Backspaces(int count)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            Tap(0x08); // VK_BACK
+        }
+    }
 
     /// <summary>Press and release one key.</summary>
     public static void Tap(ushort virtualKey)

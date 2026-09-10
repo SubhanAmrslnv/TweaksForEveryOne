@@ -117,7 +117,41 @@ public class MiddleClickCloseFeature : IDisposable
             if (sent == IntPtr.Zero) return false;
             if (result.ToInt64() != NativeMethods.HTCAPTION) return false;
 
-            NativeMethods.PostMessage(hwnd, NativeMethods.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+            // 0.94x micro-scale contraction and swift 80ms alpha fade-out
+            System.Threading.ThreadPool.QueueUserWorkItem(async _ =>
+            {
+                try
+                {
+                    if (NativeMethods.GetWindowRect(hwnd, out NativeMethods.RECT rect))
+                    {
+                        int ow = rect.Right - rect.Left;
+                        int oh = rect.Bottom - rect.Top;
+                        int targetW = (int)(ow * 0.94);
+                        int targetH = (int)(oh * 0.94);
+                        int dx = (ow - targetW) / 2;
+                        int dy = (oh - targetH) / 2;
+
+                        for (int f = 1; f <= 5; f++)
+                        {
+                            double p = f / 5.0;
+                            int curW = ow - (int)(dx * 2 * p);
+                            int curH = oh - (int)(dy * 2 * p);
+                            int curX = rect.Left + (int)(dx * p);
+                            int curY = rect.Top + (int)(dy * p);
+                            double alpha = 1.0 - (0.80 * p);
+
+                            AlphaCompositor.SetLayer(hwnd, "close", alpha);
+                            NativeMethods.SetWindowPos(hwnd, IntPtr.Zero, curX, curY, curW, curH,
+                                NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+
+                            await System.Threading.Tasks.Task.Delay(16);
+                        }
+                    }
+                }
+                catch { }
+
+                NativeMethods.PostMessage(hwnd, NativeMethods.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+            });
 
             // Swallow the click only now that it has definitely been acted on. Returning true on a
             // click that did nothing would make middle-click dead everywhere.

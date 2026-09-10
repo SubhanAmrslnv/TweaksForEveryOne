@@ -185,7 +185,6 @@ public class HotCornersFeature : IDisposable
 
     public void Dispose()
     {
-        _cts?.Cancel();
-        _cts?.Dispose();
+        SetEnabled(false);
     }
 }

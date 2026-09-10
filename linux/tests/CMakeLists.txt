@@ -11,6 +11,7 @@
 
 set(TWEAK_TESTS
     test_physics
+    test_spring_physics
     test_renderqueue
     test_scheduler
 )

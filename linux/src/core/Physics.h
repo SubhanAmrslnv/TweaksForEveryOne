@@ -1,5 +1,7 @@
 #pragma once
 
+#include "SpringPhysics.h"
+
 namespace TweakCore {
 
 // Both ends of the drag-parallax ramp, in the units the settings carry them in:
@@ -82,6 +84,12 @@ public:
     // `alpha < 250` - a test that threw away the first five units of every fade
     // and left the layer installed on the way out.
     static ParallaxResult parallaxAlpha(float speedPxPerSec, const ParallaxRamp& ramp);
+
+    // Apple CASpringAnimation analytical damped harmonic motion step.
+    static void springStep(float& currentPos, float& currentVel, float targetPos, float dt,
+                           const SpringConfig& config = SpringConfig::Default()) {
+        SpringPhysics::step(currentPos, currentVel, targetPos, dt, config);
+    }
 };
 
 } // namespace TweakCore

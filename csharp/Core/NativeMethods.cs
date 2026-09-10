@@ -126,6 +126,21 @@ internal static class NativeMethods
 
     public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     public const int DWMWCP_DONOTROUND = 1;
+    public const int DWMWCP_ROUND = 2;
+    public const int DWMWCP_ROUNDSMALL = 3;
+
+    public const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
+    public const int DWMSBT_AUTO = 0;
+    public const int DWMSBT_NONE = 1;
+    public const int DWMSBT_MAINWINDOW = 2;      // Mica
+    public const int DWMSBT_TRANSIENTWINDOW = 3; // Acrylic
+    public const int DWMSBT_TABBEDWINDOW = 4;    // Mica Alt
+
+    [DllImport("winmm.dll", EntryPoint = "timeBeginPeriod")]
+    public static extern uint TimeBeginPeriod(uint uMilliseconds);
+
+    [DllImport("winmm.dll", EntryPoint = "timeEndPeriod")]
+    public static extern uint TimeEndPeriod(uint uMilliseconds);
 
     [DllImport("user32.dll")]
     public static extern bool GetCursorPos(out POINT lpPoint);
@@ -449,6 +464,8 @@ internal static class NativeMethods
 
     public const uint SPI_GETDRAGFULLWINDOWS = 0x0026;
     public const uint SPI_SETDRAGFULLWINDOWS = 0x0025;
+    public const uint SPI_GETMENUSHOWDELAY = 106;
+    public const uint SPI_SETMENUSHOWDELAY = 107;
     public const uint SPIF_UPDATEINIFILE = 0x01;
     public const uint SPIF_SENDCHANGE = 0x02;
 
@@ -481,6 +498,26 @@ internal static class NativeMethods
     [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SystemParametersInfoSet(uint uiAction, uint uiParam, IntPtr pvParam, uint fWinIni);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct GUITHREADINFO
+    {
+        public int cbSize;
+        public int flags;
+        public IntPtr hwndActive;
+        public IntPtr hwndFocus;
+        public IntPtr hwndCapture;
+        public IntPtr hwndMenuOwner;
+        public IntPtr hwndMoveSize;
+        public IntPtr hwndCaret;
+        public RECT rcCaret;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO lpgui);
+
+    [DllImport("user32.dll")]
+    public static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
     // ---------------------------------------------------------------------------------------
     // A private message pump for HookThread.
     //

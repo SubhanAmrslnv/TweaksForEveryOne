@@ -162,8 +162,8 @@ public class FocusModeFeature : IDisposable
                 dpiY = source.CompositionTarget.TransformFromDevice.M22;
             }
 
-            double targetX = (rect.Left - SystemParameters.VirtualScreenLeft) * dpiX;
-            double targetY = (rect.Top - SystemParameters.VirtualScreenTop) * dpiY;
+            double targetX = (rect.Left * dpiX) - SystemParameters.VirtualScreenLeft;
+            double targetY = (rect.Top * dpiY) - SystemParameters.VirtualScreenTop;
             double targetW = (rect.Right - rect.Left) * dpiX;
             double targetH = (rect.Bottom - rect.Top) * dpiY;
 

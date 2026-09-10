@@ -1,11 +1,13 @@
-﻿using System;
+using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Brushes = System.Windows.Media.Brushes;
 using Color = System.Windows.Media.Color;
+using FontFamily = System.Windows.Media.FontFamily;
 using HorizontalAlignment = System.Windows.HorizontalAlignment;
 
 namespace WindowTweaks.Core;
@@ -185,27 +187,31 @@ internal sealed class OsdWindow : IDisposable
         _label = new TextBlock
         {
             Foreground = Brushes.White,
+            FontFamily = new FontFamily("SF Pro Display, Segoe UI Variable Display, Segoe UI"),
             FontSize = 14,
             FontWeight = FontWeights.SemiBold,
             TextAlignment = TextAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center
         };
+        Typography.SetNumeralAlignment(_label, FontNumeralAlignment.Tabular);
+        TextOptions.SetTextRenderingMode(_label, TextRenderingMode.ClearType);
+        TextOptions.SetTextFormattingMode(_label, TextFormattingMode.Display);
 
         _meterTrack = new Border
         {
             Width = 160,
-            Height = 6,
-            CornerRadius = new CornerRadius(3),
-            Background = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)),
+            Height = 5,
+            CornerRadius = new CornerRadius(2.5),
+            Background = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
             HorizontalAlignment = HorizontalAlignment.Left
         };
 
         _meterFill = new Border
         {
             Width = 0,
-            Height = 6,
-            CornerRadius = new CornerRadius(3),
-            Background = new SolidColorBrush(Color.FromRgb(0x9A, 0xD4, 0xFF)),
+            Height = 5,
+            CornerRadius = new CornerRadius(2.5),
+            Background = new SolidColorBrush(Color.FromRgb(0x00, 0x7A, 0xFF)), // macOS System Blue
             HorizontalAlignment = HorizontalAlignment.Left
         };
 
@@ -224,15 +230,13 @@ internal sealed class OsdWindow : IDisposable
 
         Border panel = new()
         {
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(14, 9, 14, 9),
+            CornerRadius = new CornerRadius(14),
+            Padding = new Thickness(16, 10, 16, 10),
             MinWidth = _minWidth,
-
-            // Opaque enough to read over anything, dark enough not to be a flashbang on a light
-            // background. No blur: see the owner's taste in CLAUDE.md.
-            Background = new SolidColorBrush(Color.FromArgb(0xE0, 0x1E, 0x1E, 0x1E)),
+            Background = VibrancyBackdrop.CreateFrostedBackgroundBrush(isDark: true),
             BorderThickness = new Thickness(1),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF)),
+            BorderBrush = VibrancyBackdrop.CreateSpecularBorderBrush(),
+            Effect = VibrancyBackdrop.CreateKeyShadowEffect(),
             Child = stack
         };
 
@@ -254,7 +258,11 @@ internal sealed class OsdWindow : IDisposable
             Top = -10000
         };
 
-        _window.SourceInitialized += (_, _) => OverlayPlacement.MakeClickThrough(_window);
+        _window.SourceInitialized += (_, _) =>
+        {
+            OverlayPlacement.MakeClickThrough(_window);
+            VibrancyBackdrop.ApplyNativeBackdrop(_window, VibrancyBackdrop.BackdropType.Acrylic);
+        };
 
         _hideTimer = new DispatcherTimer();
         _hideTimer.Tick += OnHideTick;

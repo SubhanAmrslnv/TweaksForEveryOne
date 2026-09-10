@@ -86,9 +86,14 @@ if ($Uninstall) {
     # Remove Startup shortcut
     if (Test-Path $ShortcutPath) { Remove-Item $ShortcutPath -Force }
     
-    # Remove Program Files directory
-    if (Test-Path $InstallDir) { 
-        Remove-Item $InstallDir -Recurse -Force 
+    # Remove Program Files directory - only if it looks like ours
+    if (Test-Path $InstallDir) {
+        $looksLikeOurs = Test-Path (Join-Path $InstallDir 'WindowTweaks.exe')
+        if ($looksLikeOurs) {
+            Remove-Item $InstallDir -Recurse -Force
+        } else {
+            Write-Host "Skipped removal: $InstallDir does not contain WindowTweaks.exe." -ForegroundColor Yellow
+        }
     }
     
     Write-Host "Uninstalled successfully."

@@ -8,6 +8,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <condition_variable>
 #include <memory>
 #include <map>
 #include <cstdint>
@@ -115,6 +116,7 @@ private:
     std::map<uint64_t, std::string> m_slotOwner;      // (window, channel) -> key
     std::map<std::string, Ownership> m_keyOwnership;  // key -> (window, channel)
     mutable std::mutex m_mutex;
+    std::condition_variable m_wakeup;
     std::atomic<bool> m_running;
     std::thread m_thread;
 };

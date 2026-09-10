@@ -480,6 +480,18 @@ void RenderQueue::flush() {
         sweepDead();
     }
 
+    // Final check: a producer may have called commit() between the loop breaking
+    // (because m_flushAgain was false) and here. Without this, that commit's state
+    // would be lost until the next external flush trigger.
+    if (m_flushAgain.load()) {
+        m_flushAgain.store(false);
+        applyOnce();
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            ++m_stats.passes;
+        }
+    }
+
     m_flushBusy.store(false);
 }
 

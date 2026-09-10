@@ -40,6 +40,7 @@ void AnimationScheduler::start() {
 
 void AnimationScheduler::stop() {
     m_running = false;
+    m_wakeup.notify_one();
     if (m_thread.joinable()) {
         m_thread.join();
     }
@@ -84,6 +85,7 @@ void AnimationScheduler::registerAnimation(const std::string& key, AnimationCall
         m_animations.end()
     );
     m_animations.push_back({key, std::move(callback)});
+    m_wakeup.notify_one();
 }
 
 void AnimationScheduler::cancelAnimation(const std::string& key) {
@@ -112,6 +114,7 @@ void AnimationScheduler::claim(uint32_t windowId, AnimChannel channel, const std
         m_animations.end()
     );
     m_animations.push_back({key, std::move(callback)});
+    m_wakeup.notify_one();
 }
 
 void AnimationScheduler::release(uint32_t windowId, AnimChannel channel) {
@@ -278,12 +281,16 @@ void AnimationScheduler::loop() {
             idle = m_animations.empty();
         }
 
-        // Nothing to drive: wait a whole frame rather than spinning. Windows
-        // kills its timer outright here; this thread has to stay alive to be
-        // joinable, so it parks instead.
+        // Nothing to drive: wait on the condition variable rather than spinning at
+        // 60 fps. registerAnimation() and claim() signal m_wakeup when work arrives,
+        // so the thread parks until then. This prevents constant CPU wake-ups that
+        // drain battery on laptops.
         auto frameTime = std::chrono::steady_clock::now() - now;
         if (idle) {
-            std::this_thread::sleep_for(targetDt);
+            std::unique_lock<std::mutex> lock(m_mutex);
+            m_wakeup.wait(lock, [this] {
+                return !m_animations.empty() || !m_running.load();
+            });
         } else if (frameTime < targetDt) {
             std::this_thread::sleep_for(targetDt - frameTime);
         }

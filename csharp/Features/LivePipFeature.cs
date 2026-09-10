@@ -89,10 +89,29 @@ public class LivePipFeature : IDisposable
             this.Title = "Live PiP";
             this.Width = width;
             this.Height = height;
-            this.WindowStyle = WindowStyle.ToolWindow;
+            this.WindowStyle = WindowStyle.None;
+            this.AllowsTransparency = true;
             this.Topmost = true;
-            this.Background = System.Windows.Media.Brushes.Black;
+            this.Background = System.Windows.Media.Brushes.Transparent;
             this.ShowInTaskbar = false;
+
+            var border = new System.Windows.Controls.Border
+            {
+                CornerRadius = new CornerRadius(14),
+                Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(230, 20, 20, 20)),
+                BorderThickness = new Thickness(1),
+                BorderBrush = VibrancyBackdrop.CreateSpecularBorderBrush(),
+                Effect = VibrancyBackdrop.CreateKeyShadowEffect()
+            };
+            border.MouseLeftButtonDown += (_, _) => { try { DragMove(); } catch { } };
+            this.Content = border;
+
+            this.SourceInitialized += (_, _) =>
+            {
+                IntPtr myHwnd = new WindowInteropHelper(this).Handle;
+                NativeMethods.SetWindowDisplayAffinity(myHwnd, NativeMethods.WDA_EXCLUDEFROMCAPTURE);
+                VibrancyBackdrop.ApplyNativeBackdrop(this, VibrancyBackdrop.BackdropType.Acrylic);
+            };
 
             this.Loaded += OnLoaded;
             this.SizeChanged += OnSizeChanged;

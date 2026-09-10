@@ -9,6 +9,10 @@ SnapGeometry::SnapGeometry(SnapParams params) : m_params(params) {}
 
 SnapGeometry::SnapGeometry(int snapThreshold) : m_params() {
     m_params.threshold = snapThreshold;
+    // The backwards-compatible path promises a fixed reach at the given threshold.
+    // Default SnapParams sets adapt = 0.55, which would scale reach with velocity and
+    // reduce it by 45% at zero speed. Set adapt to 0 to reproduce the old behaviour.
+    m_params.adapt = 0.0f;
 }
 
 void SnapGeometry::collectLines(const Rect& moving, const std::vector<Rect>& obstacles,

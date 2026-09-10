@@ -84,6 +84,7 @@ public class CustomClockFeature : IDisposable
         if (_source != null)
         {
             _source.RemoveHook(WndProc);
+            _source.Dispose();
             _source = null;
         }
 

@@ -21,4 +21,18 @@ internal static class LayoutHistoryManager
         }
         return false;
     }
+
+    /// <summary>Drop records for windows that no longer exist. Cheap; call from any slow poll.</summary>
+    public static void Sweep()
+    {
+        if (_undoHistory.Count == 0) return;
+
+        List<IntPtr>? dead = null;
+        foreach (IntPtr h in _undoHistory.Keys)
+        {
+            if (!NativeMethods.IsWindow(h)) (dead ??= new List<IntPtr>()).Add(h);
+        }
+        if (dead == null) return;
+        foreach (IntPtr h in dead) _undoHistory.Remove(h);
+    }
 }

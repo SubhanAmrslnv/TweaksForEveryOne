@@ -5,9 +5,13 @@ using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using WindowTweaks.Core;
+using Brushes = System.Windows.Media.Brushes;
+using Color = System.Windows.Media.Color;
 
 namespace WindowTweaks.Features;
 
@@ -50,23 +54,26 @@ public class SpotlightFeature : IDisposable
         {
             this.WindowStyle = WindowStyle.None;
             this.AllowsTransparency = true;
-            this.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(240, 32, 32, 32));
+            this.Background = Brushes.Transparent;
             this.Topmost = true;
             this.ShowInTaskbar = false;
-            this.Width = 640;
-            this.Height = 140;
+            this.Width = 660;
+            this.Height = 144;
             this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-            // Rounded corners using a Border
+            // Liquid Glass Squircle Container with Specular Border & Key Shadow
             Border border = new Border
             {
-                CornerRadius = new CornerRadius(20),
-                Background = System.Windows.Media.Brushes.Transparent
+                CornerRadius = new CornerRadius(18),
+                Background = VibrancyBackdrop.CreateFrostedBackgroundBrush(isDark: true),
+                BorderThickness = new Thickness(1),
+                BorderBrush = VibrancyBackdrop.CreateSpecularBorderBrush(),
+                Effect = VibrancyBackdrop.CreateKeyShadowEffect()
             };
 
             Grid grid = new Grid();
-            grid.Margin = new Thickness(20);
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(55) });
+            grid.Margin = new Thickness(24, 18, 24, 18);
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(56) });
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
             _inputBox = new System.Windows.Controls.TextBox
@@ -75,21 +82,26 @@ public class SpotlightFeature : IDisposable
                 Foreground = System.Windows.Media.Brushes.White,
                 BorderThickness = new Thickness(0),
                 FontSize = 24,
-                FontFamily = new System.Windows.Media.FontFamily("Segoe UI"),
-                CaretBrush = System.Windows.Media.Brushes.White,
-                VerticalAlignment = VerticalAlignment.Top
+                FontFamily = new System.Windows.Media.FontFamily("SF Pro Display, Segoe UI Variable Display, Segoe UI"),
+                CaretBrush = new SolidColorBrush(Color.FromRgb(0x00, 0x7A, 0xFF)),
+                VerticalAlignment = VerticalAlignment.Center
             };
+            TextOptions.SetTextRenderingMode(_inputBox, TextRenderingMode.ClearType);
+            TextOptions.SetTextFormattingMode(_inputBox, TextFormattingMode.Display);
             _inputBox.TextChanged += OnTextChanged;
             _inputBox.PreviewKeyDown += OnPreviewKeyDown;
 
             _resultText = new TextBlock
             {
-                Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(170, 170, 170)),
+                Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(180, 180, 185)),
                 FontSize = 14,
-                FontFamily = new System.Windows.Media.FontFamily("Segoe UI"),
+                FontFamily = new System.Windows.Media.FontFamily("SF Pro Text, Segoe UI Variable Text, Segoe UI"),
                 Text = "Type to search, calculate, or run...",
-                Margin = new Thickness(0, 10, 0, 0)
+                Margin = new Thickness(2, 8, 0, 0)
             };
+            Typography.SetNumeralAlignment(_resultText, FontNumeralAlignment.Tabular);
+            TextOptions.SetTextRenderingMode(_resultText, TextRenderingMode.ClearType);
+            TextOptions.SetTextFormattingMode(_resultText, TextFormattingMode.Display);
 
             Grid.SetRow(_inputBox, 0);
             Grid.SetRow(_resultText, 1);
@@ -100,12 +112,20 @@ public class SpotlightFeature : IDisposable
             border.Child = grid;
             this.Content = border;
 
+            this.SourceInitialized += (_, _) =>
+            {
+                VibrancyBackdrop.ApplyNativeBackdrop(this, VibrancyBackdrop.BackdropType.Acrylic);
+                IntPtr hwnd = new WindowInteropHelper(this).Handle;
+                NativeMethods.SetWindowDisplayAffinity(hwnd, NativeMethods.WDA_EXCLUDEFROMCAPTURE);
+            };
+
             this.Loaded += (s, e) =>
             {
-                // Align top third of the screen instead of exact center
+                // Align top third of the screen matching macOS Spotlight placement
                 var workArea = SystemParameters.WorkArea;
                 this.Top = workArea.Top + (workArea.Height - this.Height) / 3;
                 _inputBox.Focus();
+                SoundEngine.Play(SoundId.Launch);
             };
         }
 

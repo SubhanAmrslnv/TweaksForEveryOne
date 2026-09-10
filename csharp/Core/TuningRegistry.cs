@@ -468,9 +468,9 @@ internal static class TuningRegistry
         new TuningDescriptor
         {
             Key = KeyboardSoundProfile, Page = PagePower, Group = "Sound", Kind = TuningKind.Choice,
-            Title = "Sound profile", DefaultText = "click",
-            Choices = new[] { "click", "typewriter", "soft" },
-            ChoiceLabels = new[] { "Click - short and dry", "Typewriter - heavier thock", "Soft - a quiet tone" },
+            Title = "Sound profile", DefaultText = "apple",
+            Choices = new[] { "apple", "ceramic", "click", "typewriter", "soft" },
+            ChoiceLabels = new[] { "Apple - tactile tick (1.2ms attack, 1400Hz)", "Ceramic - double-impulse clack", "Click - short and dry", "Typewriter - heavier thock", "Soft - a quiet tone" },
             Description = "The instrument for every sound the app makes - keystrokes, the clipboard confirmations and the Windows shortcut chords alike. Each sound is generated in memory, so there are no audio files and nothing is read from disk while you type."
         },
         new TuningDescriptor

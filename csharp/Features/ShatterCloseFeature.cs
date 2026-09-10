@@ -61,6 +61,14 @@ public class ShatterCloseFeature : IDisposable
         int ww = rect.Right - rect.Left;
         int wh = rect.Bottom - rect.Top;
 
+        // A minimized, hidden or zero-sized window has no pixels to shatter. Close it normally
+        // rather than creating sixteen zero-sized DWM thumbnails that would leave it unresponsive.
+        if (ww < 1 || wh < 1)
+        {
+            NativeMethods.PostMessage(hwnd, NativeMethods.WM_SYSCOMMAND, new IntPtr(NativeMethods.SC_CLOSE), IntPtr.Zero);
+            return;
+        }
+
         int gridX = 4;
         int gridY = 4;
         double pieceW = (double)ww / gridX;
