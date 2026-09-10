@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using WindowTweaks.Core;
 
 namespace WindowTweaks.Features;
@@ -10,6 +12,7 @@ namespace WindowTweaks.Features;
 public class MagneticSnappingFeature : IDisposable
 {
     private bool _isEnabled = false;
+    private readonly ConcurrentDictionary<IntPtr, CancellationTokenSource> _glideChannels = new();
     private IntPtr _hookStartEnd = IntPtr.Zero;
     private IntPtr _hookLocation = IntPtr.Zero;
     private NativeMethods.WinEventDelegate _procStartEnd;
@@ -86,7 +89,18 @@ public class MagneticSnappingFeature : IDisposable
                 _hookLocation = IntPtr.Zero;
             }
             _dragHwnd = IntPtr.Zero;
+            CancelAllGlides();
         }
+    }
+
+    private void CancelAllGlides()
+    {
+        foreach (var kvp in _glideChannels)
+        {
+            kvp.Value.Cancel();
+            kvp.Value.Dispose();
+        }
+        _glideChannels.Clear();
     }
 
     public void Toggle() => SetEnabled(!_isEnabled);
@@ -259,29 +273,25 @@ public class MagneticSnappingFeature : IDisposable
         uint ownPid = (uint)Environment.ProcessId;
         NativeMethods.EnumWindows((IntPtr otherHwnd, IntPtr lParam) =>
         {
-            if (otherHwnd != hwnd && NativeMethods.IsWindowVisible(otherHwnd))
-            {
-                NativeMethods.GetWindowThreadProcessId(otherHwnd, out uint pid);
-                if (pid == ownPid) return true;
+            if (otherHwnd == hwnd) return true;
 
-                StringBuilder sb = new StringBuilder(256);
-                NativeMethods.GetClassName(otherHwnd, sb, sb.Capacity);
-                string cls = sb.ToString();
-                if (cls != "Shell_TrayWnd" && cls != "Progman" && cls != "WorkerW")
+            // Excludes invisible windows, tooltips, shells, and cloaked windows on other virtual desktops
+            if (!WindowFilter.IsOrdinaryAppWindow(otherHwnd)) return true;
+
+            NativeMethods.GetWindowThreadProcessId(otherHwnd, out uint pid);
+            if (pid == ownPid) return true;
+
+            if (NativeMethods.DwmGetWindowAttribute(otherHwnd, NativeMethods.DWMWA_EXTENDED_FRAME_BOUNDS, out NativeMethods.RECT oFrame, Marshal.SizeOf(typeof(NativeMethods.RECT))) == 0)
+            {
+                if (pT < oFrame.Bottom + neighbourProx && pB > oFrame.Top - neighbourProx)
                 {
-                    if (NativeMethods.DwmGetWindowAttribute(otherHwnd, NativeMethods.DWMWA_EXTENDED_FRAME_BOUNDS, out NativeMethods.RECT oFrame, Marshal.SizeOf(typeof(NativeMethods.RECT))) == 0)
-                    {
-                        if (pT < oFrame.Bottom + neighbourProx && pB > oFrame.Top - neighbourProx)
-                        {
-                            vLines.Add(oFrame.Left);
-                            vLines.Add(oFrame.Right);
-                        }
-                        if (pL < oFrame.Right + neighbourProx && pR > oFrame.Left - neighbourProx)
-                        {
-                            hLines.Add(oFrame.Top);
-                            hLines.Add(oFrame.Bottom);
-                        }
-                    }
+                    vLines.Add(oFrame.Left);
+                    vLines.Add(oFrame.Right);
+                }
+                if (pL < oFrame.Right + neighbourProx && pR > oFrame.Left - neighbourProx)
+                {
+                    hLines.Add(oFrame.Top);
+                    hLines.Add(oFrame.Bottom);
                 }
             }
             return true;
@@ -372,6 +382,16 @@ public class MagneticSnappingFeature : IDisposable
             return;
         }
 
+        // Cancel previous glide on this HWND if one is running
+        var cts = new CancellationTokenSource();
+        if (_glideChannels.TryGetValue(hwnd, out var existingCts))
+        {
+            existingCts.Cancel();
+            existingCts.Dispose();
+        }
+        _glideChannels[hwnd] = cts;
+        var token = cts.Token;
+
         double GLIDE_MS = 650.0;
         double ms = Math.Max(140.0, Math.Min(GLIDE_MS, 140.0 + dist * 0.9));
         
@@ -391,36 +411,53 @@ public class MagneticSnappingFeature : IDisposable
         int lastAppliedX = int.MinValue;
         int lastAppliedY = int.MinValue;
 
-        while (true)
+        try
         {
-            // Parameterised on ELAPSED TIME, not on a frame count: a fixed step per frame makes the
-            // duration depend on how heavy the frames turn out to be.
-            double t = sw.Elapsed.TotalMilliseconds / ms;
-            if (t >= 1.0) break;
-
-            // The window can be closed, minimised or snapped by Windows while the glide runs.
-            if (!NativeMethods.IsWindow(hwnd)) return;
-
-            double e = 1 - Math.Pow(1 - t, 5);
-            double o = 9.4815 * t * Math.Pow(1 - t, 3);
-
-            int nx = (int)Math.Round(fromX + dx * e + ox * o);
-            int ny = (int)Math.Round(fromY + dy * e + oy * o);
-
-            if (nx != lastAppliedX || ny != lastAppliedY)
+            while (!token.IsCancellationRequested)
             {
-                Move(hwnd, nx, ny);
-                lastAppliedX = nx;
-                lastAppliedY = ny;
+                // Parameterised on ELAPSED TIME, not on a frame count: a fixed step per frame makes the
+                // duration depend on how heavy the frames turn out to be.
+                double t = sw.Elapsed.TotalMilliseconds / ms;
+                if (t >= 1.0) break;
+
+                // The window can be closed, minimised or snapped by Windows while the glide runs.
+                if (!NativeMethods.IsWindow(hwnd)) return;
+
+                double e = 1 - Math.Pow(1 - t, 5);
+                double o = 9.4815 * t * Math.Pow(1 - t, 3);
+
+                int nx = (int)Math.Round(fromX + dx * e + ox * o);
+                int ny = (int)Math.Round(fromY + dy * e + oy * o);
+
+                if (nx != lastAppliedX || ny != lastAppliedY)
+                {
+                    Move(hwnd, nx, ny);
+                    lastAppliedX = nx;
+                    lastAppliedY = ny;
+                }
+
+                // 15 ms rather than 16: Windows' clock tick is about 15.6 ms, so a 16 ms deadline always
+                // lands just past a tick and waits for the next one. Measured over 100 idle frames, 16
+                // gave a 25.15 ms mean with 7.59 ms of jitter; 15 gave 15.92 ms with 0.37 ms.
+                await System.Threading.Tasks.Task.Delay(15, token);
             }
 
-            // 15 ms rather than 16: Windows' clock tick is about 15.6 ms, so a 16 ms deadline always
-            // lands just past a tick and waits for the next one. Measured over 100 idle frames, 16
-            // gave a 25.15 ms mean with 7.59 ms of jitter; 15 gave 15.92 ms with 0.37 ms.
-            await System.Threading.Tasks.Task.Delay(15);
+            if (!token.IsCancellationRequested && NativeMethods.IsWindow(hwnd))
+            {
+                Move(hwnd, toX, toY);
+            }
         }
-
-        if (NativeMethods.IsWindow(hwnd)) Move(hwnd, toX, toY);
+        catch (OperationCanceledException)
+        {
+            // Expected when a newer glide or drag supersedes this one
+        }
+        finally
+        {
+            if (_glideChannels.TryRemove(new KeyValuePair<IntPtr, CancellationTokenSource>(hwnd, cts)))
+            {
+                cts.Dispose();
+            }
+        }
     }
 
     private static void Move(IntPtr hwnd, int x, int y)

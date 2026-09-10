@@ -16,11 +16,15 @@ public class TrayMinimizeFeature : IDisposable
         IntPtr hwnd = NativeMethods.GetForegroundWindow();
         if (hwnd == IntPtr.Zero || !NativeMethods.IsWindow(hwnd)) return;
 
+        // Self-exclude by PID
+        NativeMethods.GetWindowThreadProcessId(hwnd, out uint pid);
+        if (pid == (uint)Environment.ProcessId) return;
+
         // Don't minimize the desktop or taskbar
         StringBuilder sbClass = new StringBuilder(256);
         NativeMethods.GetClassName(hwnd, sbClass, sbClass.Capacity);
         string cls = sbClass.ToString();
-        if (cls == "Shell_TrayWnd" || cls == "Progman" || cls == "WorkerW") return;
+        if (cls == "Shell_TrayWnd" || cls == "Progman" || cls == "WorkerW" || cls == "Shell_SecondaryTrayWnd") return;
 
         HideToTray(hwnd);
     }
@@ -35,7 +39,7 @@ public class TrayMinimizeFeature : IDisposable
         if (string.IsNullOrWhiteSpace(title)) title = "Hidden Window";
         if (title.Length > 63) title = title.Substring(0, 63); // NotifyIcon tooltip limit
 
-        Icon icon = GetWindowIcon(hwnd);
+        Icon? icon = GetWindowIcon(hwnd);
 
         NotifyIcon trayIcon = new NotifyIcon
         {
@@ -54,10 +58,17 @@ public class TrayMinimizeFeature : IDisposable
 
     private void RestoreFromTray(IntPtr hwnd)
     {
-        if (_hiddenWindows.TryGetValue(hwnd, out NotifyIcon trayIcon))
+        if (_hiddenWindows.TryGetValue(hwnd, out NotifyIcon? trayIcon))
         {
-            trayIcon.Visible = false;
-            trayIcon.Dispose();
+            if (trayIcon != null)
+            {
+                trayIcon.Visible = false;
+                if (trayIcon.Icon != null && trayIcon.Icon != SystemIcons.Application)
+                {
+                    trayIcon.Icon.Dispose();
+                }
+                trayIcon.Dispose();
+            }
             _hiddenWindows.Remove(hwnd);
 
             if (NativeMethods.IsWindow(hwnd))
@@ -80,37 +91,41 @@ public class TrayMinimizeFeature : IDisposable
         return count;
     }
 
-    private Icon GetWindowIcon(IntPtr hwnd)
+    private Icon? GetWindowIcon(IntPtr hwnd)
     {
         IntPtr hIcon = IntPtr.Zero;
         
-        // Ask politely first (Small, then Big)
-        foreach (int which in new[] { NativeMethods.ICON_SMALL2, NativeMethods.ICON_BIG })
+        // Query WM_GETICON directly
+        foreach (int which in new[] { NativeMethods.ICON_SMALL2, NativeMethods.ICON_BIG, NativeMethods.ICON_SMALL })
         {
-            IntPtr result = IntPtr.Zero;
-            bool ok = NativeMethods.SendMessageTimeout(hwnd, NativeMethods.WM_GETICON, new IntPtr(which), IntPtr.Zero, 
-                NativeMethods.SMTO_ABORTIFHUNG, 100, out result) != IntPtr.Zero;
-            if (ok && result != IntPtr.Zero)
+            if (NativeMethods.SendMessageTimeout(hwnd, NativeMethods.WM_GETICON, new IntPtr(which), IntPtr.Zero, 
+                NativeMethods.SMTO_ABORTIFHUNG, 100, out IntPtr result) != IntPtr.Zero && result != IntPtr.Zero)
             {
                 hIcon = result;
                 break;
             }
         }
 
-        // Fallback to class icon
+        // Fallback to class icon (small first, then normal)
         if (hIcon == IntPtr.Zero)
         {
-            hIcon = NativeMethods.GetClassLongPtr(hwnd, NativeMethods.GCLP_HICON);
+            hIcon = NativeMethods.GetClassLongPtr(hwnd, NativeMethods.GCLP_HICONSM);
+            if (hIcon == IntPtr.Zero)
+            {
+                hIcon = NativeMethods.GetClassLongPtr(hwnd, NativeMethods.GCLP_HICON);
+            }
         }
 
         if (hIcon != IntPtr.Zero)
         {
             try
             {
-                // Clone it so we own the lifecycle of the managed Icon
-                using (Icon tmp = Icon.FromHandle(hIcon))
+                // CRITICAL: CopyIcon creates an owned duplicate GDI handle.
+                // Disposing the managed Icon wrapper will destroy our copy, never the target app's icon.
+                IntPtr hIconCopy = NativeMethods.CopyIcon(hIcon);
+                if (hIconCopy != IntPtr.Zero)
                 {
-                    return (Icon)tmp.Clone();
+                    return Icon.FromHandle(hIconCopy);
                 }
             }
             catch
@@ -127,6 +142,10 @@ public class TrayMinimizeFeature : IDisposable
         foreach (var kvp in _hiddenWindows)
         {
             kvp.Value.Visible = false;
+            if (kvp.Value.Icon != null && kvp.Value.Icon != SystemIcons.Application)
+            {
+                kvp.Value.Icon.Dispose();
+            }
             kvp.Value.Dispose();
             if (NativeMethods.IsWindow(kvp.Key))
             {

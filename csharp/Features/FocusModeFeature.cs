@@ -18,20 +18,28 @@ public class FocusModeFeature : IDisposable
     
     // Smooth trailing variables for the cinematic spotlight movement
     private double _currentX, _currentY, _currentW, _currentH;
+    private bool _isEnabled;
 
-    public bool IsEnabled => _overlayWindow != null;
+    public bool IsEnabled => _isEnabled;
 
     public void SetEnabled(bool enabled)
     {
-        if (enabled == IsEnabled) return;
+        if (enabled == _isEnabled) return;
         if (enabled) Enable();
         else Disable();
     }
 
-    public void Toggle() => SetEnabled(!IsEnabled);
+    public void Toggle() => SetEnabled(!_isEnabled);
 
     private void Enable()
     {
+        _isEnabled = true;
+        if (_overlayWindow != null)
+        {
+            try { _overlayWindow.Close(); } catch { }
+            _overlayWindow = null;
+        }
+
         double left = SystemParameters.VirtualScreenLeft;
         double top = SystemParameters.VirtualScreenTop;
         double width = SystemParameters.VirtualScreenWidth;
@@ -90,23 +98,28 @@ public class FocusModeFeature : IDisposable
 
     private void Disable()
     {
+        _isEnabled = false;
         if (_overlayWindow == null) return;
 
         _monitorTimer?.Stop();
+        _monitorTimer = null;
 
-        // Cinematic Fade Out
-        DoubleAnimation fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.4))
+        var win = _overlayWindow;
+        DoubleAnimation fadeOut = new DoubleAnimation(win.Opacity, 0, TimeSpan.FromSeconds(0.4))
         {
             EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
         };
         
         fadeOut.Completed += (s, e) => 
         {
-            _overlayWindow?.Close();
-            _overlayWindow = null;
+            try { win.Close(); } catch { }
+            if (_overlayWindow == win)
+            {
+                _overlayWindow = null;
+            }
         };
 
-        _overlayWindow.BeginAnimation(Window.OpacityProperty, fadeOut);
+        win.BeginAnimation(Window.OpacityProperty, fadeOut);
     }
 
     private void MonitorTimer_Tick(object? sender, EventArgs e)
@@ -120,7 +133,18 @@ public class FocusModeFeature : IDisposable
 
         IntPtr activeWindow = NativeMethods.GetForegroundWindow();
         var helper = new WindowInteropHelper(_overlayWindow);
-        if (activeWindow == IntPtr.Zero || activeWindow == helper.Handle)
+        if (activeWindow == IntPtr.Zero || activeWindow == helper.Handle || !NativeMethods.IsWindow(activeWindow) || NativeMethods.IsIconic(activeWindow))
+            return;
+
+        // Self-exclude by PID
+        NativeMethods.GetWindowThreadProcessId(activeWindow, out uint pid);
+        if (pid == (uint)Environment.ProcessId) return;
+
+        // Skip desktop and taskbar
+        System.Text.StringBuilder sb = new System.Text.StringBuilder(256);
+        NativeMethods.GetClassName(activeWindow, sb, sb.Capacity);
+        string cls = sb.ToString();
+        if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd")
             return;
 
         _currentTargetHwnd = activeWindow;
@@ -176,10 +200,12 @@ public class FocusModeFeature : IDisposable
 
     public void Dispose()
     {
+        _isEnabled = false;
         _monitorTimer?.Stop();
+        _monitorTimer = null;
         if (_overlayWindow != null)
         {
-            _overlayWindow.Close();
+            try { _overlayWindow.Close(); } catch { }
             _overlayWindow = null;
         }
     }

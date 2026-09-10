@@ -25,6 +25,16 @@ public class CycleWindowSizeFeature
         IntPtr hwnd = NativeMethods.GetForegroundWindow();
         if (hwnd == IntPtr.Zero || !NativeMethods.IsWindow(hwnd)) return;
 
+        // Self-exclude by PID
+        NativeMethods.GetWindowThreadProcessId(hwnd, out uint pid);
+        if (pid == (uint)Environment.ProcessId) return;
+
+        // Don't resize desktop or taskbar
+        System.Text.StringBuilder sbCls = new System.Text.StringBuilder(256);
+        NativeMethods.GetClassName(hwnd, sbCls, sbCls.Capacity);
+        string cls = sbCls.ToString();
+        if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd") return;
+
         // Un-maximize if maximized
         NativeMethods.ShowWindow(hwnd, NativeMethods.SW_RESTORE);
 
@@ -44,7 +54,7 @@ public class CycleWindowSizeFeature
         if (!NativeMethods.GetMonitorInfo(hMonitor, ref monitorInfo)) return;
 
         int idx = 0;
-        if (_cycleStates.TryGetValue(hwnd, out CycleState st))
+        if (_cycleStates.TryGetValue(hwnd, out CycleState? st))
         {
             // If window hasn't been moved/resized by the user manually, continue cycle
             if (Math.Abs(st.Left - frameRect.Left) <= 2 &&

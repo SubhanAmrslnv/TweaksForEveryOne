@@ -15,6 +15,16 @@ public class RollUpFeature : IDisposable
         IntPtr hwnd = NativeMethods.GetForegroundWindow();
         if (hwnd == IntPtr.Zero || !NativeMethods.IsWindow(hwnd)) return;
 
+        // Self-exclude by PID
+        NativeMethods.GetWindowThreadProcessId(hwnd, out uint pid);
+        if (pid == (uint)Environment.ProcessId) return;
+
+        // Ensure we don't roll up the desktop or taskbar
+        System.Text.StringBuilder sbCls = new System.Text.StringBuilder(256);
+        NativeMethods.GetClassName(hwnd, sbCls, sbCls.Capacity);
+        string cls = sbCls.ToString();
+        if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd") return;
+
         if (!NativeMethods.GetWindowRect(hwnd, out NativeMethods.RECT winRect)) return;
         int w = winRect.Right - winRect.Left;
         int h = winRect.Bottom - winRect.Top;
@@ -43,7 +53,10 @@ public class RollUpFeature : IDisposable
             
             // Ensure final state
             IntPtr hRgn = NativeMethods.CreateRectRgn(0, 0, w, caption);
-            NativeMethods.SetWindowRgn(hwnd, hRgn, true);
+            if (NativeMethods.SetWindowRgn(hwnd, hRgn, true) == 0)
+            {
+                NativeMethods.DeleteObject(hRgn);
+            }
         }
     }
 
@@ -104,7 +117,10 @@ public class RollUpFeature : IDisposable
             int curH = startH + (int)((endH - startH) * ease);
             
             IntPtr hRgn = NativeMethods.CreateRectRgn(0, 0, w, curH);
-            NativeMethods.SetWindowRgn(hwnd, hRgn, true);
+            if (NativeMethods.SetWindowRgn(hwnd, hRgn, true) == 0)
+            {
+                NativeMethods.DeleteObject(hRgn);
+            }
 
             await Task.Delay(16); // ~60 FPS
         }

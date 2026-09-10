@@ -161,11 +161,11 @@ public partial class App : System.Windows.Application
         _altDragFeature = new AltDragFeature();
         _restoreAllFeature = new RestoreAllFeature(_rollUpFeature, _trayMinimizeFeature);
 
-        // The double-tap triggers marshal onto the dispatcher: the keyboard hook runs on whichever
-        // thread is pumping, and both targets touch UI.
-        _stealthPanicTrigger = new StealthPanicTrigger(() => Dispatcher.Invoke(() => _bossKeyFeature.Toggle()));
-        _doubleAltTrigger = new DoubleAltTrigger(() => Dispatcher.Invoke(() => _micMuteFeature.Toggle()));
-        _doubleCtrlTrigger = new DoubleCtrlTrigger(() => Dispatcher.Invoke(() => _spotlightFeature.Toggle()));
+        // The double-tap triggers marshal onto the dispatcher asynchronously so the keyboard hook
+        // thread is never blocked waiting on UI actions (avoiding hook lag and timeouts).
+        _stealthPanicTrigger = new StealthPanicTrigger(() => Dispatcher.BeginInvoke(new Action(() => _bossKeyFeature.Toggle())));
+        _doubleAltTrigger = new DoubleAltTrigger(() => Dispatcher.BeginInvoke(new Action(() => _micMuteFeature.Toggle())));
+        _doubleCtrlTrigger = new DoubleCtrlTrigger(() => Dispatcher.BeginInvoke(new Action(() => _spotlightFeature.Toggle())));
 
         // Must exist before anything else: it is the only way to ask this app to exit, since it
         // shows no window of its own.

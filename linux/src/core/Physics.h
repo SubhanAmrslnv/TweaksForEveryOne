@@ -35,7 +35,8 @@ public:
     // target delta. The Windows original is `1 - (1 - t) ** 5`, and since
     // (t-1)^5 == -(1-t)^5 the correct C++ is a plus.
     static float quinticEaseOut(float t) {
-        return 1.0f + (--t) * t * t * t * t;
+        const float f = t - 1.0f;
+        return 1.0f + f * f * f * f * f;
     }
 
     // Settle bump: exactly 0 at both ends, peaking at t = 0.25.

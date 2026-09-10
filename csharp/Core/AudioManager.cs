@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 
 namespace WindowTweaks.Core;
@@ -60,43 +60,55 @@ public static class AudioManager
         int GetMute([MarshalAs(UnmanagedType.Bool)] out bool pbMute);
     }
 
-    private static IAudioEndpointVolume GetMasterVolumeObject()
+    private static IAudioEndpointVolume? GetMasterVolumeObject()
     {
-        IMMDeviceEnumerator deviceEnumerator = null;
-        IMMDevice defaultDevice = null;
-        IAudioEndpointVolume endpointVolume = null;
+        IMMDeviceEnumerator? deviceEnumerator = null;
+        IMMDevice? defaultDevice = null;
         try
         {
             deviceEnumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
-            deviceEnumerator.GetDefaultAudioEndpoint(0, 1, out defaultDevice); // eRender = 0, eMultimedia = 1
-            if (defaultDevice != null)
+            if (deviceEnumerator.GetDefaultAudioEndpoint(0, 1, out defaultDevice) == 0 && defaultDevice != null) // eRender = 0, eMultimedia = 1
             {
                 Guid iid = typeof(IAudioEndpointVolume).GUID;
-                defaultDevice.Activate(ref iid, 23, IntPtr.Zero, out endpointVolume); // CLSCTX_INPROC_SERVER = 1 | CLSCTX_LOCAL_SERVER = 4 ... CLSCTX_ALL = 23
+                if (defaultDevice.Activate(ref iid, 23, IntPtr.Zero, out IAudioEndpointVolume endpointVolume) == 0) // CLSCTX_INPROC_SERVER = 1 | CLSCTX_LOCAL_SERVER = 4 ... CLSCTX_ALL = 23
+                {
+                    return endpointVolume;
+                }
             }
         }
         catch { }
-        return endpointVolume;
+        finally
+        {
+            if (defaultDevice != null) Marshal.ReleaseComObject(defaultDevice);
+            if (deviceEnumerator != null) Marshal.ReleaseComObject(deviceEnumerator);
+        }
+        return null;
     }
 
-    private static IAudioEndpointVolume GetMicVolumeObject()
+    private static IAudioEndpointVolume? GetMicVolumeObject()
     {
-        IMMDeviceEnumerator deviceEnumerator = null;
-        IMMDevice defaultDevice = null;
-        IAudioEndpointVolume endpointVolume = null;
+        IMMDeviceEnumerator? deviceEnumerator = null;
+        IMMDevice? defaultDevice = null;
         try
         {
             deviceEnumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
             // eCapture = 1, eMultimedia = 1
-            deviceEnumerator.GetDefaultAudioEndpoint(1, 1, out defaultDevice); 
-            if (defaultDevice != null)
+            if (deviceEnumerator.GetDefaultAudioEndpoint(1, 1, out defaultDevice) == 0 && defaultDevice != null) 
             {
                 Guid iid = typeof(IAudioEndpointVolume).GUID;
-                defaultDevice.Activate(ref iid, 23, IntPtr.Zero, out endpointVolume); 
+                if (defaultDevice.Activate(ref iid, 23, IntPtr.Zero, out IAudioEndpointVolume endpointVolume) == 0) 
+                {
+                    return endpointVolume;
+                }
             }
         }
         catch { }
-        return endpointVolume;
+        finally
+        {
+            if (defaultDevice != null) Marshal.ReleaseComObject(defaultDevice);
+            if (deviceEnumerator != null) Marshal.ReleaseComObject(deviceEnumerator);
+        }
+        return null;
     }
 
     public static bool GetMute()
@@ -106,9 +118,15 @@ public static class AudioManager
             var vol = GetMasterVolumeObject();
             if (vol != null)
             {
-                vol.GetMute(out bool isMuted);
-                Marshal.ReleaseComObject(vol);
-                return isMuted;
+                try
+                {
+                    vol.GetMute(out bool isMuted);
+                    return isMuted;
+                }
+                finally
+                {
+                    Marshal.ReleaseComObject(vol);
+                }
             }
         }
         catch { }
@@ -122,8 +140,14 @@ public static class AudioManager
             var vol = GetMasterVolumeObject();
             if (vol != null)
             {
-                vol.SetMute(mute, Guid.Empty);
-                Marshal.ReleaseComObject(vol);
+                try
+                {
+                    vol.SetMute(mute, Guid.Empty);
+                }
+                finally
+                {
+                    Marshal.ReleaseComObject(vol);
+                }
             }
         }
         catch { }
@@ -136,9 +160,15 @@ public static class AudioManager
             var vol = GetMicVolumeObject();
             if (vol != null)
             {
-                vol.GetMute(out bool isMuted);
-                Marshal.ReleaseComObject(vol);
-                return isMuted;
+                try
+                {
+                    vol.GetMute(out bool isMuted);
+                    return isMuted;
+                }
+                finally
+                {
+                    Marshal.ReleaseComObject(vol);
+                }
             }
         }
         catch { }
@@ -152,8 +182,14 @@ public static class AudioManager
             var vol = GetMicVolumeObject();
             if (vol != null)
             {
-                vol.SetMute(mute, Guid.Empty);
-                Marshal.ReleaseComObject(vol);
+                try
+                {
+                    vol.SetMute(mute, Guid.Empty);
+                }
+                finally
+                {
+                    Marshal.ReleaseComObject(vol);
+                }
             }
         }
         catch { }

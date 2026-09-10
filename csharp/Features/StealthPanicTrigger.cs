@@ -53,7 +53,15 @@ public class StealthPanicTrigger : IDisposable
 
     internal bool OnKey(KeyboardHook.KeyEvent e)
     {
-        if (e.VirtualKey != VK_ESCAPE) return false;
+        if (e.VirtualKey != VK_ESCAPE)
+        {
+            if (e.IsKeyDown && _escCount > 0)
+            {
+                _escCount = 0;
+                _timer.Reset();
+            }
+            return false;
+        }
 
         if (e.IsKeyDown)
         {

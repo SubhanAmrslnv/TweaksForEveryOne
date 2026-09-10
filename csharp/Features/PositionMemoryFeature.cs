@@ -14,8 +14,11 @@ public class PositionMemoryFeature : IDisposable
     private bool _isEnabled = false;
     private IntPtr _hook = IntPtr.Zero;
     private NativeMethods.WinEventDelegate _procDelegate;
+    private readonly object _gate = new();
     private Dictionary<string, WindowRect> _positions = new();
     private string _settingsPath;
+    private System.Threading.Timer? _debounceTimer;
+    private bool _dirty;
 
     public bool IsEnabled => _isEnabled;
 
@@ -45,27 +48,58 @@ public class PositionMemoryFeature : IDisposable
 
     private void LoadPositions()
     {
-        if (File.Exists(_settingsPath))
+        lock (_gate)
         {
-            try
+            if (File.Exists(_settingsPath))
             {
-                string json = File.ReadAllText(_settingsPath);
-                var loaded = JsonSerializer.Deserialize<Dictionary<string, WindowRect>>(json);
-                if (loaded != null) _positions = loaded;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Failed to load positions: {ex.Message}");
+                try
+                {
+                    string json = File.ReadAllText(_settingsPath);
+                    var loaded = JsonSerializer.Deserialize<Dictionary<string, WindowRect>>(json);
+                    if (loaded != null) _positions = loaded;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Failed to load positions: {ex.Message}");
+                }
             }
         }
     }
 
-    private void SavePositions()
+    private void ScheduleSave()
     {
+        lock (_gate)
+        {
+            _dirty = true;
+            if (_debounceTimer == null)
+            {
+                _debounceTimer = new System.Threading.Timer(_ => Flush(), null, 500, System.Threading.Timeout.Infinite);
+            }
+            else
+            {
+                _debounceTimer.Change(500, System.Threading.Timeout.Infinite);
+            }
+        }
+    }
+
+    public void Flush()
+    {
+        Dictionary<string, WindowRect> snapshot;
+        lock (_gate)
+        {
+            if (!_dirty) return;
+            _dirty = false;
+            _debounceTimer?.Dispose();
+            _debounceTimer = null;
+            snapshot = new Dictionary<string, WindowRect>(_positions);
+        }
+
         try
         {
-            string json = JsonSerializer.Serialize(_positions, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_settingsPath, json);
+            string json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions { WriteIndented = true });
+            string tmp = _settingsPath + ".tmp";
+            File.WriteAllText(tmp, json);
+            File.Move(tmp, _settingsPath, overwrite: true);
         }
         catch (Exception ex)
         {
@@ -139,9 +173,7 @@ public class PositionMemoryFeature : IDisposable
         uint exStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
 
         const uint WS_THICKFRAME = 0x00040000;
-        const uint WS_MAXIMIZEBOX = 0x00010000;
         const uint WS_EX_TOOLWINDOW = 0x00000080;
-        const uint WS_EX_TOPMOST = 0x00000008;
 
         if ((exStyle & WS_EX_TOOLWINDOW) == WS_EX_TOOLWINDOW) return null;
         if ((style & WS_THICKFRAME) == 0) return null;
@@ -157,24 +189,8 @@ public class PositionMemoryFeature : IDisposable
         string exeLower = ProcessNameCache.ForPid(pid);
         if (string.IsNullOrEmpty(exeLower)) return null;
 
-        // PiP checks (WS_EX_TOPMOST but no WS_MAXIMIZEBOX, specific browsers)
-        if ((exStyle & WS_EX_TOPMOST) == WS_EX_TOPMOST && (style & WS_MAXIMIZEBOX) == 0)
-        {
-            if (exeLower == "chrome" || exeLower == "msedge" || exeLower == "firefox" || exeLower == "brave" || exeLower == "opera" || exeLower == "vivaldi")
-            {
-                return null;
-            }
-        }
-
-        // Title PiP check
-        StringBuilder sbTitle = new StringBuilder(256);
-        NativeMethods.GetWindowText(hwnd, sbTitle, sbTitle.Capacity);
-        string title = sbTitle.ToString();
-
-        if (System.Text.RegularExpressions.Regex.IsMatch(title, @"^(Picture.?in.?Picture|PiP|Картинка в картинке|Resim içinde resim|Şəkil içində şəkil)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
-        {
-            return null;
-        }
+        // PiP checks via central WindowFilter
+        if (WindowFilter.IsPictureInPicture(hwnd)) return null;
 
         return $"{exeLower}:{cls}";
     }
@@ -193,8 +209,11 @@ public class PositionMemoryFeature : IDisposable
 
             if (w <= 0 || h <= 0) return;
 
-            _positions[key] = new WindowRect { X = winRect.Left, Y = winRect.Top };
-            SavePositions(); // Ideally this is debounced, but this works for now
+            lock (_gate)
+            {
+                _positions[key] = new WindowRect { X = winRect.Left, Y = winRect.Top };
+            }
+            ScheduleSave();
         }
     }
 
@@ -203,7 +222,14 @@ public class PositionMemoryFeature : IDisposable
         string? key = GetWindowKey(hwnd);
         if (key == null) return;
 
-        if (_positions.TryGetValue(key, out WindowRect rect))
+        bool found;
+        WindowRect rect;
+        lock (_gate)
+        {
+            found = _positions.TryGetValue(key, out rect);
+        }
+
+        if (found)
         {
             if (!NativeMethods.IsWindow(hwnd)) return;
 
@@ -222,5 +248,6 @@ public class PositionMemoryFeature : IDisposable
             NativeMethods.UnhookWinEvent(_hook);
             _hook = IntPtr.Zero;
         }
+        Flush();
     }
 }

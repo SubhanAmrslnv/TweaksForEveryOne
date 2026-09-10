@@ -29,9 +29,6 @@ public class QuickFolderJumpFeature
     [DllImport("user32.dll", CharSet = CharSet.Auto, EntryPoint = "SendMessage")]
     private static extern IntPtr SendMessageString(IntPtr hWnd, int Msg, IntPtr wParam, string lParam);
 
-    [DllImport("user32.dll")]
-    private static extern IntPtr SetFocus(IntPtr hWnd);
-
     public delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
 
     [DllImport("user32.dll")]
@@ -75,7 +72,7 @@ public class QuickFolderJumpFeature
         }
 
         // 3. Get the path from the most recent Explorer window
-        string path = GetActiveExplorerPath();
+        string? path = GetActiveExplorerPath();
         if (string.IsNullOrEmpty(path))
         {
             return;
@@ -83,27 +80,31 @@ public class QuickFolderJumpFeature
 
         Task.Run(() => 
         {
-            // 4. Backup the current text
-            int length = SendMessage(editHwnd, WM_GETTEXTLENGTH, IntPtr.Zero, IntPtr.Zero).ToInt32();
-            StringBuilder oldText = new StringBuilder(length + 1);
-            SendMessage(editHwnd, WM_GETTEXT, new IntPtr(oldText.Capacity), oldText);
-
-            // 5. Set focus and text
-            SetFocus(editHwnd);
-            SendMessageString(editHwnd, WM_SETTEXT, IntPtr.Zero, path);
-            Thread.Sleep(50);
-
-            // 6. Send Enter key directly to the edit control to navigate
-            NativeMethods.PostMessage(editHwnd, WM_KEYDOWN, new IntPtr(VK_RETURN), IntPtr.Zero);
-            NativeMethods.PostMessage(editHwnd, WM_KEYUP, new IntPtr(VK_RETURN), IntPtr.Zero);
-            
-            Thread.Sleep(150);
-
-            // 7. Restore the old text if it wasn't empty
-            if (oldText.Length > 0)
+            try
             {
-                SendMessageString(editHwnd, WM_SETTEXT, IntPtr.Zero, oldText.ToString());
+                // 4. Backup the current text
+                int length = SendMessage(editHwnd, WM_GETTEXTLENGTH, IntPtr.Zero, IntPtr.Zero).ToInt32();
+                StringBuilder oldText = new StringBuilder(length + 1);
+                SendMessage(editHwnd, WM_GETTEXT, new IntPtr(oldText.Capacity), oldText);
+
+                // 5. Ensure dialog is active and set text
+                NativeMethods.SetForegroundWindow(hwnd);
+                SendMessageString(editHwnd, WM_SETTEXT, IntPtr.Zero, path);
+                Thread.Sleep(50);
+
+                // 6. Send Enter key directly to the edit control to navigate
+                NativeMethods.PostMessage(editHwnd, WM_KEYDOWN, new IntPtr(VK_RETURN), IntPtr.Zero);
+                NativeMethods.PostMessage(editHwnd, WM_KEYUP, new IntPtr(VK_RETURN), IntPtr.Zero);
+                
+                Thread.Sleep(150);
+
+                // 7. Restore the old text if it wasn't empty
+                if (oldText.Length > 0)
+                {
+                    SendMessageString(editHwnd, WM_SETTEXT, IntPtr.Zero, oldText.ToString());
+                }
             }
+            catch { }
         });
     }
 
@@ -119,17 +120,54 @@ public class QuickFolderJumpFeature
             if (shellAppType != null)
             {
                 dynamic? shell = Activator.CreateInstance(shellAppType);
-                var windows = shell?.Windows();
-                if (windows != null)
+                if (shell != null)
                 {
-                    for (int i = 0; i < windows.Count; i++)
+                    try
                     {
-                        var window = windows.Item(i);
-                        if (window != null && (IntPtr)window.HWND == explorerHwnd)
+                        var windows = shell.Windows();
+                        if (windows != null)
                         {
-                            string? path = window.Document?.Folder?.Self?.Path;
-                            return path;
+                            try
+                            {
+                                for (int i = 0; i < windows.Count; i++)
+                                {
+                                    var window = windows.Item(i);
+                                    if (window == null) continue;
+
+                                    try
+                                    {
+                                        if (((uint)Convert.ToInt64(window.HWND)) == (uint)explorerHwnd.ToInt64())
+                                        {
+                                            var doc = window.Document;
+                                            if (doc != null)
+                                            {
+                                                var folder = doc.Folder;
+                                                if (folder != null)
+                                                {
+                                                    var self = folder.Self;
+                                                    if (self != null)
+                                                    {
+                                                        return (string?)self.Path;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    catch
+                                    {
+                                        // Ignore windows without valid Document/Folder/Self structures
+                                    }
+                                }
+                            }
+                            finally
+                            {
+                                Marshal.ReleaseComObject(windows);
+                            }
                         }
+                    }
+                    finally
+                    {
+                        Marshal.ReleaseComObject(shell);
                     }
                 }
             }

@@ -29,21 +29,29 @@ public class ShatterCloseFeature : IDisposable
         public CancellationTokenSource Cts = new();
     }
 
+    private readonly object _lock = new();
     private readonly Dictionary<IntPtr, ActiveShatter> _activeShatters = new();
 
     public void Toggle()
     {
         IntPtr hwnd = NativeMethods.GetForegroundWindow();
-        if (hwnd == IntPtr.Zero) return;
+        if (hwnd == IntPtr.Zero || !NativeMethods.IsWindow(hwnd)) return;
+
+        // Self-exclude by PID
+        NativeMethods.GetWindowThreadProcessId(hwnd, out uint pid);
+        if (pid == (uint)Environment.ProcessId) return;
 
         // Ensure we don't shatter the desktop or taskbar
         System.Text.StringBuilder sbCls = new System.Text.StringBuilder(256);
         NativeMethods.GetClassName(hwnd, sbCls, sbCls.Capacity);
         string cls = sbCls.ToString();
-        if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd") return;
+        if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd") return;
 
-        if (_activeShatters.ContainsKey(hwnd))
-            return;
+        lock (_lock)
+        {
+            if (_activeShatters.ContainsKey(hwnd))
+                return;
+        }
 
         if (!NativeMethods.GetWindowRect(hwnd, out NativeMethods.RECT rect))
             return;
@@ -74,7 +82,8 @@ public class ShatterCloseFeature : IDisposable
         {
             for (int row = 0; row < gridY; row++)
             {
-                NativeMethods.DwmRegisterThumbnail(overlayHwnd, hwnd, out IntPtr thumb);
+                if (NativeMethods.DwmRegisterThumbnail(overlayHwnd, hwnd, out IntPtr thumb) != 0 || thumb == IntPtr.Zero)
+                    continue;
 
                 double srcX = col * pieceW;
                 double srcY = row * pieceH;
@@ -108,7 +117,17 @@ public class ShatterCloseFeature : IDisposable
             }
         }
 
-        _activeShatters[hwnd] = shatter;
+        if (shatter.Shards.Count == 0)
+        {
+            NativeMethods.PostMessage(overlayHwnd, NativeMethods.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+            NativeMethods.PostMessage(hwnd, NativeMethods.WM_SYSCOMMAND, new IntPtr(NativeMethods.SC_CLOSE), IntPtr.Zero);
+            return;
+        }
+
+        lock (_lock)
+        {
+            _activeShatters[hwnd] = shatter;
+        }
 
         // Hide real window far off-screen
         NativeMethods.SetWindowPos(hwnd, IntPtr.Zero, -19999, wy, 0, 0,
@@ -199,22 +218,28 @@ public class ShatterCloseFeature : IDisposable
             await Task.Delay(15);
         }
 
-        CleanupShatter(shatter, true);
+        if (!token.IsCancellationRequested)
+        {
+            CleanupShatter(shatter, true);
+        }
     }
 
     private void CleanupShatter(ActiveShatter shatter, bool closeWindow)
     {
+        lock (_lock)
+        {
+            if (!_activeShatters.Remove(shatter.Hwnd))
+            {
+                return;
+            }
+        }
+
         foreach (var s in shatter.Shards)
         {
             NativeMethods.DwmUnregisterThumbnail(s.ThumbId);
         }
 
         NativeMethods.PostMessage(shatter.OverlayHwnd, NativeMethods.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
-
-        if (_activeShatters.ContainsKey(shatter.Hwnd))
-        {
-            _activeShatters.Remove(shatter.Hwnd);
-        }
 
         if (NativeMethods.IsWindow(shatter.Hwnd))
         {
@@ -232,7 +257,13 @@ public class ShatterCloseFeature : IDisposable
 
     public void Dispose()
     {
-        foreach (var shatter in new List<ActiveShatter>(_activeShatters.Values))
+        List<ActiveShatter> toCleanup;
+        lock (_lock)
+        {
+            toCleanup = new List<ActiveShatter>(_activeShatters.Values);
+        }
+
+        foreach (var shatter in toCleanup)
         {
             shatter.Cts.Cancel();
             CleanupShatter(shatter, false);

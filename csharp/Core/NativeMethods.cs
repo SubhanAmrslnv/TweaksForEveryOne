@@ -202,6 +202,7 @@ internal static class NativeMethods
     public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam, uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
     public const uint WM_GETICON = 0x007F;
     public const uint SMTO_ABORTIFHUNG = 0x0002;
+    public const int ICON_SMALL = 0;
     public const int ICON_SMALL2 = 2;
     public const int ICON_BIG = 1;
 
@@ -217,6 +218,7 @@ internal static class NativeMethods
     [DllImport("user32.dll", EntryPoint = "GetClassLongPtr")]
     private static extern IntPtr GetClassLongPtr64(IntPtr hWnd, int nIndex);
     public const int GCLP_HICON = -14;
+    public const int GCLP_HICONSM = -34;
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
@@ -329,10 +331,10 @@ internal static class NativeMethods
     // lpWindowName is nullable, and declaring it so matters: every caller in this app searches by
     // CLASS and passes null for the title, which produced a nullable warning at each call site.
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-    public static extern IntPtr FindWindow(string lpClassName, string? lpWindowName);
+    public static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-    public static extern IntPtr FindWindowEx(IntPtr parentHandle, IntPtr childAfter, string lclassName, string windowTitle);
+    public static extern IntPtr FindWindowEx(IntPtr parentHandle, IntPtr childAfter, string? lclassName, string? windowTitle);
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);

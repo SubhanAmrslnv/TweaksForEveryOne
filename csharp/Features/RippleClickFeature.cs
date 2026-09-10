@@ -70,8 +70,8 @@ public class RippleClickFeature : IDisposable
     private int _poolIndex;
 
     private readonly PendingClick[] _pendingQueue = new PendingClick[8];
-    private int _writeIndex;
-    private int _readIndex;
+    private volatile int _writeIndex;
+    private volatile int _readIndex;
 
     private DispatcherTimer? _renderTimer;
     private bool _initialized;
