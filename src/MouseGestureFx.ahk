@@ -67,16 +67,14 @@ InitShakeFind() {
         SF_Gui := Gui("-Caption +ToolWindow +AlwaysOnTop -DPIScale +E0x20")
         SF_Gui.BackColor := "White"
         SF_Hwnd := SF_Gui.Hwnd
-        WinSetTransparent(160, SF_Hwnd)
+        RS_SetAlpha(SF_Hwnd, 160, RS_PRI_USER)
+        RS_Commit()
         return true
     }
     SF_Gui := 0, SF_Hwnd := 0
     return false
 }
 
-; The Sync* this timer never had. ShakeDetector polls the mouse and the idle
-; timer 25 times a second and serves TWO features; with both off it was pure
-; overhead, and it was armed unconditionally from InitShakeFind at startup.
 SyncShakeDetector() {
     global ShakeFindEnabled, CursorYawnEnabled, ShakeFindActive
     if (ShakeFindEnabled || CursorYawnEnabled) {
@@ -84,11 +82,9 @@ SyncShakeDetector() {
         return
     }
     SetTimer(ShakeDetector, 0)
-    ; Switched off mid-highlight: take the circle down, or it is stranded at
-    ; whatever size it had reached with nothing left to shrink it.
     if ShakeFindActive {
         ShakeFindActive := false
-        SetTimer(RenderShakeFind, 0)
+        CancelAnimation("ShakeFind")
         global SF_Hwnd
         if (SF_Hwnd && DllCall("IsWindow", "ptr", SF_Hwnd))
             try DllCall("ShowWindow", "ptr", SF_Hwnd, "int", 0)   ; SW_HIDE
@@ -156,35 +152,36 @@ StartShakeFind() {
     SF_TargetSize := Tune("shakeSize")
     SF_Size := 10
     SF_Vel := 0
-    SetTimer(RenderShakeFind, 16)
+    RegisterAnimation("ShakeFind", RenderShakeFindStep)
+    global SF_Hwnd
+    try DllCall("ShowWindow", "ptr", SF_Hwnd, "int", 8) ; SW_SHOWNA
 }
 
-RenderShakeFind() {
-    global ShakeFindActive, SF_Size, SF_TargetSize, SF_Vel, SF_Hwnd, SF_CircleSize
+RenderShakeFindStep(dt, now) {
+    global ShakeFindActive, SF_Size, SF_TargetSize, SF_Vel, SF_Hwnd, SF_CircleSize, FRAME_MS
 
-    ; 16 ms timer: a throw here would pop an error dialog and kill the timer for
-    ; the rest of the session, so the overlay must be verified before it is used.
     if (!SF_Hwnd || !DllCall("IsWindow", "ptr", SF_Hwnd)) {
         ShakeFindActive := false
-        SetTimer(RenderShakeFind, 0)
-        return
+        return false
     }
 
     if (!ShakeFindActive) {
-        SetTimer(RenderShakeFind, 0)
-        DllCall("ShowWindow", "ptr", SF_Hwnd, "int", 0) ; SW_HIDE
-        return
+        try DllCall("ShowWindow", "ptr", SF_Hwnd, "int", 0) ; SW_HIDE
+        return false
     }
     
-    SF_Vel += (SF_TargetSize - SF_Size) * 0.4
-    SF_Vel *= 0.6 ; friction
-    SF_Size += SF_Vel
+    if (dt <= 0)
+        dt := FRAME_MS
+    steps := dt / FRAME_MS
+    
+    SF_Vel += (SF_TargetSize - SF_Size) * 0.4 * steps
+    SF_Vel *= Exp(-0.5108256 * steps)
+    SF_Size += SF_Vel * steps
     
     if (SF_Size < 2 && SF_TargetSize == 0) {
         ShakeFindActive := false
-        DllCall("ShowWindow", "ptr", SF_Hwnd, "int", 0) ; SW_HIDE
-        SetTimer(RenderShakeFind, 0)
-        return
+        try DllCall("ShowWindow", "ptr", SF_Hwnd, "int", 0) ; SW_HIDE
+        return false
     }
     
     MouseGetPos(&mx, &my)
@@ -193,14 +190,10 @@ RenderShakeFind() {
         s := SF_CircleSize
         
     if (s > 0) {
-        try {
-            WinSetRegion("0-0 w" s " h" s " E", SF_Hwnd)
-            DllCall("SetWindowPos", "ptr", SF_Hwnd, "ptr", -1, "int", mx - s//2, "int", my - s//2, "int", s, "int", s, "uint", 0x50) ; SWP_NOACTIVATE | SWP_SHOWWINDOW
-        } catch {
-            ShakeFindActive := false
-            SetTimer(RenderShakeFind, 0)
-        }
+        RS_SetRegion(SF_Hwnd, "0-0 w" s " h" s " E", RS_PRI_ANIM)
+        RS_SetPos(SF_Hwnd, mx - s//2, my - s//2, s, s, RS_PRI_ANIM)
     }
+    return true
 }
 
 TriggerCursorYawn() {
@@ -208,7 +201,8 @@ TriggerCursorYawn() {
     
     guiObj := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
     guiObj.BackColor := "White"
-    WinSetTransparent(220, guiObj.Hwnd)
+    RS_SetAlpha(guiObj.Hwnd, 220, RS_PRI_USER)
+    RS_Commit()
     guiObj.Show("NA Hide")
     
     animKey := "CursorYawn_" . guiObj.Hwnd
@@ -243,7 +237,7 @@ TriggerCursorYawn() {
             w := (baseSize + 28) * (1 - ease)
             
             alpha := Round(220 * (1 - ease))
-            try WinSetTransparent(alpha, guiObj.Hwnd)
+            RS_SetAlpha(guiObj.Hwnd, alpha, RS_PRI_ANIM)
         }
         
         if (w < 2)
@@ -251,8 +245,8 @@ TriggerCursorYawn() {
         if (h < 2)
             h := 2
             
-        WinSetRegion("0-0 w" Round(w) " h" Round(h) " E", guiObj.Hwnd)
-        DllCall("SetWindowPos", "ptr", guiObj.Hwnd, "ptr", -1, "int", Round(mx - w/2), "int", Round(my - h/2), "int", Round(w), "int", Round(h), "uint", 0x14)
+        RS_SetRegion(guiObj.Hwnd, "0-0 w" Round(w) " h" Round(h) " E", RS_PRI_ANIM)
+        RS_SetPos(guiObj.Hwnd, Round(mx - w/2), Round(my - h/2), Round(w), Round(h), RS_PRI_ANIM)
         return true
     }
     
@@ -324,7 +318,9 @@ ElasticScroll(hwnd, dir, startX, startY) {
     
     if (ElasticHwnd != hwnd) {
         if (ElasticHwnd) {
-            try WinMove(ElasticBaseX, ElasticBaseY,,, ElasticHwnd)
+            Anim_Release(ElasticHwnd, "geom")
+            try RS_SetPos(ElasticHwnd, ElasticBaseX, ElasticBaseY, -1, -1, RS_PRI_ANIM)
+            try RS_Commit()
         }
         ElasticHwnd := hwnd
         ElasticBaseX := startX
@@ -521,20 +517,18 @@ global DragTrailActive := false
 
 global DragTrailX := 0, DragTrailY := 0, DragTrailVX := 0, DragTrailVY := 0
 
-CheckElasticDrag() {
+CheckElasticDrag(dt, now) {
     global DragTrailStartX, DragTrailStartY, DragTrailActive, DragTrailX, DragTrailY, DragTrailGui
     if (!GetKeyState("LButton", "P")) {
-        SetTimer(CheckElasticDrag, 0)
-        return
+        return false
     }
     MouseGetPos(&mx, &my)
     if (Abs(mx - DragTrailStartX) > 5 || Abs(my - DragTrailStartY) > 5) {
-        SetTimer(CheckElasticDrag, 0)
         DragTrailActive := true
         if (!DragTrailGui) {
             DragTrailGui := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
             DragTrailGui.BackColor := "Gray"
-            WinSetRegion("0-0 w16 h16 E", DragTrailGui.Hwnd)
+            RS_SetRegion(DragTrailGui.Hwnd, "0-0 w16 h16 E", RS_PRI_USER)
         }
         DragTrailX := mx, DragTrailY := my
         DragTrailVX := 0
@@ -543,7 +537,9 @@ CheckElasticDrag() {
         RS_Commit()
         DragTrailGui.Show("x-1000 y-1000 w16 h16 NoActivate")
         RegisterAnimation("DragTrail", DragTrailCallback)
+        return false
     }
+    return true
 }
 
 DragTrailCallback(dt, now) {

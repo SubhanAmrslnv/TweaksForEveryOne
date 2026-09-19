@@ -67,7 +67,7 @@ global RippleClickEnabled := false        ; OFF-BY-DEFAULT: never rendered until
 ; OFF-BY-DEFAULT: forces WS_EX_LAYERED onto every context menu in the OS.
 global ContextMenuAnimEnabled := false
 global ElasticDragEnabled := true
-global BreatheCursorEnabled := true
+global BreatheCursorEnabled := false
 global RestoreEnabled := true
 global BlackHoleMinimizeEnabled := true
 global MomentumTiltEnabled := true
@@ -104,7 +104,7 @@ global CursorYawnActive := false
 global CursorYawnIdleTime := 900000
 global ShatterEnabled := false            ; OFF-BY-DEFAULT: never rendered until now
 global ActiveShatters := Map()
-global BreathingEnabled := true
+global BreathingEnabled := false
 global OpenAnim := "Ghost Slide-In"
 global ParallaxEnabled := true
 global FlyMinimizeEnabled := true
@@ -126,7 +126,7 @@ global ClipboardAppendEnabled := true
 global SmoothCaretEnabled := true
 global TypingSoundsEnabled := true
 global HotkeySoundsEnabled := true
-global CopyFeedbackEnabled := true
+global CopyFeedbackEnabled := false
 global SmartCapsEnabled := true
 global SmartCapsAction := "Escape"
 global SmartTaskbarEnabled := false
@@ -146,7 +146,7 @@ global GrabPanEnabled := true
 global MicKillSwitchEnabled := true
 global MicOsdGui := "", MicOsdHiding := false
 global InfiniteWrapEnabled := false
-global SpotlightEnabled := true
+global SpotlightEnabled := false
 global SpotlightGui := "", SpotlightInput := "", SpotlightResult := ""
 global AlwaysOnBottomEnabled := true
 global BottomWindows := Map()

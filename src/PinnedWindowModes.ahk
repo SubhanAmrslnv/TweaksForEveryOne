@@ -410,8 +410,8 @@ ToggleGhostMode() {
         ; the composed value can never collapse to "Off" and strip
         ; WS_EX_LAYERED back off while the cursor is sitting on the window.
         RS_SetAlphaLayer(hwnd, "ghost", 1.0, RS_PRI_AMBIENT)
+        RS_SetZOrder(hwnd, -1, 0x0013, RS_PRI_USER)
         RS_Commit()
-        WinSetAlwaysOnTop(1, hwnd)
     } catch
         return
 
@@ -438,11 +438,11 @@ UnGhostWindow(hwnd) {
         ; Clearing the layer, not forcing "Off": a window the user had also set
         ; to 50% with the wheel goes back to 50%, not to fully opaque.
         RS_ClearAlphaLayer(hwnd, "ghost", RS_PRI_AMBIENT)
-        RS_Commit()                            ; nothing else will flush this
         if !(orig.exStyle & 0x20)
             WinSetExStyle("-0x20", hwnd)
         if !(orig.exStyle & 0x8)
-            WinSetAlwaysOnTop(0, hwnd)
+            RS_SetZOrder(hwnd, -2, 0x0013, RS_PRI_USER)
+        RS_Commit()
     }
 }
 
@@ -499,8 +499,10 @@ GhostMonitorStep() {
             ; and each crossing rewrote WS_EX_TRANSPARENT 40 times a second -
             ; so the window flickered between clickable and not.
             isClickThrough := (WinGetExStyle(hwnd) & 0x20)
+            origClickThrough := (info.exStyle & 0x20)
+            
             if (dist < clickDist) {
-                if (isClickThrough)
+                if (isClickThrough && !origClickThrough)
                     WinSetExStyle("-0x20", hwnd)
             } else if (dist > clickDist + 12) {
                 if (!isClickThrough)

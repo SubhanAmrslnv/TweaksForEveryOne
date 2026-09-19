@@ -135,10 +135,10 @@ Bye(*) {
     ; tray -> Restart path, so this is not academic.
     try SetTimer(CheckTaskbarAndUI, 0)
     try SetTimer(ShakeDetector, 0)
-    try SetTimer(RenderShakeFind, 0)
+    try CancelAnimation("ShakeFind")
     try SetTimer(CheckMouseIdle, 0)
-    try SetTimer(CheckElasticDrag, 0)
-    try SetTimer(CheckMagDrag, 0)
+    try CancelAnimation("CheckElasticDrag")
+    try CancelAnimation("CheckMagDrag")
     ; The smooth caret overlay is an always-on-top blue bar owned by this
     ; process. Nothing else takes it down, so exiting used to leave it painted
     ; over whatever had focus.
@@ -159,7 +159,7 @@ Bye(*) {
     ; Nothing else puts it back, so exiting mid-lean left it displaced.
     global ElasticHwnd, ElasticBaseX, ElasticBaseY
     if (ElasticHwnd && DllCall("IsWindow", "ptr", ElasticHwnd))
-        try WinMove(ElasticBaseX, ElasticBaseY, , , ElasticHwnd)
+        try RS_SetPos(ElasticHwnd, ElasticBaseX, ElasticBaseY, -1, -1, RS_PRI_USER)
     ElasticHwnd := 0
 
     try MC_Shutdown()

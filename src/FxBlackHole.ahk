@@ -169,9 +169,8 @@ TriggerBlackHoleMinimize(hwnd) {
         if (curH < 1)
             curH := 1
             
-        DllCall("SetWindowPos", "ptr", animGui.Hwnd, "ptr", -1, "int", Round(curX), "int", Round(curY), "int", curW, "int", curH, "uint", 0x14)
-        
-        WinSetTransparent(Round(255 * scaleDown), animGui.Hwnd)
+        RS_SetPos(animGui.Hwnd, Round(curX), Round(curY), curW, curH, RS_PRI_ANIM)
+        RS_SetAlpha(animGui.Hwnd, Round(255 * scaleDown), RS_PRI_ANIM)
         return true
     }
     RegisterAnimation(animKey, Step)

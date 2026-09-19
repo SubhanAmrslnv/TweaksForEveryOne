@@ -300,20 +300,20 @@ HideMag() {
     }
 }
 
-CheckMagDrag() {
+CheckMagDrag(dt, now) {
     global MagStartX, MagStartY, MagActive
     if (!GetKeyState("LButton", "P")) {
-        SetTimer(CheckMagDrag, 0)
-        return
+        return false
     }
     MouseGetPos(&mx, &my)
     if (Abs(mx - MagStartX) > 5 || Abs(my - MagStartY) > 5) {
-        SetTimer(CheckMagDrag, 0)
         if ShowMag(mx, my) {
             MagActive := true
             RegisterAnimation("MagLoupe", MagCallback)
         }
+        return false
     }
+    return true
 }
 
 MagCallback(dt, now) {

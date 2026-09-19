@@ -194,7 +194,6 @@ public class WtSpi {
         'Fade or slide menus into view'      = 0x1003   # SPI_SETMENUANIMATION
         'Smooth-scroll list boxes'           = 0x1007   # SPI_SETLISTBOXSMOOTHSCROLLING
         'Selection fade'                     = 0x1015   # SPI_SETSELECTIONFADE
-        'Show shadows under windows'         = 0x1025   # SPI_SETDROPSHADOW
         'Animate controls inside windows'    = 0x1043   # SPI_SETCLIENTAREAANIMATION
     }
 
@@ -203,6 +202,7 @@ public class WtSpi {
         'Fade out menu items after clicking' = 0x1013   # SPI_SETMENUFADE
         'Fade or slide ToolTips into view (1)' = 0x1017 # SPI_SETTOOLTIPANIMATION
         'Fade or slide ToolTips into view (2)' = 0x1019 # SPI_SETTOOLTIPFADE
+        'Show shadows under windows'         = 0x1025   # SPI_SETDROPSHADOW
         'Show shadows under mouse pointer'   = 0x101B   # SPI_SETCURSORSHADOW
     }
 

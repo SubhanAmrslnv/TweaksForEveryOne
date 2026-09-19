@@ -60,8 +60,19 @@ ShellEvent(wParam, lParam, *) {
     if ((wParam & 0x7FFF) = HSHELL_GETMINRECT) {
         global FlyMinimizeEnabled, BlackHoleMinimizeEnabled
         if (BlackHoleMinimizeEnabled) {
+            static bhCount := 0
+            static lastBhTime := 0
+            t := A_TickCount
+            if (t - lastBhTime > 500) {
+                bhCount := 0
+            }
+            bhCount++
+            lastBhTime := t
+            
             hwndToMin := NumGet(lParam, 0, "ptr")
-            TriggerBlackHoleMinimize(hwndToMin)
+            if (bhCount <= 3) {
+                TriggerBlackHoleMinimize(hwndToMin)
+            }
             rectOffset := A_PtrSize == 8 ? 8 : 4
             try WinGetPos(&wx, &wy, &ww, &wh, hwndToMin)
             if IsSet(wx) {

@@ -638,9 +638,9 @@ ApplyGridZone(hwnd, zoneIndex) {
     destW := finalW - gap*2
     destH := finalH - gap*2
     
-    try WinMove(destX, destY, destW, destH, hwnd)
-    catch
-        return
+    Anim_Release(hwnd, "geom")
+    RS_SetPos(hwnd, destX, destY, destW, destH, RS_PRI_USER)
+    RS_Commit()
     RememberPosition(hwnd)
 
     global MomentumTiltEnabled

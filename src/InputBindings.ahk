@@ -295,14 +295,14 @@ MButton:: {
         if (A_Cursor == "IBeam") {
             MagStartX := startX, MagStartY := startY
             MagActive := false
-            SetTimer(CheckMagDrag, 16)
+            RegisterAnimation("CheckMagDrag", CheckMagDrag)
         }
     }
     
     if (ElasticDragEnabled) {
         global DragTrailStartX := startX, DragTrailStartY := startY
         global DragTrailActive := false
-        SetTimer(CheckElasticDrag, 16)
+        RegisterAnimation("CheckElasticDrag", CheckElasticDrag)
     }
 }
 #HotIf !GameModeActive
@@ -682,7 +682,6 @@ SaveOldClipboard() {
     if !hwnd
         return
 
-
     ; The title-bar probe costs a cross-process SendMessageTimeout with a 50 ms
     ; ceiling, and it is only ever used to decide between Close and Roll-Up. With
     ; neither of those on - grab & pan alone - it answered a question nobody
@@ -693,17 +692,32 @@ SaveOldClipboard() {
         DllCall("SendMessageTimeout", "ptr", hwnd, "uint", 0x84, "ptr", 0, "ptr", lp, "uint", 2, "uint", 50, "ptr*", &res)
     }
     
+    global RolledUpWindows
+    isRolledUp := RolledUpWindows.Has(hwnd)
+    
+    ; Determine if a title-bar click should resolve to Roll-Up or Close.
+    ; If the window is rolled up, Roll-Up (to unroll) has precedence.
+    ResolveTitleBarClick() {
+        if (RollUpEnabled && isRolledUp) {
+            ToggleRollUp(hwnd)
+            return true
+        }
+        if (MiddleClickCloseEnabled && !isRolledUp) {
+            try WinClose("ahk_id " hwnd)
+            return true
+        }
+        if (RollUpEnabled && !isRolledUp) {
+            ToggleRollUp(hwnd)
+            return true
+        }
+        return false
+    }
+
     if (!GrabPanEnabled) {
         if (res == 2) {
             KeyWait("MButton")
-            if (MiddleClickCloseEnabled) {
-                try WinClose("ahk_id " hwnd)
+            if ResolveTitleBarClick()
                 return
-            }
-            if (RollUpEnabled) {
-                ToggleRollUp(hwnd)
-                return
-            }
         }
         Send("{Blind}{MButton Down}")
         KeyWait("MButton")
@@ -715,7 +729,9 @@ SaveOldClipboard() {
     StartY := sY
     dragged := false
     threshold := 3
+    titleBarThreshold := 10  ; Higher distance threshold for title bar to avoid accidental pan
     step := 25
+    startTime := A_TickCount
 
     busy := true
     try {
@@ -727,8 +743,15 @@ SaveOldClipboard() {
             dx := CurX - StartX
             dy := CurY - StartY
 
-            if (!dragged && (Abs(dx) > threshold || Abs(dy) > threshold))
-                dragged := true
+            if (!dragged) {
+                if (res == 2) {
+                    if ((Abs(dx) > titleBarThreshold || Abs(dy) > titleBarThreshold) || ((A_TickCount - startTime) > 200 && (Abs(dx) > threshold || Abs(dy) > threshold)))
+                        dragged := true
+                } else {
+                    if (Abs(dx) > threshold || Abs(dy) > threshold)
+                        dragged := true
+                }
+            }
 
             if (dragged) {
                 if (Abs(dy) >= step) {
@@ -756,14 +779,8 @@ SaveOldClipboard() {
 
     if (!dragged) {
         if (res == 2) {
-            if (MiddleClickCloseEnabled) {
-                try WinClose("ahk_id " hwnd)
+            if ResolveTitleBarClick()
                 return
-            }
-            if (RollUpEnabled) {
-                ToggleRollUp(hwnd)
-                return
-            }
         }
         Send("{Blind}{MButton}")
     }

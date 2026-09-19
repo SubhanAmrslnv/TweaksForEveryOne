@@ -149,8 +149,9 @@ ToggleGrabPan() {
             return
     }
     try {
-        WinSetAlwaysOnTop(-1, hwnd)
-        isTop := WinGetExStyle(hwnd) & 0x8      ; WS_EX_TOPMOST
+        isTop := !(WinGetExStyle(hwnd) & 0x8)
+        RS_SetZOrder(hwnd, isTop ? -1 : -2, 0x0013, RS_PRI_USER)
+        RS_Commit()
         try WriteLog(Format("alwaysontop {1} hwnd={2} class={3}", isTop ? "ON" : "OFF", hwnd, WinGetClass(hwnd)))
         Notify(isTop ? "Always on top: ON" : "Always on top: OFF")
     } catch Error as err {
