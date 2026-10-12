@@ -240,7 +240,11 @@ CheckToasts() {
 ; their own height.
 AnimToastBounce(hwnd, startX, destX, y) {
     animKey := "Toast_" hwnd
-    CancelAnimation(animKey)
+    ; Ambient, so RS_PRI_ANIM and a "geom" claim like every other window-motion
+    ; animator; it ran unclaimed at RS_PRI_USER, the priority reserved for an
+    ; explicit command, and out-ranked anything else moving the toast.
+    if (Anim_Owner(hwnd, "geom") != "" && Anim_Owner(hwnd, "geom") != animKey)
+        return
     start := QPC()
     ms := 500
 
@@ -249,17 +253,17 @@ AnimToastBounce(hwnd, startX, destX, y) {
             return false
         t := (now - start) / ms
         if (t >= 1) {
-            RS_SetPos(hwnd, destX, y, -1, -1, RS_PRI_USER)
+            RS_SetPos(hwnd, destX, y, -1, -1, RS_PRI_ANIM)
             return false
         }
         c1 := 1.70158
         c3 := c1 + 1
         ease := 1 + c3 * ((t - 1) ** 3) + c1 * ((t - 1) ** 2)
         curX := Round(startX + (destX - startX) * ease)
-        RS_SetPos(hwnd, curX, y, -1, -1, RS_PRI_USER)
+        RS_SetPos(hwnd, curX, y, -1, -1, RS_PRI_ANIM)
         return true
     }
-    RegisterAnimation(animKey, BounceStep)
+    Anim_Claim(hwnd, "geom", animKey, BounceStep)
 }
 
 ; The largest idle cost in the program had no Sync* at all: this was armed

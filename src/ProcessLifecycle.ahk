@@ -112,7 +112,27 @@ Bye(*) {
     global TrayIcons, BossKeyActive, BossKeyWindows, BossKeyMuteState
     global WinEventHook, WinEventCb, RolledUpWindows, CustomTrans
     global OriginalTaskbarState, SmartTaskbarEnabled, DimmerGuis, OsdGui, PipGuis, MicOsdGui, SpotlightGui
-    global WinCurrentAlpha, GhostWindows, BottomWindows, FocusGuis
+    global WinCurrentAlpha, GhostWindows, BottomWindows, FocusGuis, AnimOwnerKey
+
+    ; Nothing may interrupt the teardown. A window created mid-way used to reach
+    ; HandleNewWindow after the alpha sweep below and be left at alpha 0 -
+    ; invisible - by a process that was gone. So: uninterruptible, and the shell
+    ; hook goes first, before anything is undone.
+    Critical
+    try DllCall("DeregisterShellHookWindow", "ptr", A_ScriptHwnd)
+
+    ; Windows a region animation is clipping right now. RolledUpWindows below only
+    ; knows the settled ones: a roll-DOWN removes its entry before it animates,
+    ; and the window-open unroll never has one, so stopping the scheduler
+    ; mid-animation left those windows cut off. Read before StopScheduler, which
+    ; forgets every owner.
+    byeClipped := []
+    try {
+        for byeKey, byeSlot in AnimOwnerKey {
+            if (byeSlot.channel = "region")
+                byeClipped.Push(byeSlot.hwnd)
+        }
+    }
 
     ; Stop producing before we start undoing, so no timer or animation frame can
     ; re-apply a state we have just cleaned up. Bye also runs on tray -> Restart,
@@ -222,6 +242,10 @@ Bye(*) {
         if DllCall("IsWindow", "ptr", hwnd)
             try RS_SetRegion(hwnd, "", RS_PRI_USER)
     }
+    for hwnd in byeClipped {
+        if DllCall("IsWindow", "ptr", hwnd)
+            try RS_SetRegion(hwnd, "", RS_PRI_USER)
+    }
     for hwnd, info in GhostWindows.Clone()
         try UnGhostWindow(hwnd)
     for hwnd, info in BottomWindows.Clone()
@@ -256,8 +280,6 @@ Bye(*) {
         try DllCall("UnhookWinEvent", "ptr", MenuEventHook)
     if (MenuEventCb)
         try CallbackFree(MenuEventCb)
-        
-    try DllCall("DeregisterShellHookWindow", "ptr", A_ScriptHwnd)
 
     ; Both of these are normally deferred to an idle timer. On the way out there
     ; is no idle, so write straight through - a queued timer would never fire.

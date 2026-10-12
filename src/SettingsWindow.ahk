@@ -45,7 +45,12 @@ ShowWin() {
         }
         Win := ""                    ; stale handle - fall through and rebuild
     }
-    BuildWin()
+    ; Game Mode and Stealth Panic hold suppressed values in the very globals
+    ; BuildWin reads, so the window used to open with every suspended box
+    ; unticked. It edits the configuration, so it is built from it.
+    swOverlays := OverlaysUnsuspend()
+    try BuildWin()
+    finally OverlaysResuspend(swOverlays)
 }
 
 BuildWin() {
@@ -240,7 +245,7 @@ BuildWin() {
     Sub(pg, CW, cSub, "Instantly hides all windows and mutes system volume. Press again to restore.", "xm y+8")
     
     C["expander"] := Box(pg, CW, FG, "Global Text Expander (Snippets)", TextExpanderEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Type @@mail, @@tel, @@date to auto-expand. Edit snippets in WindowTweaks.ini", "xm y+8")
+    Sub(pg, CW, cSub, "Type @@mail, @@tel, @@date to auto-expand. Edit snippets in settings.ini, section [snippets]", "xm y+8")
     
     C["smartcaps"] := Box(pg, CW, FG, "Smart Caps Lock (Hold for Caps, Tap for action)", SmartCapsEnabled, "xm y+16")
     C["smartcaps_act"] := pg.AddDropDownList("x320 yp-3 w90 Background" EDITBG " c" EDITFG " Choose" IndexOf(CAPS_ACTIONS, SmartCapsAction), CAPS_ACTIONS)
@@ -427,7 +432,7 @@ BuildWin() {
     C["twave"] := Box(pg, CW, FG, "Taskbar Icon Wave", TaskbarWaveEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Hovering over the taskbar creates a magnifying glass bubble that tracks your mouse.", "xm y+8")
     
-    ; The taskbar clock has its own page - see CreatePage("[clock]") above.
+    ; The taskbar clock has its own page, "Taskbar Clock", built above.
     
     C["toast"] := Box(pg, CW, FG, "Elastic Toast Notifications", ToastBounceEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Notifications slide in elastically with an overshoot bounce.", "xm y+8")
@@ -479,20 +484,34 @@ BuildWin() {
 
     if dark {
         DllCall("dwmapi\DwmSetWindowAttribute", "ptr", g.Hwnd, "uint", 20, "int*", 1, "uint", 4)
-        for ctl in g {
-            if (ctl.Type = "Edit" || ctl.Type = "ComboBox" || ctl.Type = "Button")
-                DllCall("uxtheme\SetWindowTheme", "ptr", ctl.Hwnd, "wstr", "DarkMode_Explorer", "ptr", 0)
-        }
+        for ctl in g
+            DarkThemeControl(ctl)
         for pname, cpg in Pages {
-            for ctl in cpg {
-                if (ctl.Type = "Edit" || ctl.Type = "ComboBox" || ctl.Type = "Button")
-                    DllCall("uxtheme\SetWindowTheme", "ptr", ctl.Hwnd, "wstr", "DarkMode_Explorer", "ptr", 0)
-            }
+            for ctl in cpg
+                DarkThemeControl(ctl)
         }
     }
+    ; Remembered so a system theme switch while the window is open can tell
+    ; whether it needs rebuilding (OnSettingChange).
+    g.IsDarkTheme := dark
+    OnMessage(0x001A, OnSettingChange)    ; WM_SETTINGCHANGE
+    OnMessage(0x0100, OnSettingsKeyDown)  ; WM_KEYDOWN
 
     g.Show("w" W " h" H)
     SelectPage("🪟 Window Management")
+}
+
+; A DropDownList reports its Type as "DDL", not "ComboBox", so the dark theme
+; used to miss all ten of them - light arrow and light popup on a dark page.
+; DarkMode_CFD is the combo-box flavour of the dark theme.
+DarkThemeControl(ctl) {
+    theme := ""
+    switch ctl.Type {
+        case "Edit", "Button":   theme := "DarkMode_Explorer"
+        case "DDL", "ComboBox":  theme := "DarkMode_CFD"
+    }
+    if (theme != "")
+        try DllCall("uxtheme\SetWindowTheme", "ptr", ctl.Hwnd, "wstr", theme, "ptr", 0)
 }
 
 Head(pg, w, col, txt, pos := "xm") {
@@ -571,22 +590,30 @@ Gui_Size(thisGui, minMax, width, height) {
         return
     try thisGui.SidebarBg.Move(,,, height)
     try thisGui.HintLbl.Move(, height - 40)
-    UpdatePageHint()
-    
+
+    ; Re-clamp BEFORE the hint: a taller window can leave the page scrolled
+    ; past its own end, and the hint must describe the corrected position.
     global CurPage, Pages
     if CurPage && Pages.Has(CurPage) {
         pg := Pages[CurPage]
-        if !pg.HasOwnProp("Y_Offset")
-            pg.Y_Offset := 0
-        pg.GetPos(,,, &h)
-        minY := height - h
-        if (minY > 0)
-            minY := 0
-        if (pg.Y_Offset < minY) {
-            pg.Y_Offset := minY
-            pg.Move(, minY)
-        }
+        ScrollPageTo(pg, pg.HasOwnProp("Y_Offset") ? pg.Y_Offset : 0)
     }
+    UpdatePageHint()
+}
+
+; The one place a page's scroll offset is clamped and applied, so the wheel, a
+; resize and keyboard focus all agree. Offsets are in the Gui's own DPI-scaled
+; units, the same as Move/GetPos/GetClientPos.
+ScrollPageTo(pg, newY) {
+    global Win
+    pg.GetPos(,,, &h)
+    Win.GetClientPos(,,, &ph)
+    minY := Min(ph - h, 0)
+    newY := Max(Min(newY, 0), minY)
+    if (pg.HasOwnProp("Y_Offset") && pg.Y_Offset = newY)
+        return
+    pg.Y_Offset := newY
+    pg.Move(, newY)
 }
 
 OnMouseWheel(wParam, lParam, msg, hwnd) {
@@ -595,29 +622,118 @@ OnMouseWheel(wParam, lParam, msg, hwnd) {
         return
     if !WinActive("ahk_id " Win.Hwnd)
         return
-        
+    ; Only wheel messages aimed at this window. The handler is process-wide, so
+    ; without this it would also act on Spotlight or any other script GUI.
+    if (DllCall("GetAncestor", "ptr", hwnd, "uint", 2, "ptr") != Win.Hwnd)
+        return
+
     pg := Pages[CurPage]
     delta := (wParam << 32 >> 48)
-    
-    if !pg.HasOwnProp("Y_Offset")
-        pg.Y_Offset := 0
-        
-    newY := pg.Y_Offset + (delta > 0 ? 40 : -40)
-    
-    pg.GetPos(,,, &h)
-    Win.GetClientPos(,,, &ph)
-    
-    minY := ph - h
-    if (minY > 0)
-        minY := 0
-        
-    if (newY > 0)
-        newY := 0
-    if (newY < minY)
-        newY := minY
-        
-    pg.Y_Offset := newY
-    pg.Move(, newY)
+    ScrollPageTo(pg, (pg.HasOwnProp("Y_Offset") ? pg.Y_Offset : 0) + (delta > 0 ? 40 : -40))
+    ; Consumed. Falling through let the same notch reach the control under the
+    ; cursor, so scrolling the page also silently changed whichever dropdown
+    ; or number field it passed over.
+    return 0
+}
+
+; Keyboard access. The sidebar entries are static text and cannot take focus, so
+; Ctrl+Tab / Ctrl+Shift+Tab (and Ctrl+PgDn / Ctrl+PgUp) cycle pages, the usual
+; Windows convention for tabbed settings. A plain Tab moves focus as before and
+; then scrolls the newly focused control into view, which the page never did -
+; tabbing below the fold left the cursor in a field nobody could see.
+OnSettingsKeyDown(wParam, lParam, msg, hwnd) {
+    global Win
+    if !Win
+        return
+    try {
+        if (DllCall("GetAncestor", "ptr", hwnd, "uint", 2, "ptr") != Win.Hwnd)
+            return
+    } catch {
+        return
+    }
+    if (GetKeyState("Ctrl") && (wParam = 0x09 || wParam = 0x21 || wParam = 0x22)) {
+        back := (wParam = 0x21) || (wParam = 0x09 && GetKeyState("Shift"))
+        CyclePage(back ? -1 : 1)
+        return 0
+    }
+    if (wParam = 0x09)
+        SetTimer(EnsureFocusVisible, -1)  ; after the dialog manager has moved focus
+}
+
+; NavItems is a Map and enumerates sorted by key, not in sidebar order, so the
+; order comes from each entry's on-screen position.
+CyclePage(dir) {
+    global NavItems, CurPage
+    order := []
+    for name, item in NavItems {
+        item.GetPos(, &y)
+        i := 1
+        while (i <= order.Length && order[i].y < y)
+            i++
+        order.InsertAt(i, {name: name, y: y})
+    }
+    if !order.Length
+        return
+    cur := 1
+    for i, o in order {
+        if (o.name = CurPage)
+            cur := i
+    }
+    nxt := Mod(cur - 1 + dir + order.Length, order.Length) + 1
+    SelectPage(order[nxt].name)
+}
+
+EnsureFocusVisible() {
+    global Win, CurPage, Pages
+    if (!Win || !CurPage || !Pages.Has(CurPage))
+        return
+    try {
+        pg := Pages[CurPage]
+        focus := DllCall("GetFocus", "ptr")
+        if (!focus || DllCall("GetParent", "ptr", focus, "ptr") != pg.Hwnd)
+            return
+        ; Physical pixels from Win32, converted to the Gui's DPI-scaled units.
+        scale := A_ScreenDPI / 96
+        rc := Buffer(16, 0)
+        DllCall("GetWindowRect", "ptr", focus, "ptr", rc)
+        pt := Buffer(8, 0)
+        NumPut("int", NumGet(rc, 0, "int"), "int", NumGet(rc, 4, "int"), pt)
+        DllCall("ScreenToClient", "ptr", Win.Hwnd, "ptr", pt)
+        top := NumGet(pt, 4, "int") / scale
+        bottom := top + (NumGet(rc, 12, "int") - NumGet(rc, 4, "int")) / scale
+        Win.GetClientPos(,,, &ph)
+        y := pg.HasOwnProp("Y_Offset") ? pg.Y_Offset : 0
+        margin := 24
+        if (bottom > ph - margin)
+            ScrollPageTo(pg, y - (bottom - (ph - margin)))
+        else if (top < margin)
+            ScrollPageTo(pg, y + (margin - top))
+    }
+}
+
+; A light/dark switch while the window is open used to leave it in the old theme
+; until it was closed and reopened. Rebuilding is the honest fix: every colour is
+; chosen at build time. Debounced, because WM_SETTINGCHANGE is broadcast to every
+; top-level window this process owns.
+OnSettingChange(wParam, lParam, msg, hwnd) {
+    global Win
+    if !Win
+        return
+    try {
+        if (lParam && StrGet(lParam) = "ImmersiveColorSet")
+            SetTimer(RethemeSettingsWindow, -300)
+    }
+}
+
+RethemeSettingsWindow() {
+    global Win, CurPage
+    if (!Win || !Win.HasOwnProp("IsDarkTheme") || Win.IsDarkTheme = IsDark())
+        return
+    page := CurPage
+    CloseWin(Win)
+    ShowWin()
+    if (page != "")
+        SelectPage(page)
 }
 
 ; Closing the window used to run SaveSettings() and only THEN cancel the pending
@@ -628,6 +744,10 @@ CloseWin(g) {
     SetTimer(ApplyUi, 0)
     ApplyUi(true)
     SaveSettings()
+    ; The window registered these; nothing needs them once it is gone.
+    OnMessage(0x020A, OnMouseWheel, 0)
+    OnMessage(0x001A, OnSettingChange, 0)
+    OnMessage(0x0100, OnSettingsKeyDown, 0)
     try g.Destroy()
     Win := ""
 }
@@ -757,6 +877,12 @@ ApplyUi(writeBack := false) {
     ; its value. TuneApplyUi already skips a control it cannot read.
     try TuneApplyUi(writeBack)
 
+    ; The controls show the configuration (ShowWin builds them outside any
+    ; overlay), so while Game Mode or Stealth Panic is active what was just read
+    ; is the user's real intent: hand it to the overlay and re-suppress, before
+    ; any Sync* below can start a suspended feature.
+    try OverlaysAdoptEdits()
+
     ; Everything below is applying state, not reading controls, and each step is
     ; independent - so one failure cannot silently skip the rest or the save.
     if (uiAutoStart != "" && uiAutoStart != IsAutoStart())
@@ -833,13 +959,12 @@ ShowHotkeys() {
   . "Numpad 0`tMaximize / restore`n"
   . "Up / Down`tTop half / bottom half`n"
   . "Z`t`tUndo the last layout change`n"
-  . "(the keypad keys need NumLock ON - Up/Down do not)`n`n"
+  . "(works with NumLock on or off)`n`n"
   . "FEATURE TOGGLES  (Shift+Alt)`n"
   . "S`t`tMagnetic snapping`n"
   . "M`t`tPosition memory`n"
   . "E`t`tBreathing windows`n"
   . "C`t`tHot corners`n"
-  . "V`t`tSmart active border`n"
   . "I`t`tInfinite cursor wrap`n"
   . "D`t`tMulti-monitor dimmer`n"
   . "T`t`tSmart auto-hide taskbar`n"
@@ -847,6 +972,7 @@ ShowHotkeys() {
   . "Space`t`tUniversal grab and pan`n`n"
   . "RECOVERY  (Shift+Alt)`n"
   . "Y`t`tRestore every rolled-up, ghosted or hidden window`n"
+  . "F12`t`tGame Mode - suspend effects while gaming`n"
   . "X`t`tReset the active window to fully opaque`n"
   . "F5 / F6`tRestart / Exit`n`n"
   . "SYSTEM AND MEDIA`n"

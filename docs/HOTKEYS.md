@@ -1,13 +1,18 @@
 # Hotkeys
 
-Every global hotkey in this program is **Shift + Alt + key**. There is no second
-tier — commit `3dadac4` ("map all global hotkeys to Shift+Alt") collapsed the old
-`Win + Ctrl` scheme into this one chord, and the source binds `+!` and nothing
-else.
+Every program-wide command is **Shift + Alt + key**. Commit `3dadac4` collapsed
+the old `Win + Ctrl` scheme into this one chord. A handful of other keys exist,
+each tied to a feature and listed below: `Ctrl + Alt + V`, `Alt + F4`,
+`Win + Alt + D`, the clipboard keys, `Delete`, `CapsLock`, `Esc Esc Esc` and
+mouse gestures.
 
-This file is generated from the `; ====== Hotkeys ======` block in
-`src\WindowTweaks.ahk` and is the reference the other documents defer to. If a
-key changes, change it there and here.
+This file is the reference the other documents defer to. The bindings live in the
+`; ====== Hotkeys ======` block in `src\InputBindings.ahk`, plus the few declared
+next to their feature (see **Changing a hotkey**). If a key changes, change it
+there and here.
+
+**Game Mode** (`Shift + Alt + F12`) switches off every hotkey and gesture below
+except itself and the Stealth Panic triple-Esc.
 
 ## Always available
 
@@ -23,6 +28,7 @@ key changes, change it there and here.
 | **Shift + Alt + H** | **Minimize to tray** |
 | **Shift + Alt + Esc** | **Boss key** — hide everything and mute |
 | **Shift + Alt + Wheel** | **Transparency** of the active window |
+| **Shift + Alt + F12** | **Game Mode** on / off - suspends effects and gestures while gaming |
 
 ## Window layout
 
@@ -45,11 +51,8 @@ the window goes.
  1  bottom-left ¼ 2  bottom half   3  bottom-right ¼
 ```
 
-> **NumLock must be ON for the keypad tiling to work.** Only the digit names
-> (`Numpad7`…) are bound. With NumLock off the keypad sends the navigation names
-> (`NumpadHome`, `NumpadUp`, …) and nothing happens. A comment above the block in
-> `src\WindowTweaks.ahk` claims both names are bound; they are not. Use
-> `Shift + Alt + ↑ / ↓` for the halves if you keep NumLock off.
+Both names of every keypad key are bound (`Numpad7` and `NumpadHome`, and so on),
+so tiling works with NumLock on or off.
 
 Left and right halves are deliberately the only ones without an arrow-key alias:
 Windows' own **Win + ←/→** already does that.
@@ -98,15 +101,16 @@ settings.
 | **Shift + Alt + F4** | Shatter-to-close | Shatter to Close |
 | **Alt + F4** | Close with the gravity-drop animation | Gravity Drop on Close |
 | **Ctrl + Alt + V** | Paste as plain text | Global Plain-Text Paste |
-
-`Ctrl + Alt + V` is the one exception to the Shift+Alt rule, because it shadows
-the paste it replaces.
+| **Win + Alt + D** | Curtain drop: show the desktop with a drop animation | Curtain Drop |
+| **Delete** in Explorer or on the desktop | Black-hole delete animation (the delete still happens) | Black Hole Delete |
+| **Hold Ctrl + V**, then **wheel** | Morphing paste: pick a transformed version of the clipboard before it pastes | Morphing Paste |
+| **Ctrl + C** twice quickly | Append the new selection to what was already copied | Clipboard Append |
 
 ## Gestures and other keys
 
 | Input | Action | Requires |
 |---|---|---|
-| **Esc Esc Esc** | Stealth Panic Mode on / off | always on |
+| **Esc Esc Esc** | Stealth Panic Mode on / off | Stealth Panic (on by default) |
 | **Double-tap Ctrl** | Spotlight launcher | Spotlight |
 | **Double-tap Alt** | Microphone kill-switch | Mic Kill Switch |
 | **Alt + Left-drag** | Move a window from anywhere on it | Alt-Drag |
@@ -116,7 +120,10 @@ the paste it replaces.
 | **Wheel over the taskbar** | Volume; middle-click mutes | Taskbar Scroll |
 | **Ctrl + G** in a file dialog | Jump to the last Explorer folder | Quick Folder Jump |
 | **CapsLock** | Tap = Esc or Backspace, hold = real CapsLock | Smart CapsLock |
-| **Space** in Explorer | Quick Look preview | Quick Look |
+| **Space** in Explorer | Quick Look preview; **Space** or **Esc** closes it | Quick Look |
+| **Enter** / **Esc** in Spotlight | Run / close | Spotlight |
+| **Wheel** at the end of a scrollable window | Elastic overscroll bounce | Elastic Scroll |
+| **@@mail**, **@@date**, ... | Text expander snippets, from `[snippets]` in `settings.ini` | Text Expander |
 
 Triple-Escape is bound as `~Esc`, so Escape still reaches the focused window.
 
@@ -135,9 +142,12 @@ features.
 
 ## Changing a hotkey
 
-Hotkeys live in one block in `src\WindowTweaks.ahk` (search for
-`=== Hotkeys ===`), with three exceptions declared inline next to their code:
-always-on-top (`+!o`), gravity close (`$!F4`) and shatter close (`+!F4`).
+Hotkeys live in one block in `src\InputBindings.ahk` (search for
+`=== Hotkeys ===`), with a few declared next to their feature instead:
+always-on-top (`+!o`, `src\FeatureToggles.ahk`), gravity close (`$!F4`) and
+curtain drop (`#!d`, both `src\FxGravity.ahk`), shatter close (`+!F4`,
+`src\FxShatter.ahk`), black-hole delete (`~Delete`, `src\FxBlackHole.ahk`) and
+triple-Esc (`~Esc`, `src\StealthPanic.ahk`).
 
 AutoHotkey modifier symbols:
 
@@ -164,7 +174,6 @@ bare `#HotIf`.
 
 | Problem | Cause |
 |---|---|
-| Keypad tiling does nothing | NumLock is off — see the note above |
 | A hotkey does nothing on one window | It is elevated. AutoHotkey cannot touch an admin window unless it is elevated too |
 | A `#HotIf` hotkey does nothing | Its feature is switched off in settings |
-| The tray menu shows different keys | The tray labels were not updated in commit `3dadac4` and still show the old `Win + Ctrl` chords. The keys in this file are the ones that work |
+| Nothing responds at all | Game Mode is on - press `Shift + Alt + F12` |

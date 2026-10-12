@@ -512,8 +512,12 @@ GhostMonitorStep() {
     }
 
     if IsObject(dead) {
-        for hwnd in dead
-            GhostWindows.Delete(hwnd)
+        for hwnd in dead {
+            ; Has(): RestoreAllWindows or ApplyUi can un-ghost it between the
+            ; collect and here, and a throw in a timer kills the timer.
+            if GhostWindows.Has(hwnd)
+                GhostWindows.Delete(hwnd)
+        }
         if (GhostWindows.Count == 0)
             SetTimer(GhostMonitorStep, 0)
     }

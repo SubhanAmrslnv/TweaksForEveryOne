@@ -121,6 +121,12 @@ ShellEvent(wParam, lParam, *) {
                 LayoutUndo.Delete(lParam)
             if SizeCycleIdx.Has(lParam)
                 SizeCycleIdx.Delete(lParam)
+            ; Elastic scroll's per-window edge state, same growth problem.
+            global ElasticEdgeStates, ElasticAwayCounts
+            if ElasticEdgeStates.Has(lParam)
+                ElasticEdgeStates.Delete(lParam)
+            if ElasticAwayCounts.Has(lParam)
+                ElasticAwayCounts.Delete(lParam)
             RS_RemoveHwnd(lParam)
             MC_RemoveHwnd(lParam)      ; MediaCore caches pid/exe per HWND forever otherwise
         }

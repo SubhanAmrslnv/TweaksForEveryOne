@@ -22,12 +22,17 @@ $startMenu = Join-Path ([Environment]::GetFolderPath('Programs')) 'Window Tweaks
 $desktop   = Join-Path ([Environment]::GetFolderPath('Desktop'))  'Window Tweaks.lnk'
 
 Write-Host "[1/5] Stopping the program" -ForegroundColor Cyan
-$found = 0
-Get-CimInstance Win32_Process -Filter "Name like 'AutoHotkey%'" |
-    Where-Object { $_.CommandLine -like '*WindowTweaks.ahk*' } |
-    ForEach-Object { Stop-Process -Id $_.ProcessId -Force; $found++ }
-Say $(if ($found) { "Stopped $found" } else { "Wasn't running" })
-Start-Sleep -Milliseconds 800
+# Graceful first (taskkill without /F posts WM_CLOSE), so the program's exit
+# handler hands back every window it changed; force only what does not exit.
+# The Stealth Panic settings GUI is a separate process and is stopped too.
+$procs = @(Get-CimInstance Win32_Process -Filter "Name like 'AutoHotkey%'" |
+           Where-Object { $_.CommandLine -like '*WindowTweaks.ahk*' -or $_.CommandLine -like '*StealthPanicUI.ahk*' })
+foreach ($p in $procs) { & taskkill.exe /PID $p.ProcessId 2>&1 | Out-Null }
+foreach ($p in $procs) {
+    Wait-Process -Id $p.ProcessId -Timeout 5
+    if (Get-Process -Id $p.ProcessId) { Stop-Process -Id $p.ProcessId -Force }
+}
+Say $(if ($procs.Count) { "Stopped $($procs.Count)" } else { "Wasn't running" })
 
 Write-Host "[2/5] Taskbar" -ForegroundColor Cyan
 # The program restores the taskbar when it exits cleanly. Killing it does not
@@ -90,9 +95,14 @@ if (Test-Path $backupDir) {
 }
 
 Write-Host "[4/5] Removing shortcuts" -ForegroundColor Cyan
-foreach ($l in @($startup, $startMenu, $desktop)) {
+$spSettings = Join-Path ([Environment]::GetFolderPath('Programs')) 'Stealth Panic Mode Settings.lnk'
+foreach ($l in @($startup, $startMenu, $desktop, $spSettings)) {
     if (Test-Path $l) { Remove-Item $l -Force; Say "Removed $(Split-Path $l -Leaf)" }
 }
+# Older versions wrote the Stealth Panic launch log to %APPDATA%, outside the
+# install folder; it now lives inside it and goes with the folder below.
+$legacyLog = Join-Path $env:APPDATA 'StealthPanic_Launch.log'
+if (Test-Path $legacyLog) { Remove-Item $legacyLog -Force; Say "Removed StealthPanic_Launch.log" }
 
 Write-Host "[5/5] Removing the install folder" -ForegroundColor Cyan
 if (Test-Path $dest) {

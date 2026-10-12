@@ -75,10 +75,12 @@ CleanClockLocation(s) {
 }
 
 IniPick(section, key, allowed, defaultVal) {
-    v := IniStr(section, key, defaultVal)
+    v := Trim(IniStr(section, key, defaultVal))
+    ; Case-insensitive match, canonical spelling returned: a hand-edited
+    ; "celsius" or "task view" used to fall back to the default silently.
     for a in allowed {
-        if (v == a)
-            return v
+        if (v = a)
+            return a
     }
     return defaultVal
 }
@@ -217,8 +219,10 @@ WriteSettings() {
     ; for good on the next launch. The real values go back for the duration of
     ; the write and the suppression is re-applied in the finally, so no exit
     ; path and no throw can leave the two out of step.
-    gmRestored := false
-    try gmRestored := GameModeUnsuspendForWrite()
+    ;
+    ; Stealth Panic is the same kind of overlay and gets the same bracket, so the
+    ; two are unwound together by OverlaysUnsuspend().
+    wsOverlays := OverlaysUnsuspend()
     try {
         PutIni(SnapEnabled ? 1 : 0,      "snap", "enabled")
         PutIni(MagneticGroupsEnabled ? 1 : 0, "snap", "magnetic")
@@ -308,9 +312,50 @@ WriteSettings() {
             }
         }
     } finally {
-        if gmRestored
-            GameModeResuspend()
+        OverlaysResuspend(wsOverlays)
     }
+}
+
+; ====== In-memory overlays (Game Mode, Stealth Panic) ======
+;
+; Both hold feature flags suppressed in the globals and keep the user's real
+; values on the side. Anything that must see the CONFIGURATION rather than the
+; overlay - writing settings.ini, building the settings window - brackets itself
+; with OverlaysUnsuspend()/OverlaysResuspend(). When both overlays are active,
+; the one entered LATER captured the other's suppressed values as its
+; "originals", so it is unwound first and the earlier one - which holds the real
+; configuration - is applied last. Neither calls a Sync*: the real values are
+; only back for the duration of the bracket.
+OverlaysUnsuspend() {
+    global StealthEnteredTick, GameModeEnteredTick
+    done := {gm: false, sp: false}
+    stealthLater := false
+    try stealthLater := (StealthEnteredTick >= GameModeEnteredTick)
+    if (stealthLater) {
+        try done.sp := StealthUnsuspendForWrite()
+        try done.gm := GameModeUnsuspendForWrite()
+    } else {
+        try done.gm := GameModeUnsuspendForWrite()
+        try done.sp := StealthUnsuspendForWrite()
+    }
+    return done
+}
+
+OverlaysResuspend(done) {
+    if (done.gm)
+        try GameModeResuspend()
+    if (done.sp)
+        try StealthResuspend()
+}
+
+; The settings window has just written the user's edits into the globals. While
+; an overlay is active those edits are the new REAL values: hand them to the
+; overlay and re-apply the suppression. Without this, a click in the settings
+; window during Game Mode re-enabled every suspended feature at once, and an edit
+; made there was then overwritten by the stale held value on exit.
+OverlaysAdoptEdits() {
+    try GameModeAdoptEdits()
+    try StealthAdoptEdits()
 }
 
 StartupLink() => A_Startup "\Window Tweaks.lnk"

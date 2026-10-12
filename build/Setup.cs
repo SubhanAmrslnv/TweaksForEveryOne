@@ -284,7 +284,10 @@ namespace WindowTweaksSetup
                     "install --id AutoHotkey.AutoHotkey --source winget " +
                     "--accept-package-agreements --accept-source-agreements --disable-interactivity");
                 psi.UseShellExecute = false;
-                psi.CreateNoWindow = true;
+                // Visible on purpose: a setup that runs winget/PowerShell in a
+                // hidden window is the dropper shape endpoint security flags, and
+                // the user should see what is being installed or changed.
+                psi.CreateNoWindow = false;
                 Process p = Process.Start(psi);
                 p.WaitForExit(300000);
                 return true;
@@ -396,7 +399,10 @@ namespace WindowTweaksSetup
                 ProcessStartInfo psi = new ProcessStartInfo("powershell",
                     "-NoProfile -ExecutionPolicy Bypass -File \"" + script + "\"");
                 psi.UseShellExecute = false;
-                psi.CreateNoWindow = true;
+                // Visible on purpose: a setup that runs winget/PowerShell in a
+                // hidden window is the dropper shape endpoint security flags, and
+                // the user should see what is being installed or changed.
+                psi.CreateNoWindow = false;
                 Process p = Process.Start(psi);
                 p.WaitForExit(120000);
             }

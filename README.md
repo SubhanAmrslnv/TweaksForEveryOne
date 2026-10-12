@@ -89,7 +89,8 @@ The Windows 11 taskbar cannot be meaningfully shrunk by an ordinary program, so
 Window Tweaks doesn't pretend to — the height engine that tried was removed, and
 [docs/TASKBAR-AND-INTERNALS.md](docs/TASKBAR-AND-INTERNALS.md) records exactly what
 was measured and why. Instead it integrates with **ExplorerPatcher**, which can do
-it properly: the installer fetches and installs ExplorerPatcher for you, and
+it properly: `Install.ps1 -ExplorerPatcher` (opt-in; it needs UAC) installs a
+pinned, checksum-verified ExplorerPatcher release for you, and
 Window Tweaks gives you a clean UI to switch between Windows 10 and Windows 11
 taskbar styles and to turn on small icons.
 
@@ -117,7 +118,7 @@ Context Menu Unfold. Turn on whichever you want in the settings window.
 - **macOS "Quick Look"**: Press Space on any file in Explorer to instantly preview it.
 - **Multi-Monitor Focus Dimmer**: Dims inactive monitors by 50% to reduce eye strain.
 - **macOS "Hot Corners"**: Throw your mouse to screen corners to trigger actions (e.g. Hide windows, Task View).
-- **Premium Volume OSD**: A sleek, blurred macOS-style volume indicator when scrolling the taskbar.
+- **Premium Volume OSD**: A sleek, translucent macOS-style volume indicator when scrolling the taskbar.
 - **Live Window PiP**: `Shift+Alt+P` creates a live, always-on-top thumbnail of any background window.
 - **Universal Grab & Pan**: Hold Middle-Click to pan/scroll any window (like the Photoshop Hand Tool).
 - **Global Mic Kill-Switch**: Double-tap `Alt` to instantly mute/unmute your microphone system-wide.
@@ -157,10 +158,9 @@ Context Menu Unfold. Turn on whichever you want in the settings window.
 - **Mechanical Keystroke Sounds**: Every key makes a synthesised mechanical switch sound - a bright click layered over the keycap bottoming out - with its own voice for space, enter, backspace and copy/cut/paste.
 - **Hotkey Sounds**: Commands get their own voices, distinct from typing - a rising two-tone when a feature switches on, falling when it switches off, a short snap for a window layout command and a deeper hit for restore-all and the boss key. Keystrokes and commands have separate volume settings.
 - **Dynamic Notch (OSD)**: Volume and brightness adjustments drop down a sleek iOS-style Dynamic Island pill from the top of the screen.
-- **Curtain Drop (Win+D)**: Showing the desktop drops all windows simultaneously with a kinetic motion-blur effect.
+- **Curtain Drop (Win+Alt+D)**: Showing the desktop drops all windows simultaneously with a kinetic fall.
 - **Overscroll Bounce**: Scrolling past the end of a page elastically stretches and springs back.
 - **Taskbar Icon Wave & Elastic Toasts**: Hovering over the taskbar creates a macOS-like icon wave, and notifications bounce elastically into view.
-- **Start Menu Slide-Up Blur**: Opening the Start menu slides it up while deeply blurring the entire background.
 - **Window Throw & Catch**: Forcefully flick a window towards another monitor, and it will kinetically fly across screens.
 - **Shatter to Close**: Shift+Alt+F4 smashes the active window into dozens of 3D glass shards that fall with gravity.
 
@@ -338,7 +338,10 @@ window, using DWM thumbnails rather than screen capture.
 
 No. Nothing is installed outside your user profile, there is no service, no
 scheduled task and no `Run` registry key — only a Startup shortcut. The optional
-Windows tuning writes to `HKCU` only and is fully reversible.
+Windows tuning writes to `HKCU` only and is fully reversible. The one exception
+is the optional ExplorerPatcher install, which is off unless you ask for it.
+[docs/SECURITY.md](docs/SECURITY.md) lists every hook, registry key, file and
+network request the program uses, for anyone reviewing it on a managed machine.
 
 ### Will it slow my PC down?
 

@@ -24,10 +24,7 @@
 ; curtain drop and black-hole delete. Each of those modules brackets its own
 ; context.
 ;
-; The keypad tiles are bound ONLY under their digit names (Numpad7..Numpad0).
-; With NumLock OFF the keypad sends the navigation names instead and the whole
-; tiling gesture is dead - Shift+Alt+Up/Down are the only NumLock-independent
-; layout keys.
+; The keypad tiles are bound under BOTH key names - see the tiling block below.
 
 ; =========================================================== Hotkeys ===========================================================
 #HotIf !GameModeActive
@@ -80,6 +77,19 @@
 +!Numpad2::TileWindow(2)
 +!Numpad3::TileWindow(3)
 +!Numpad0::ToggleMaximize()
+; The navigation names. These were documented as bound and were not, so with
+; NumLock off the whole tiling gesture was dead. Shift also flips the keypad to
+; these names while NumLock is ON, so they cover both states.
++!NumpadHome::TileWindow(7)
++!NumpadUp::TileWindow(8)
++!NumpadPgUp::TileWindow(9)
++!NumpadLeft::TileWindow(4)
++!NumpadClear::TileWindow(5)
++!NumpadRight::TileWindow(6)
++!NumpadEnd::TileWindow(1)
++!NumpadDown::TileWindow(2)
++!NumpadPgDn::TileWindow(3)
++!NumpadIns::ToggleMaximize()
 
 ; Laptop aliases for the two halves that have no Windows equivalent. The arrow
 ; keys are only free vertically - Win+Ctrl+Left/Right switch virtual desktops.

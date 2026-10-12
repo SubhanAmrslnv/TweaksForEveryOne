@@ -7,22 +7,34 @@
     Desktop and Startup shortcuts, and starts it.
 
     No admin rights. No registry keys for the program itself. Nothing outside
-    your user profile. Uninstall.ps1 removes all of it.
+    your user profile. Uninstall.ps1 removes all of it. The one exception is
+    the optional ExplorerPatcher step (-ExplorerPatcher), which is a third-party
+    shell extension: its own setup asks for administrator rights (UAC) and puts
+    files under C:\Windows. It is never installed unless you ask for it.
+
+    Network access: winget, only if AutoHotkey v2 is missing; GitHub, only with
+    -ExplorerPatcher. See docs\SECURITY.md for everything the program touches.
 
 .PARAMETER Silent
-    Skip every prompt and take the defaults (install + autostart, no tuning).
+    Skip every prompt and take the defaults: install + autostart, no Windows
+    tuning, no ExplorerPatcher, no Explorer restart.
 
 .PARAMETER NoAutoStart
     Don't run at login.
 
 .PARAMETER Tuning
     Also apply the Windows animation and Explorer tuning (scripts\).
+
+.PARAMETER ExplorerPatcher
+    Also install ExplorerPatcher (pinned release, SHA-256 verified; needs UAC)
+    and import PatcherSettings\*.reg. Off by default.
 #>
 [CmdletBinding()]
 param(
     [switch]$Silent,
     [switch]$NoAutoStart,
-    [switch]$Tuning
+    [switch]$Tuning,
+    [switch]$ExplorerPatcher
 )
 
 $ErrorActionPreference = 'Stop'
@@ -78,77 +90,103 @@ if (-not $epInstalled) {
     $epInstalled = Test-Path "C:\Windows\SystemApps\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\dxgi.dll"
 }
 
+# OPT-IN ONLY. ExplorerPatcher is a third-party shell extension that installs
+# into C:\Windows and needs UAC - on a managed machine that is IT's decision, not
+# a default. It used to be downloaded from "releases/latest" and run silently on
+# every install, unverified. Now: only on request, a pinned release, and the
+# file's SHA-256 must match before it is executed. To move to a newer release,
+# update both constants from the release's asset "digest" on the GitHub API.
+$EP_TAG    = '26100.8457.70.3'
+$EP_SHA256 = '8146db4d3a87201fb80ad1d3712ba8f56883e9a0811758bd39f62d73a9f2c586'
+$EP_URL    = "https://github.com/valinet/ExplorerPatcher/releases/download/$EP_TAG/ep_setup.exe"
+
+$wantEP = [bool]$ExplorerPatcher
+if (-not $wantEP -and -not $Silent) {
+    Say "ExplorerPatcher (optional, third-party) enables the Win10 taskbar style and" 'Gray'
+    Say "small-icon options. It needs administrator rights and may be blocked by" 'Gray'
+    Say "company policy. Window Tweaks works fully without it." 'Gray'
+    $answer = Read-Host "  Install ExplorerPatcher $EP_TAG and apply its settings? (y/N)"
+    $wantEP = ($answer -match '^[Yy]')
+}
+
+$epApplied = $false
 if ($epInstalled) {
     Say "ExplorerPatcher is already installed." 'Green'
+} elseif (-not $wantEP) {
+    Say "Skipped (optional). Re-run with -ExplorerPatcher to add it." 'DarkGray'
 } else {
-    Say "ExplorerPatcher provides the taskbar style and small-icon options." 'Yellow'
-    Say "Installing it automatically..." 'Yellow'
-    $doEP = $true
-    
-    if ($doEP) {
-        Say "Fetching latest ExplorerPatcher from GitHub..." 'Yellow'
-        try {
-            # Use TLS 1.2
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            $release = Invoke-RestMethod -Uri "https://api.github.com/repos/valinet/ExplorerPatcher/releases/latest" -ErrorAction Stop
-            $asset = $release.assets | Where-Object { $_.name -eq 'ep_setup.exe' }
-            if ($asset) {
-                $epSetup = Join-Path $env:TEMP 'ep_setup.exe'
-                Say "Downloading $($asset.name)..." 'DarkGray'
-                Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $epSetup -ErrorAction Stop
-                Say "Installing ExplorerPatcher (Please accept the UAC prompt if it appears)..." 'Yellow'
-                $proc = Start-Process -FilePath $epSetup -ArgumentList "/quiet" -Wait -PassThru
-                if ($proc.ExitCode -eq 0) {
-                    Say "ExplorerPatcher installed successfully." 'Green'
-                } else {
-                    Say "ExplorerPatcher installation failed or was cancelled." 'Red'
-                }
+    $epSetup = Join-Path $env:TEMP "ep_setup_$EP_TAG.exe"
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Say "Downloading ExplorerPatcher $EP_TAG from GitHub..." 'DarkGray'
+        Invoke-WebRequest -Uri $EP_URL -OutFile $epSetup -UseBasicParsing -ErrorAction Stop
+        $hash = (Get-FileHash -Path $epSetup -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($hash -ne $EP_SHA256) {
+            Say "SHA-256 mismatch - refusing to run it." 'Red'
+            Say "  expected $EP_SHA256" 'Red'
+            Say "  got      $hash" 'Red'
+        } else {
+            Say "Checksum verified. Installing (accept the UAC prompt)..." 'Yellow'
+            $proc = Start-Process -FilePath $epSetup -Wait -PassThru
+            if ($proc.ExitCode -eq 0) {
+                Say "ExplorerPatcher installed." 'Green'
+                $epInstalled = $true
             } else {
-                Say "Could not find ep_setup.exe in the latest release." 'Red'
+                Say "ExplorerPatcher setup failed or was cancelled (exit $($proc.ExitCode))." 'Red'
             }
-        } catch {
-            Say "Failed to download ExplorerPatcher: $_" 'Red'
         }
+    } catch {
+        Say "Could not install ExplorerPatcher: $_" 'Red'
+    } finally {
+        Remove-Item $epSetup -Force -ErrorAction SilentlyContinue
     }
 }
 
 # ------------------------------------------------- 2.5 ExplorerPatcher Settings ----
-Step 2.5 "Applying ExplorerPatcher Settings"
-$regFiles = Get-ChildItem -Path "$repo\PatcherSettings\ExplorerPatcher*.reg" -ErrorAction SilentlyContinue
-if ($regFiles) {
-    $regFile = $regFiles | Select-Object -First 1
-    
-    $apply = $true
-    if (-not $Silent) {
-        $answer = Read-Host "Do you want to apply ExplorerPatcher settings from $($regFile.Name)? (Y/n)"
-        if ($answer -eq 'n' -or $answer -eq 'N') {
-            $apply = $false
-        }
-    }
-
-    if ($apply) {
-        Say "Applying settings from $($regFile.Name)..." 'Yellow'
-        $regProc = Start-Process reg.exe -ArgumentList "import `"$($regFile.FullName)`"" -Wait -WindowStyle Hidden -PassThru
-        if ($regProc.ExitCode -eq 0) {
-            Say "Settings applied." 'Green'
-        } else {
-            Say "Failed to apply settings." 'Red'
-        }
-    } else {
-        Say "Skipping ExplorerPatcher settings." 'DarkGray'
-    }
-} else {
+Step 2.5 "ExplorerPatcher settings"
+# Only together with an explicit ExplorerPatcher opt-in. The .reg is trimmed to
+# ExplorerPatcher's own keys (see its header) and imported visibly.
+$regFile = Get-ChildItem -Path "$repo\PatcherSettings\ExplorerPatcher*.reg" -ErrorAction SilentlyContinue |
+           Select-Object -First 1
+if (-not $wantEP) {
+    Say "Skipped (ExplorerPatcher not requested)." 'DarkGray'
+} elseif (-not $epInstalled) {
+    Say "Skipped (ExplorerPatcher is not installed)." 'DarkGray'
+} elseif (-not $regFile) {
     Say "No PatcherSettings\ExplorerPatcher*.reg found, skipping." 'DarkGray'
+} else {
+    Say "Importing $($regFile.Name) (HKCU only)..." 'Yellow'
+    $ErrorActionPreference = 'Continue'     # reg.exe reports success on stderr
+    & reg.exe import "$($regFile.FullName)" 2>&1 | ForEach-Object { Say "$_" 'DarkGray' }
+    $ErrorActionPreference = 'Stop'
+    if ($LASTEXITCODE -eq 0) { Say "Settings applied." 'Green'; $epApplied = $true }
+    else                     { Say "Failed to apply settings (reg.exe exit $LASTEXITCODE)." 'Red' }
 }
 
 # ------------------------------------------------------ 3. stop old copy ----
 Step 3 "Stopping any running copy"
+# Ask first, force only as a fallback. A forced kill skips the program's exit
+# handler, which is what writes pending settings and hands back every window it
+# changed (always-on-bottom, ghosted, rolled-up, hidden to tray) - an upgrade
+# over a running copy used to strand those. taskkill without /F posts WM_CLOSE.
 $stopped = 0
-Get-CimInstance Win32_Process -Filter "Name like 'AutoHotkey%'" -ErrorAction SilentlyContinue |
-    Where-Object { $_.CommandLine -like '*WindowTweaks.ahk*' } |
-    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; $stopped++ }
+$procs = @(Get-CimInstance Win32_Process -Filter "Name like 'AutoHotkey%'" -ErrorAction SilentlyContinue |
+           Where-Object { $_.CommandLine -like '*WindowTweaks.ahk*' -or $_.CommandLine -like '*StealthPanicUI.ahk*' })
+foreach ($p in $procs) {
+    # 'Continue' locally: under 'Stop', Windows PowerShell 5.1 turns a native
+    # command's redirected stderr into a terminating error.
+    $ErrorActionPreference = 'Continue'
+    & taskkill.exe /PID $p.ProcessId 2>&1 | Out-Null
+    $ErrorActionPreference = 'Stop'
+    $stopped++
+}
+foreach ($p in $procs) {
+    try { Wait-Process -Id $p.ProcessId -Timeout 5 -ErrorAction Stop } catch {}
+    if (Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue) {
+        Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+}
 Say $(if ($stopped) { "Stopped $stopped" } else { "Nothing was running" })
-Start-Sleep -Milliseconds 700
 
 # ------------------------------------------------------------- 4. files ----
 Step 4 "Installing to $dest"
@@ -173,7 +211,7 @@ foreach ($f in $ahkFiles) {
     Copy-Item $f.FullName (Join-Path $dest $f.Name) -Force
     $copied++
 }
-foreach ($f in 'GUIDE.md', 'HOTKEYS.md', 'ANIMATIONS.md', 'TASKBAR-AND-INTERNALS.md', 'WINDOWS-TUNING.md') {
+foreach ($f in 'GUIDE.md', 'HOTKEYS.md', 'ANIMATIONS.md', 'TASKBAR-AND-INTERNALS.md', 'WINDOWS-TUNING.md', 'SECURITY.md') {
     $p = Join-Path $repo "docs\$f"
     if (Test-Path $p) { Copy-Item $p (Join-Path $dest $f) -Force; $copied++ }
 }
@@ -231,24 +269,15 @@ else       { if (Test-Path $startup) { Remove-Item $startup -Force }; Say "Autos
 # ----------------------------------------------------------- 6. Windows ----
 Step 6 "Windows settings"
 
-if (-not ('WtSpi' -as [type])) {
-    Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-public class WtSpi {
-  [DllImport("user32.dll", SetLastError=true)]
-  public static extern bool SystemParametersInfo(uint a, uint p, IntPtr v, uint w);
-  [DllImport("user32.dll", SetLastError=true)]
-  public static extern bool SystemParametersInfo(uint a, uint p, ref ANIMATIONINFO v, uint w);
-    [StructLayout(LayoutKind.Sequential)]
-    public struct ANIMATIONINFO { public uint cbSize; public int iMinAnimate; }
-}
-'@
-}
-
+# No runtime-compiled C# here any more. The only thing this step must guarantee
+# is DragFullWindows=1, and the program itself applies that live at startup
+# (CheckDragFullWindows -> SPI_SETDRAGFULLWINDOWS), so the registry value is
+# all the installer needs to write.
 $drag = (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -ErrorAction SilentlyContinue).DragFullWindows
-$applyVisualEffects = $true
 
+# -Tuning: apply without asking. -Silent alone: no tuning (as documented).
+# Interactive: ask, default yes.
+$applyVisualEffects = [bool]$Tuning
 if (-not $Tuning -and -not $Silent) {
     if ("$drag" -ne '1') {
         Say "'Show window contents while dragging' is OFF - the ice glide needs it." 'Yellow'
@@ -272,14 +301,12 @@ if ($applyVisualEffects) {
         if ($null -eq $drag -or "$drag" -eq "") { Set-Content $dragBackupFile 'absent' } else { Set-Content $dragBackupFile $drag }
     }
     Set-ItemProperty 'HKCU:\Control Panel\Desktop' 'DragFullWindows' '1' -Type String
-    
-    [WtSpi]::SystemParametersInfo(0x0025, 1, [IntPtr]::Zero, 3) | Out-Null
     Say "Turned on 'Show window contents while dragging' (required) - nothing else changed" 'Yellow'
 } else {
     Say "Skipped Windows Visual Effects tuning." 'DarkGray'
 }
 
-$applyExplorerTuning = $true
+$applyExplorerTuning = [bool]$Tuning
 if (-not $Tuning -and -not $Silent) {
     Say "Optional: Faster Explorer (Launch to This PC, run folder windows in a separate process)."
     Say "All HKCU only and fully reversible. See docs\WINDOWS-TUNING.md."
@@ -293,9 +320,24 @@ if ($applyExplorerTuning) {
     Say "Skipped Explorer tuning - run scripts\Apply-Windows-Tuning.ps1 any time" 'DarkGray'
 }
 
-Say "Restarting Explorer to apply all settings..." 'Yellow'
-Stop-Process -Name explorer -Force
-Start-Sleep -Seconds 2
+# Explorer is restarted only when something that needs it was applied, and never
+# without asking in an interactive install. It used to be force-killed on every
+# install, and nothing relaunched it if Windows did not.
+if ($applyExplorerTuning -or $epApplied) {
+    $restart = $Silent
+    if (-not $Silent) {
+        $answer = Read-Host "  Restart Explorer now so the changes take effect? (Y/n)"
+        $restart = -not ($answer -match '^[Nn]')
+    }
+    if ($restart) {
+        Say "Restarting Explorer..." 'Yellow'
+        Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 3
+        if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
+    } else {
+        Say "Explorer not restarted - the changes apply at next sign-in." 'DarkGray'
+    }
+}
 
 # ------------------------------------------------------------ 7. launch ----
 Step 7 "Starting Window Tweaks"

@@ -317,6 +317,11 @@ ElasticScroll(hwnd, dir, startX, startY) {
     }
     
     if (ElasticHwnd != hwnd) {
+        ; An ambient cue declines a window something else is already moving
+        ; (glide, bounce, layout), the same rule PulseWindow and VerifySnap
+        ; follow. It used to register unclaimed and fight them at equal priority.
+        if (Anim_Owner(hwnd, "geom") != "")
+            return
         if (ElasticHwnd) {
             Anim_Release(ElasticHwnd, "geom")
             try RS_SetPos(ElasticHwnd, ElasticBaseX, ElasticBaseY, -1, -1, RS_PRI_ANIM)
@@ -328,7 +333,7 @@ ElasticScroll(hwnd, dir, startX, startY) {
         ElasticOffsetY := 0
         ElasticTargetY := 0
         ElasticVel := 0
-        RegisterAnimation("ElasticScroll", ElasticScrollCallback)
+        Anim_Claim(hwnd, "geom", "ElasticScroll", ElasticScrollCallback)
     }
     
     ElasticTargetY := dir * Tune("elasticAmt")
@@ -660,6 +665,9 @@ global SMOOTH_CARET_HOLD_MS := 1200
 
 UpdateSmoothCaret() {
     global SmoothCaretEnabled, SmoothCaretGui, LastCaretX, LastCaretY, CaretVelX, CaretVelY
+    ; Assigned below and read by SmoothCaretWatchdog. Undeclared, they were locals,
+    ; the watchdog saw SmoothCaretWin = 0 and hid the bar on its first tick.
+    global SmoothCaretLastMove, SmoothCaretWin
     if (!SmoothCaretEnabled)
         return
         

@@ -69,6 +69,21 @@ if ($badName) {
     throw "Module filenames may not contain an underscore (Setup.cs unflattens '_' to '\'): $($badName.Name -join ', ')"
 }
 
+# Every shipped module must be reachable: either an entry point or the target of
+# an #Include somewhere in src\. A stray file (a local wrapper with a hardcoded
+# path to someone else's machine was once shipped this way) fails the build.
+$entryPoints = @('WindowTweaks.ahk', 'StealthPanicUI.ahk')
+$included = @{}
+foreach ($f in $ahkFiles) {
+    foreach ($m in (Select-String -Path $f.FullName -Pattern '^\s*#Include\s+"?([^"\s]+\.ahk)"?' -AllMatches)) {
+        $included[(Split-Path $m.Matches[0].Groups[1].Value -Leaf)] = $true
+    }
+}
+$orphans = $ahkFiles | Where-Object { $entryPoints -notcontains $_.Name -and -not $included.ContainsKey($_.Name) }
+if ($orphans) {
+    throw "Not an entry point and not #Included anywhere - refusing to ship: $($orphans.Name -join ', ')"
+}
+
 $payload = @()
 foreach ($f in $ahkFiles) {
     $payload += @{ From = "src\$($f.Name)"; Res = $f.Name }
@@ -79,6 +94,7 @@ $payload += @(
     @{ From = 'docs\ANIMATIONS.md';                  Res = 'ANIMATIONS.md' }
     @{ From = 'docs\WINDOWS-TUNING.md';              Res = 'WINDOWS-TUNING.md' }
     @{ From = 'docs\TASKBAR-AND-INTERNALS.md';       Res = 'TASKBAR-AND-INTERNALS.md' }
+    @{ From = 'docs\SECURITY.md';                    Res = 'SECURITY.md' }
     @{ From = 'Uninstall.ps1';                       Res = 'Uninstall.ps1' }
     @{ From = 'scripts\Apply-Windows-Tuning.ps1';    Res = 'scripts_Apply-Windows-Tuning.ps1' }
     @{ From = 'scripts\Restore-Windows-Tuning.ps1';  Res = 'scripts_Restore-Windows-Tuning.ps1' }

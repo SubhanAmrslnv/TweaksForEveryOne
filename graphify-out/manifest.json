@@ -1,0 +1,572 @@
+{
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\.claude\\settings.local.json": {
+    "mtime": 1791792630.6986923,
+    "ast_hash": "b3d1118992e012ec0e408c66ae984cba",
+    "semantic_hash": "b3d1118992e012ec0e408c66ae984cba"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\.mcp.json": {
+    "mtime": 1791792533.8377783,
+    "ast_hash": "128048c3396e9c50d41d669bdbf5db9d",
+    "semantic_hash": "128048c3396e9c50d41d669bdbf5db9d"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\Install.ps1": {
+    "mtime": 1791792533.856148,
+    "ast_hash": "00a0011c3ee80022b50630f0bc531827",
+    "semantic_hash": "00a0011c3ee80022b50630f0bc531827"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\Stealth Panic Mode.ps1": {
+    "mtime": 1791792533.85842,
+    "ast_hash": "2c128cab7d03b37edea9d62ad9b969f9",
+    "semantic_hash": "2c128cab7d03b37edea9d62ad9b969f9"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\Uninstall Stealth Panic Mode.ps1": {
+    "mtime": 1791792533.8592145,
+    "ast_hash": "59c91f288c27bb317fd6c1685cfafe7b",
+    "semantic_hash": "59c91f288c27bb317fd6c1685cfafe7b"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\Uninstall.ps1": {
+    "mtime": 1791792533.8592145,
+    "ast_hash": "e49f42b5f3feb6dd802b9d6d8c86dcb6",
+    "semantic_hash": "e49f42b5f3feb6dd802b9d6d8c86dcb6"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\assets\\Make-Icon.ps1": {
+    "mtime": 1791792533.8603487,
+    "ast_hash": "5ab207b55c61b1bbb440d3c648d569a8",
+    "semantic_hash": "5ab207b55c61b1bbb440d3c648d569a8"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\check_globals.py": {
+    "mtime": 1791792533.8643534,
+    "ast_hash": "b92accacf967a2eee69874635a01a9c4",
+    "semantic_hash": "b92accacf967a2eee69874635a01a9c4"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\install.sh": {
+    "mtime": 1791792533.8728647,
+    "ast_hash": "72203b542c88dc2f8383da26a30a1f7e",
+    "semantic_hash": "72203b542c88dc2f8383da26a30a1f7e"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\scripts\\check-layers.sh": {
+    "mtime": 1791792533.873864,
+    "ast_hash": "51b2deda1a5379a9964df598c6d05978",
+    "semantic_hash": "51b2deda1a5379a9964df598c6d05978"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\AcousticKeystrokes.cpp": {
+    "mtime": 1791792533.8748643,
+    "ast_hash": "d0d49d01e83639afd008b29aae3f1aaf",
+    "semantic_hash": "d0d49d01e83639afd008b29aae3f1aaf"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\AcousticKeystrokes.h": {
+    "mtime": 1791792533.8748643,
+    "ast_hash": "54ffe6616843864348d1c6d20717090e",
+    "semantic_hash": "54ffe6616843864348d1c6d20717090e"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\AnimationScheduler.cpp": {
+    "mtime": 1791792533.8748643,
+    "ast_hash": "de44b4dfeb92338e62d39745195b0c57",
+    "semantic_hash": "de44b4dfeb92338e62d39745195b0c57"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\AnimationScheduler.h": {
+    "mtime": 1791792533.8758643,
+    "ast_hash": "d53d618d2b63b2a4e34d5774fa7dfb9a",
+    "semantic_hash": "d53d618d2b63b2a4e34d5774fa7dfb9a"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\ClipboardManager.cpp": {
+    "mtime": 1791792533.8758643,
+    "ast_hash": "4376c8343cb19949b644e0866efd8904",
+    "semantic_hash": "4376c8343cb19949b644e0866efd8904"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\ClipboardManager.h": {
+    "mtime": 1791792533.8758643,
+    "ast_hash": "a035cec6a34c502f76062745a4b68dee",
+    "semantic_hash": "a035cec6a34c502f76062745a4b68dee"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\GameMode.cpp": {
+    "mtime": 1791792533.8758643,
+    "ast_hash": "fd60c3879324aff83088c5e0cb7ffd51",
+    "semantic_hash": "fd60c3879324aff83088c5e0cb7ffd51"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\GameMode.h": {
+    "mtime": 1791792533.8770888,
+    "ast_hash": "8acfeeffa89c557ff9cfd4d7a7f45d93",
+    "semantic_hash": "8acfeeffa89c557ff9cfd4d7a7f45d93"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\Geometry.h": {
+    "mtime": 1791792533.8770888,
+    "ast_hash": "0de89f87ccde5f09c7e4bd0d39f52227",
+    "semantic_hash": "0de89f87ccde5f09c7e4bd0d39f52227"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\Physics.cpp": {
+    "mtime": 1791792533.8770888,
+    "ast_hash": "24ca524deb935f9318a24c0ef248aefa",
+    "semantic_hash": "24ca524deb935f9318a24c0ef248aefa"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\Physics.h": {
+    "mtime": 1791792533.878094,
+    "ast_hash": "5df4658e89d1d723d3230688d95026fe",
+    "semantic_hash": "5df4658e89d1d723d3230688d95026fe"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\PlatformAdapter.h": {
+    "mtime": 1791792533.878094,
+    "ast_hash": "0ca6786a11090fd6d2ec07b7fc88fb30",
+    "semantic_hash": "0ca6786a11090fd6d2ec07b7fc88fb30"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\RenderQueue.cpp": {
+    "mtime": 1791792533.8790934,
+    "ast_hash": "ae3ad6ac1af78e6dc9cfc5c1586ef8bb",
+    "semantic_hash": "ae3ad6ac1af78e6dc9cfc5c1586ef8bb"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\RenderQueue.h": {
+    "mtime": 1791792533.8790934,
+    "ast_hash": "c6e6d5a859b96102b544b32ef3fb4415",
+    "semantic_hash": "c6e6d5a859b96102b544b32ef3fb4415"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\SnapGeometry.cpp": {
+    "mtime": 1791792533.8800936,
+    "ast_hash": "54d857220e8a4c58be95525a0ea1e09b",
+    "semantic_hash": "54d857220e8a4c58be95525a0ea1e09b"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\SnapGeometry.h": {
+    "mtime": 1791792533.8800936,
+    "ast_hash": "5d7b85ab996094c0e7d269f7800d1408",
+    "semantic_hash": "5d7b85ab996094c0e7d269f7800d1408"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\VelocitySampler.cpp": {
+    "mtime": 1791792533.8800936,
+    "ast_hash": "a7fe807b0e7894b089c60516cf74b8a7",
+    "semantic_hash": "a7fe807b0e7894b089c60516cf74b8a7"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\VelocitySampler.h": {
+    "mtime": 1791792533.8810945,
+    "ast_hash": "41aeda72c96f6c297cf3260c916b4336",
+    "semantic_hash": "41aeda72c96f6c297cf3260c916b4336"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\WeatherFetcher.cpp": {
+    "mtime": 1791792533.8810945,
+    "ast_hash": "92789bf3e5d291c841b36eaa54abc989",
+    "semantic_hash": "92789bf3e5d291c841b36eaa54abc989"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\core\\WeatherFetcher.h": {
+    "mtime": 1791792533.8810945,
+    "ast_hash": "3a4b0e44a4dfbf40e36024ec4dfd9fe4",
+    "semantic_hash": "3a4b0e44a4dfbf40e36024ec4dfd9fe4"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\main.cpp": {
+    "mtime": 1791792533.8820941,
+    "ast_hash": "e0ae6653403ae4764eabb72cada0c42b",
+    "semantic_hash": "e0ae6653403ae4764eabb72cada0c42b"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\platform\\gnome\\extension.js": {
+    "mtime": 1791792533.8830936,
+    "ast_hash": "23347aa08188076866a7a155e177eac8",
+    "semantic_hash": "23347aa08188076866a7a155e177eac8"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\platform\\gnome\\metadata.json": {
+    "mtime": 1791792533.8830936,
+    "ast_hash": "0c844f8d98818002e45b384862811f29",
+    "semantic_hash": "0c844f8d98818002e45b384862811f29"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\platform\\wayland\\DBusDaemon.cpp": {
+    "mtime": 1791792533.8840947,
+    "ast_hash": "0398cad50b52cb9b35d565bb0b24f687",
+    "semantic_hash": "0398cad50b52cb9b35d565bb0b24f687"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\platform\\wayland\\DBusDaemon.h": {
+    "mtime": 1791792533.8840947,
+    "ast_hash": "758bee94de6a8c637440facd1dd489e9",
+    "semantic_hash": "758bee94de6a8c637440facd1dd489e9"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\platform\\x11\\X11Adapter.cpp": {
+    "mtime": 1791792533.8840947,
+    "ast_hash": "8636921b941f4d8773c5161ff1d7a398",
+    "semantic_hash": "8636921b941f4d8773c5161ff1d7a398"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\src\\platform\\x11\\X11Adapter.h": {
+    "mtime": 1791792533.885599,
+    "ast_hash": "758bca5cefec2cf85bc184b5136424c2",
+    "semantic_hash": "758bca5cefec2cf85bc184b5136424c2"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\tests\\FakeAdapter.h": {
+    "mtime": 1791792533.885599,
+    "ast_hash": "9bf3020bf080c5d5f52756fbb52c8ec0",
+    "semantic_hash": "9bf3020bf080c5d5f52756fbb52c8ec0"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\tests\\TestHarness.h": {
+    "mtime": 1791792533.8866043,
+    "ast_hash": "8f600fd9b829706254f84a89acdeab66",
+    "semantic_hash": "8f600fd9b829706254f84a89acdeab66"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\tests\\test_physics.cpp": {
+    "mtime": 1791792533.8866043,
+    "ast_hash": "a224bef72e5b49df48165a20c8eef5d3",
+    "semantic_hash": "a224bef72e5b49df48165a20c8eef5d3"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\tests\\test_renderqueue.cpp": {
+    "mtime": 1791792533.8866043,
+    "ast_hash": "fc12573156fedb65fea8159805a8dc1d",
+    "semantic_hash": "fc12573156fedb65fea8159805a8dc1d"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\tests\\test_scheduler.cpp": {
+    "mtime": 1791792533.8876047,
+    "ast_hash": "645cbdb00512aba9734a7086fa5ee5cb",
+    "semantic_hash": "645cbdb00512aba9734a7086fa5ee5cb"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\rewrite-docs.py": {
+    "mtime": 1791792533.8876047,
+    "ast_hash": "c24eb758db71903413d7123e1016df1e",
+    "semantic_hash": "c24eb758db71903413d7123e1016df1e"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\rewrite.py": {
+    "mtime": 1791792533.8886034,
+    "ast_hash": "2dd78764b909e46aa4641abcd7bddc75",
+    "semantic_hash": "2dd78764b909e46aa4641abcd7bddc75"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\scripts\\Apply-Windows-Tuning.ps1": {
+    "mtime": 1791792533.8886034,
+    "ast_hash": "047d78aeeb3533981d8c6ddc4d10b3c8",
+    "semantic_hash": "047d78aeeb3533981d8c6ddc4d10b3c8"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\scripts\\Check-Split.ps1": {
+    "mtime": 1791792533.889603,
+    "ast_hash": "9335962600932ab13e5e293492555335",
+    "semantic_hash": "9335962600932ab13e5e293492555335"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\scripts\\Restore-Windows-Tuning.ps1": {
+    "mtime": 1791792533.8898182,
+    "ast_hash": "74a4f58226c579cfb8e6d81b8edd1f07",
+    "semantic_hash": "74a4f58226c579cfb8e6d81b8edd1f07"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\scripts\\tuning-backup.example.json": {
+    "mtime": 1791792533.890371,
+    "ast_hash": "16e20689befd3fa6b602ab61247cb80a",
+    "semantic_hash": "16e20689befd3fa6b602ab61247cb80a"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\.agents\\rules\\defensive_programming.md": {
+    "mtime": 1791792533.828266,
+    "ast_hash": "7eaf664fda4d26747b30e64ab9a46d59",
+    "semantic_hash": "7eaf664fda4d26747b30e64ab9a46d59"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\.agents\\rules\\professional_engineering.md": {
+    "mtime": 1791792533.8367727,
+    "ast_hash": "ed6ce651a407860ff952306a6ed401d1",
+    "semantic_hash": "ed6ce651a407860ff952306a6ed401d1"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\CLAUDE.md": {
+    "mtime": 1791792533.838777,
+    "ast_hash": "9e42863707beb20327399233a42906e3",
+    "semantic_hash": "9e42863707beb20327399233a42906e3"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\README.md": {
+    "mtime": 1791792533.8581536,
+    "ast_hash": "dae0d3462a35a092b62a4aca278c3ed1",
+    "semantic_hash": "dae0d3462a35a092b62a4aca278c3ed1"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\Shadow-Modification-Report.md": {
+    "mtime": 1791792533.85842,
+    "ast_hash": "d794453ad8ab355673c1b0c61e3c12ae",
+    "semantic_hash": "d794453ad8ab355673c1b0c61e3c12ae"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\docs\\ANIMATIONS.md": {
+    "mtime": 1791792533.8658588,
+    "ast_hash": "b50aa17d438698f2246604f815c7eb3f",
+    "semantic_hash": "b50aa17d438698f2246604f815c7eb3f"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\docs\\FUTURE-ANIMATIONS.md": {
+    "mtime": 1791792533.8658588,
+    "ast_hash": "e2bbbc94f9433b87fe9ee580c5ded771",
+    "semantic_hash": "e2bbbc94f9433b87fe9ee580c5ded771"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\docs\\GUIDE.md": {
+    "mtime": 1791792533.866864,
+    "ast_hash": "0188cc3850ab716b1ef09baa192c8ada",
+    "semantic_hash": "0188cc3850ab716b1ef09baa192c8ada"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\docs\\HOTKEYS.md": {
+    "mtime": 1791792533.866864,
+    "ast_hash": "187e3e64920dd80711284967f1a4bcaa",
+    "semantic_hash": "187e3e64920dd80711284967f1a4bcaa"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\docs\\MODULARIZATION.md": {
+    "mtime": 1791792533.8678648,
+    "ast_hash": "ab006e162e1b0bd8caf79370162991e1",
+    "semantic_hash": "ab006e162e1b0bd8caf79370162991e1"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\docs\\TASKBAR-AND-INTERNALS.md": {
+    "mtime": 1791792533.8688643,
+    "ast_hash": "02917c3b370d8249600e174d7ab5b940",
+    "semantic_hash": "02917c3b370d8249600e174d7ab5b940"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\docs\\WINDOWS-TUNING.md": {
+    "mtime": 1791792533.8688643,
+    "ast_hash": "3d0f06b7fd1a4203b923ea6585c28cb2",
+    "semantic_hash": "3d0f06b7fd1a4203b923ea6585c28cb2"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\docs\\claude.md": {
+    "mtime": 1791792533.8688643,
+    "ast_hash": "b24684c674490dfd3dd9417c4c3557d3",
+    "semantic_hash": "b24684c674490dfd3dd9417c4c3557d3"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\CLAUDE.md": {
+    "mtime": 1791792533.8698647,
+    "ast_hash": "2f8685bb198e178af2a474f6fcdafdf3",
+    "semantic_hash": "2f8685bb198e178af2a474f6fcdafdf3"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\CMakeLists.txt": {
+    "mtime": 1791792533.8698647,
+    "ast_hash": "454fc0f246aa08a288660ec68dea9517",
+    "semantic_hash": "454fc0f246aa08a288660ec68dea9517"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\docs\\ARCHITECTURE.md": {
+    "mtime": 1791792533.8708644,
+    "ast_hash": "349138677cc151f211ec8696e3ef0eaa",
+    "semantic_hash": "349138677cc151f211ec8696e3ef0eaa"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\docs\\FEATURE-MATRIX.md": {
+    "mtime": 1791792533.8708644,
+    "ast_hash": "82576bf6fd695b9e30518bc192d98cdf",
+    "semantic_hash": "82576bf6fd695b9e30518bc192d98cdf"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\docs\\IMPLEMENTATION-AUDIT.md": {
+    "mtime": 1791792533.8718646,
+    "ast_hash": "4b4531f5d9c153af746fe934b1c94e8c",
+    "semantic_hash": "4b4531f5d9c153af746fe934b1c94e8c"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\docs\\INSTALLATION.md": {
+    "mtime": 1791792533.8718646,
+    "ast_hash": "e50cc00414f640883f0afae538571bb4",
+    "semantic_hash": "e50cc00414f640883f0afae538571bb4"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\docs\\WAYLAND-LIMITATIONS.md": {
+    "mtime": 1791792533.8728647,
+    "ast_hash": "75ac18c953c9c10abca2536c35b2d111",
+    "semantic_hash": "75ac18c953c9c10abca2536c35b2d111"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\linux\\tests\\CMakeLists.txt": {
+    "mtime": 1791792533.885599,
+    "ast_hash": "c5add15a09a0243f90c7e53281b10182",
+    "semantic_hash": "c5add15a09a0243f90c7e53281b10182"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\AcousticKeystrokes.ahk": {
+    "mtime": 1791792533.890371,
+    "ast_hash": "369496d80c85041dc456bcc5dafae8fb",
+    "semantic_hash": "369496d80c85041dc456bcc5dafae8fb"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\AmbientDimming.ahk": {
+    "mtime": 1791799526.0886772,
+    "ast_hash": "9fc3073b981dc93eb33578c6f53ffa3c",
+    "semantic_hash": "9fc3073b981dc93eb33578c6f53ffa3c"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\AnimationScheduler.ahk": {
+    "mtime": 1791792533.8933754,
+    "ast_hash": "14632e87ec6152d162276392c9d3c047",
+    "semantic_hash": "14632e87ec6152d162276392c9d3c047"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\AudioOsd.ahk": {
+    "mtime": 1791792533.8933754,
+    "ast_hash": "a5aaca13b58ef5845de254a317e6cf45",
+    "semantic_hash": "a5aaca13b58ef5845de254a317e6cf45"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\CmdAltDrag.ahk": {
+    "mtime": 1791792533.8943763,
+    "ast_hash": "7811f908935feb1193bea686f11c26b1",
+    "semantic_hash": "7811f908935feb1193bea686f11c26b1"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\CmdRestoreAll.ahk": {
+    "mtime": 1791792533.8943763,
+    "ast_hash": "a988bf60f5a90f6accca06c9ccb85790",
+    "semantic_hash": "a988bf60f5a90f6accca06c9ccb85790"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\CmdRollUp.ahk": {
+    "mtime": 1791792533.8943763,
+    "ast_hash": "89dbd8ce4e2b83c414beee771ce5d797",
+    "semantic_hash": "89dbd8ce4e2b83c414beee771ce5d797"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\CmdTransparency.ahk": {
+    "mtime": 1791792533.8943763,
+    "ast_hash": "32205209caafadf016ab41ee9a5693dc",
+    "semantic_hash": "32205209caafadf016ab41ee9a5693dc"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\CmdTrayMinimize.ahk": {
+    "mtime": 1791792533.8958807,
+    "ast_hash": "a5dd9c7531359de9ee12a08e25db7edd",
+    "semantic_hash": "a5dd9c7531359de9ee12a08e25db7edd"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\CmdWindowGeometry.ahk": {
+    "mtime": 1791792533.8958807,
+    "ast_hash": "005128b301a031d54a0d3dca33728966",
+    "semantic_hash": "005128b301a031d54a0d3dca33728966"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\DiagnosticsLog.ahk": {
+    "mtime": 1791792533.8958807,
+    "ast_hash": "e5bae29e12fc8c65cc4ef916140a0460",
+    "semantic_hash": "e5bae29e12fc8c65cc4ef916140a0460"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\DragPipeline.ahk": {
+    "mtime": 1791792533.8968866,
+    "ast_hash": "568fdb0043ada7b4901de86f734c8d9a",
+    "semantic_hash": "568fdb0043ada7b4901de86f734c8d9a"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\DropPlacement.ahk": {
+    "mtime": 1791792533.8978913,
+    "ast_hash": "f5e72d41377235a996c56519ad61ac66",
+    "semantic_hash": "f5e72d41377235a996c56519ad61ac66"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\FeatureFlags.ahk": {
+    "mtime": 1791799441.9183807,
+    "ast_hash": "fd0a367b23c9db09bf092df9ee476d49",
+    "semantic_hash": "fd0a367b23c9db09bf092df9ee476d49"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\FeatureToggles.ahk": {
+    "mtime": 1791799526.0896776,
+    "ast_hash": "6617a28e2905831ca2d3636e1013fe64",
+    "semantic_hash": "6617a28e2905831ca2d3636e1013fe64"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\FocusEmphasis.ahk": {
+    "mtime": 1791792533.8995135,
+    "ast_hash": "1e20426fcc775a29067adaee75ed876b",
+    "semantic_hash": "1e20426fcc775a29067adaee75ed876b"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\FxBlackHole.ahk": {
+    "mtime": 1791792533.8995135,
+    "ast_hash": "3708c7001db239812c82a4236ad0d004",
+    "semantic_hash": "3708c7001db239812c82a4236ad0d004"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\FxCurtain.ahk": {
+    "mtime": 1791792533.8995135,
+    "ast_hash": "b4b76e940325366dd735b7db3b3dc04c",
+    "semantic_hash": "b4b76e940325366dd735b7db3b3dc04c"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\FxGravity.ahk": {
+    "mtime": 1791792533.9008992,
+    "ast_hash": "71bc5eb195289e054372d5a6cb2147d2",
+    "semantic_hash": "71bc5eb195289e054372d5a6cb2147d2"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\FxShatter.ahk": {
+    "mtime": 1791792533.9008992,
+    "ast_hash": "6f5a66dae95e290272665b4a8dda0c59",
+    "semantic_hash": "6f5a66dae95e290272665b4a8dda0c59"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\GameMode.ahk": {
+    "mtime": 1791799514.7828512,
+    "ast_hash": "ea673cb2c0ac205803ab431c70db5a06",
+    "semantic_hash": "ea673cb2c0ac205803ab431c70db5a06"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\InputBindings.ahk": {
+    "mtime": 1791792533.901904,
+    "ast_hash": "425d044ff7632ff5bff569ce99715d3a",
+    "semantic_hash": "425d044ff7632ff5bff569ce99715d3a"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\MediaCore.ahk": {
+    "mtime": 1791792533.9031713,
+    "ast_hash": "7776612f9df259fdc7faa75fa558c441",
+    "semantic_hash": "7776612f9df259fdc7faa75fa558c441"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\MonitorGeometry.ahk": {
+    "mtime": 1791792533.9031713,
+    "ast_hash": "6764eb2c7041095372b416a8e2188b36",
+    "semantic_hash": "6764eb2c7041095372b416a8e2188b36"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\MouseGestureFx.ahk": {
+    "mtime": 1791799374.9653468,
+    "ast_hash": "3e8d9d492f3f508cf35babba0c9fc7a9",
+    "semantic_hash": "3e8d9d492f3f508cf35babba0c9fc7a9"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\OnDemandOverlays.ahk": {
+    "mtime": 1791792533.9043806,
+    "ast_hash": "04a7751c69cd1caa41bc568c881ad2a5",
+    "semantic_hash": "04a7751c69cd1caa41bc568c881ad2a5"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\OverlayGui.ahk": {
+    "mtime": 1791792533.905887,
+    "ast_hash": "aee908458f1187f6a30f001a5378e645",
+    "semantic_hash": "aee908458f1187f6a30f001a5378e645"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\PinnedWindowModes.ahk": {
+    "mtime": 1791792533.905887,
+    "ast_hash": "dffb0553034aa5d2922c591a270c1f80",
+    "semantic_hash": "dffb0553034aa5d2922c591a270c1f80"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\PositionMemory.ahk": {
+    "mtime": 1791792533.9068942,
+    "ast_hash": "c2321695719a56cae165298b860d0cc0",
+    "semantic_hash": "c2321695719a56cae165298b860d0cc0"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\ProcessLifecycle.ahk": {
+    "mtime": 1791792533.9068942,
+    "ast_hash": "a1525af0977c13b926f7bad886fc92b4",
+    "semantic_hash": "a1525af0977c13b926f7bad886fc92b4"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\RenderCore.ahk": {
+    "mtime": 1791792533.9068942,
+    "ast_hash": "a65830bf0443c3bcecfb194799ab50c7",
+    "semantic_hash": "a65830bf0443c3bcecfb194799ab50c7"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\ScreenEdgeGestures.ahk": {
+    "mtime": 1791792533.9078927,
+    "ast_hash": "43098efe0d8fedf97b0cfdde4e201046",
+    "semantic_hash": "43098efe0d8fedf97b0cfdde4e201046"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\SettingsStore.ahk": {
+    "mtime": 1791799503.0394077,
+    "ast_hash": "b3680f6cd89e37249e779b93fcc091cd",
+    "semantic_hash": "b3680f6cd89e37249e779b93fcc091cd"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\SettingsWindow.ahk": {
+    "mtime": 1791799533.701703,
+    "ast_hash": "262d4333cdde80b28a633a0c93ae6d4a",
+    "semantic_hash": "262d4333cdde80b28a633a0c93ae6d4a"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\ShellHook.ahk": {
+    "mtime": 1791792533.9088924,
+    "ast_hash": "d100be73c1e11d5ba3e977cf2c4ab3f2",
+    "semantic_hash": "d100be73c1e11d5ba3e977cf2c4ab3f2"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\ShellSurfaceWatcher.ahk": {
+    "mtime": 1791792533.9088924,
+    "ast_hash": "99bde2b6b1e6cd1bc5ff08cde7de3deb",
+    "semantic_hash": "99bde2b6b1e6cd1bc5ff08cde7de3deb"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\SnapCore.ahk": {
+    "mtime": 1791792533.909892,
+    "ast_hash": "129e9e67e4842ba7d2d8162918298bbf",
+    "semantic_hash": "129e9e67e4842ba7d2d8162918298bbf"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\StealthPanic.ahk": {
+    "mtime": 1791799514.7828512,
+    "ast_hash": "fc53d9254af1d73ee9a38020ef84e291",
+    "semantic_hash": "fc53d9254af1d73ee9a38020ef84e291"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\StealthPanicConfig.ahk": {
+    "mtime": 1791792533.9108925,
+    "ast_hash": "3c1fc39d593c15dc96cf70ffbf2cc952",
+    "semantic_hash": "3c1fc39d593c15dc96cf70ffbf2cc952"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\StealthPanicUI.ahk": {
+    "mtime": 1791792533.9108925,
+    "ast_hash": "1c6e3a67a7221eda015307a763420bc8",
+    "semantic_hash": "1c6e3a67a7221eda015307a763420bc8"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\TaskbarClock.ahk": {
+    "mtime": 1791792533.9118965,
+    "ast_hash": "52027ed4858d03f7ede93901ce108624",
+    "semantic_hash": "52027ed4858d03f7ede93901ce108624"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\TuningRegistry.ahk": {
+    "mtime": 1791792533.9118965,
+    "ast_hash": "3ed02efba2a9ab3503151b2e4b8d789f",
+    "semantic_hash": "3ed02efba2a9ab3503151b2e4b8d789f"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\WindowClassification.ahk": {
+    "mtime": 1791792533.9128914,
+    "ast_hash": "1fd4f0fba2d7289178ba50f4350ecbf1",
+    "semantic_hash": "1fd4f0fba2d7289178ba50f4350ecbf1"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\WindowOpenAnim.ahk": {
+    "mtime": 1791792533.9138927,
+    "ast_hash": "b0ce0159157fa225b8d644ae806f149e",
+    "semantic_hash": "b0ce0159157fa225b8d644ae806f149e"
+  },
+  "C:\\Users\\subhan.amiraslanov\\Desktop\\TweaksForEveryOne\\src\\WindowTweaks.ahk": {
+    "mtime": 1791792533.9138927,
+    "ast_hash": "ce9dd2909cd9e3a9579acf2125b4d319",
+    "semantic_hash": "ce9dd2909cd9e3a9579acf2125b4d319"
+  }
+}

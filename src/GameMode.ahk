@@ -66,6 +66,7 @@ EnterGameMode() {
     ; feature silences itself on the way in.
     PlayHotkeySound("toggleon")
     GameModeActive := true
+    GameModeEnteredTick := A_TickCount
     GameModeSuspendedFeatures.Clear()
 
     for gmFeat in GAME_MODE_FEATURES {
@@ -142,6 +143,35 @@ GameModeResuspend() {
     }
     if (GameModeSuspendedFeatures.Has("OpenAnim") && IsSet(OpenAnim))
         OpenAnim := "None"
+}
+
+; The settings window wrote the user's edits into the globals (see
+; OverlaysAdoptEdits). Those are the new real values: keep them as the held
+; values and put the suppression back.
+GameModeAdoptEdits() {
+    global
+    if (!GameModeActive)
+        return
+    for gmFeat in GAME_MODE_FEATURES {
+        if (GameModeSuspendedFeatures.Has(gmFeat) && IsSet(%gmFeat%))
+            GameModeSuspendedFeatures[gmFeat] := %gmFeat%
+    }
+    if (GameModeSuspendedFeatures.Has("OpenAnim") && IsSet(OpenAnim))
+        GameModeSuspendedFeatures["OpenAnim"] := OpenAnim
+    GameModeResuspend()
+}
+
+; Every hotkey is already off during Game Mode (#HotIf !GameModeActive), but the
+; tray menu is not, and a flip from there was reverted by the next
+; WriteSettings() while the tick mark stayed changed. A toggle of a suspended
+; flag says why it is refusing instead.
+GameModeHolds(flagName) {
+    global GameModeActive, GameModeSuspendedFeatures
+    if (GameModeActive && GameModeSuspendedFeatures.Has(flagName)) {
+        Notify("Game Mode is on - press Shift+Alt+F12 to leave it first")
+        return true
+    }
+    return false
 }
 
 GameModeSyncFeatures() {

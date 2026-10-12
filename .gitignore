@@ -3,6 +3,9 @@ settings.ini
 window-positions.ini
 snap.log
 snap.log.old
+error.log
+error.txt
+StealthPanic_Launch.log
 taskbar-height.ini
 
 # Stealth Panic Mode, written next to whichever copy is running. The app list is

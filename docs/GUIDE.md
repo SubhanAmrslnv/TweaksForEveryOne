@@ -30,7 +30,7 @@ To remove it: run **`Uninstall.ps1`**.
 - **macOS "Quick Look"**: Press Space on any file in Explorer to instantly preview it.
 - **Multi-Monitor Focus Dimmer**: Dims inactive monitors by 50% to reduce eye strain.
 - **macOS "Hot Corners"**: Throw your mouse to screen corners to trigger actions (e.g. Hide windows, Task View).
-- **Premium Volume OSD**: A sleek, blurred macOS-style volume indicator when scrolling the taskbar.
+- **Premium Volume OSD**: A sleek, translucent macOS-style volume indicator when scrolling the taskbar.
 - **Live Window PiP**: `Shift+Alt+P` creates a live, always-on-top thumbnail of any background window.
 - **Universal Grab & Pan**: Hold Middle-Click to pan/scroll any window (like the Photoshop Hand Tool).
 - **Global Mic Kill-Switch**: Double-tap `Alt` to instantly mute/unmute your microphone system-wide.

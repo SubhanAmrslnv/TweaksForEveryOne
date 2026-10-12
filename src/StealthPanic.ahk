@@ -20,6 +20,9 @@ global StealthHiddenWindows := []
 global StealthOriginalMute := false
 global StealthOriginalMic := false
 global StealthSuspendedFeatures := Map()
+; When panic was entered, so WriteSettings() can unwind it and Game Mode in the
+; right order when both overlays are active at once.
+global StealthEnteredTick := 0
 
 global StealthEscCount := 0
 global StealthEscTimer := 0
@@ -160,6 +163,7 @@ StealthSyncFeatures() {
 }
 
 EnterStealthPanic() {
+    global StealthEnteredTick
     global StealthPanicActive, StealthHiddenWindows, StealthOriginalMute, StealthOriginalMic
     global StealthMuteAudio, StealthMuteMic, StealthLaunchSafeApps, StealthLaunchDelay
 
@@ -167,6 +171,7 @@ EnterStealthPanic() {
         return
     
     StealthPanicActive := true
+    StealthEnteredTick := A_TickCount
     StealthHiddenWindows := []
     
     ; 1. Hide windows
@@ -315,37 +320,7 @@ SuspendStealthFeatures() {
 
 RestoreStealthFeatures() {
     global StealthSuspendedFeatures
-    
-    global OpenAnim, ContextMenuAnimEnabled, RippleClickEnabled
-    global ProximityGhostEnabled, LivePipEnabled
-    global SpotlightEnabled, BreathingEnabled, CursorYawnEnabled
-    
-    for key, val in StealthSuspendedFeatures {
-        if (key == "OpenAnim" && IsSet(OpenAnim)) {
-            OpenAnim := val
-        }
-        if (key == "ContextMenuAnimEnabled" && IsSet(ContextMenuAnimEnabled)) {
-            ContextMenuAnimEnabled := val
-        }
-        if (key == "RippleClickEnabled" && IsSet(RippleClickEnabled)) {
-            RippleClickEnabled := val
-        }
-        if (key == "ProximityGhostEnabled" && IsSet(ProximityGhostEnabled)) {
-            ProximityGhostEnabled := val
-        }
-        if (key == "LivePipEnabled" && IsSet(LivePipEnabled)) {
-            LivePipEnabled := val
-        }
-        if (key == "SpotlightEnabled" && IsSet(SpotlightEnabled)) {
-            SpotlightEnabled := val
-        }
-        if (key == "BreathingEnabled" && IsSet(BreathingEnabled)) {
-            BreathingEnabled := val
-        }
-        if (key == "CursorYawnEnabled" && IsSet(CursorYawnEnabled)) {
-            CursorYawnEnabled := val
-        }
-    }
+    StealthApplyFeatureValues(StealthSuspendedFeatures)
     StealthSuspendedFeatures.Clear()
 
     ; Same call list as the suspend direction: each Sync* reads the flag it was
@@ -353,11 +328,82 @@ RestoreStealthFeatures() {
     StealthSyncFeatures()
 }
 
+; Writes each key of `values` back into the global flag of the same name. The one
+; place that knows the suspended names, so the restore path, the exit path and
+; the persistence bracket cannot drift apart. IsSet guards keep it safe standalone.
+StealthApplyFeatureValues(values) {
+    global OpenAnim, ContextMenuAnimEnabled, RippleClickEnabled
+    global ProximityGhostEnabled, LivePipEnabled
+    global SpotlightEnabled, BreathingEnabled, CursorYawnEnabled
+
+    for key, val in values {
+        if (key == "OpenAnim" && IsSet(OpenAnim))
+            OpenAnim := val
+        if (key == "ContextMenuAnimEnabled" && IsSet(ContextMenuAnimEnabled))
+            ContextMenuAnimEnabled := val
+        if (key == "RippleClickEnabled" && IsSet(RippleClickEnabled))
+            RippleClickEnabled := val
+        if (key == "ProximityGhostEnabled" && IsSet(ProximityGhostEnabled))
+            ProximityGhostEnabled := val
+        if (key == "LivePipEnabled" && IsSet(LivePipEnabled))
+            LivePipEnabled := val
+        if (key == "SpotlightEnabled" && IsSet(SpotlightEnabled))
+            SpotlightEnabled := val
+        if (key == "BreathingEnabled" && IsSet(BreathingEnabled))
+            BreathingEnabled := val
+        if (key == "CursorYawnEnabled" && IsSet(CursorYawnEnabled))
+            CursorYawnEnabled := val
+    }
+}
+
+; ====== Persistence bracket ======
+;
+; Stealth Panic suspends features in memory exactly the way Game Mode does, and
+; WriteSettings() persists whatever the globals hold - so an exit, reload or any
+; SaveSettings() while panic was active wrote OpenAnim=None, ripple/ghost/PiP/
+; spotlight/breathing/yawn = 0 to settings.ini, and they stayed off for good.
+; WriteSettings() brackets itself with this pair, same contract as
+; GameModeUnsuspendForWrite()/GameModeResuspend(): no Sync* calls, because the
+; real values are only back for the duration of the write.
+StealthUnsuspendForWrite() {
+    global StealthPanicActive, StealthSuspendedFeatures
+    if (!StealthPanicActive || !StealthSuspendedFeatures.Count)
+        return false
+    StealthApplyFeatureValues(StealthSuspendedFeatures)
+    return true
+}
+
+; Settings-window edits made during panic become the held values; see
+; OverlaysAdoptEdits() in SettingsStore.ahk. Assume-global for the dynamic
+; %name% read, hence the sp prefix on its scratch variables.
+StealthAdoptEdits() {
+    global
+    if (!StealthPanicActive)
+        return
+    for spKey in StealthSuspendedFeatures.Clone() {
+        if IsSet(%spKey%)
+            StealthSuspendedFeatures[spKey] := %spKey%
+    }
+    StealthResuspend()
+}
+
+StealthResuspend() {
+    global StealthPanicActive, StealthSuspendedFeatures
+    if (!StealthPanicActive)
+        return
+    suppressed := Map()
+    for key in StealthSuspendedFeatures
+        suppressed[key] := (key == "OpenAnim") ? "None" : false
+    StealthApplyFeatureValues(suppressed)
+}
+
 global StealthAppCache := Map()
 
 LaunchSafeApps() {
     global StealthSafeAppList, StealthAppCache
-    logPath := A_AppData "\StealthPanic_Launch.log"
+    ; Next to the program, like every other file it writes. It used to go to
+    ; %APPDATA%, outside the program folder, where no uninstaller removed it.
+    logPath := A_ScriptDir "\StealthPanic_Launch.log"
     try FileDelete(logPath)
     
     LogLaunch(msg) {
@@ -631,17 +677,19 @@ ResolveAppPath(exeName, LogFunc) {
 }
 
 FindVisualStudio() {
-    vswhere := EnvGet("ProgramFiles(x86)") "\Microsoft Visual Studio\Installer\vswhere.exe"
-    if FileExist(vswhere) {
-        cmd := '"' vswhere '" -latest -products * -requires Microsoft.VisualStudio.Component.CoreEditor -property productPath'
+    ; Look on disk instead of running vswhere. That was a hidden child process
+    ; started through WScript.Shell.Exec - a console flash, and the
+    ; script-host-spawns-a-process shape endpoint security watches for - and it
+    ; asked for productPath, which is already devenv.exe, then appended
+    ; Common7\IDE\devenv.exe to it, so it never matched anything anyway.
+    ; Standard layout: <ProgramFiles>\Microsoft Visual Studio\<version>\<edition>.
+    for vsRoot in [EnvGet("ProgramFiles"), EnvGet("ProgramFiles(x86)")] {
+        if (vsRoot = "")
+            continue
         try {
-            shell := ComObject("WScript.Shell")
-            exec := shell.Exec(cmd)
-            out := Trim(exec.StdOut.ReadAll())
-            Loop Parse, out, "`n", "`r" {
-                p := Trim(A_LoopField)
-                if (p != "") {
-                    fullPath := p "\Common7\IDE\devenv.exe"
+            Loop Files, vsRoot "\Microsoft Visual Studio\*", "D" {
+                Loop Files, A_LoopFileFullPath "\*", "D" {
+                    fullPath := A_LoopFileFullPath "\Common7\IDE\devenv.exe"
                     if FileExist(fullPath)
                         return fullPath
                 }
@@ -677,11 +725,24 @@ FindVisualStudio() {
 OnExit(ExitStealthPanic)
 
 ExitStealthPanic(ExitReason, ExitCode) {
-    global StealthPanicActive, StealthHiddenWindows
-    if (StealthPanicActive) {
-        for hwnd in StealthHiddenWindows {
-            if DllCall("IsWindow", "ptr", hwnd)
-                try WinShow(hwnd)
-        }
+    global StealthPanicActive, StealthHiddenWindows, StealthSuspendedFeatures
+    global StealthOriginalMute, StealthOriginalMic, StealthMuteAudio, StealthMuteMic
+    if (!StealthPanicActive)
+        return
+    for hwnd in StealthHiddenWindows {
+        if DllCall("IsWindow", "ptr", hwnd)
+            try WinShow(hwnd)
     }
+    ; Exiting used to hand back the windows only: the speakers and microphone
+    ; stayed muted after the program was gone, with nothing left to unmute them.
+    if (StealthMuteAudio)
+        try SoundSetMute(StealthOriginalMute)
+    if (StealthMuteMic)
+        try SoundSetMute(StealthOriginalMic, , "Microphone")
+    ; Flags only, no Sync*: Bye() runs next and tears every feature down anyway.
+    ; This runs before Bye() (registered at load), so its WriteSettings() sees
+    ; the real values even without the bracket.
+    StealthApplyFeatureValues(StealthSuspendedFeatures)
+    StealthSuspendedFeatures.Clear()
+    StealthPanicActive := false
 }

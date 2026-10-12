@@ -27,6 +27,8 @@
 
 ToggleBreathing() {
     global BreathingEnabled, Win, C
+    if GameModeHolds("BreathingEnabled")
+        return
     BreathingEnabled := !BreathingEnabled
     SyncTray(), SaveSettings()
     if (Win && WinExist("ahk_id " Win.Hwnd))
@@ -185,7 +187,9 @@ BreathingAnimatorStep(dt:=0, now:=0) {
     dead := []
     ; Hoisted out of the loop: this runs every frame for every tracked window.
     anyMedia := MC_AnyMedia()
-    For hwnd, target in WinTargetAlpha {
+    ; A snapshot: the shell hook's destroy branch can interrupt this loop and
+    ; delete from the live Map, which shifts the enumerator the same way.
+    For hwnd, target in WinTargetAlpha.Clone() {
         ; Collect, do not delete: removing the current item shifts the rest down
         ; under the live enumerator index, which silently skips the next window.
         if !DllCall("IsWindow", "ptr", hwnd) {
@@ -263,7 +267,11 @@ BreathingAnimatorStep(dt:=0, now:=0) {
     }
 
     for hwnd in dead {
-        WinTargetAlpha.Delete(hwnd)
+        ; Has(): a window is collected as dead precisely when the shell hook
+        ; already removed it, and Map.Delete on a missing key throws - which
+        ; retired the whole animator.
+        if WinTargetAlpha.Has(hwnd)
+            WinTargetAlpha.Delete(hwnd)
         if WinCurrentAlpha.Has(hwnd)
             WinCurrentAlpha.Delete(hwnd)
         if WinLastActive.Has(hwnd)

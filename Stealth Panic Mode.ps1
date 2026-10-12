@@ -121,12 +121,14 @@ $uiShortcut.Arguments = "`"$dest\StealthPanicUI.ahk`" `"$dest\StealthPanic.ini`"
 $uiShortcut.WorkingDirectory = $dest
 $uiShortcut.Save()
 
-$uninstallShortcut = $WshShell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Programs')) 'Uninstall Stealth Panic Mode.lnk'))
-$uninstallShortcut.TargetPath = "powershell.exe"
-$uninstallShortcut.Arguments = "-ExecutionPolicy Bypass -File `"$dest\Uninstall Stealth Panic Mode.ps1`""
-$uninstallShortcut.WorkingDirectory = $dest
-$uninstallShortcut.Save()
+# No "Uninstall" Start Menu shortcut. It was a .lnk launching
+# powershell.exe -ExecutionPolicy Bypass, a shape endpoint security flags on
+# sight. Uninstall by running the script in the install folder instead; an old
+# shortcut from a previous install is removed here.
+$oldUninstallLnk = Join-Path ([Environment]::GetFolderPath('Programs')) 'Uninstall Stealth Panic Mode.lnk'
+if (Test-Path $oldUninstallLnk) { Remove-Item $oldUninstallLnk -Force -ErrorAction SilentlyContinue }
 Say "Added to Start Menu" 'Green'
+Say "To uninstall: run '$dest\Uninstall Stealth Panic Mode.ps1'" 'DarkGray'
 
 # ------------------------------------------------- 4. Start ----
 Step 4 "Starting Stealth Panic Mode"

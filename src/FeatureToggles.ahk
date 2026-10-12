@@ -56,6 +56,8 @@ SyncTray() {
 
 ToggleSnap() {
     global SnapEnabled, Win, C
+    if GameModeHolds("SnapEnabled")
+        return
     SnapEnabled := !SnapEnabled
     SyncTray(), SaveSettings()
     if (Win && WinExist("ahk_id " Win.Hwnd))
@@ -92,6 +94,8 @@ ToggleFeatureFlag(label, isOn, ctrlKey) {
 
 ToggleHotCorners() {
     global HotCornersEnabled
+    if GameModeHolds("HotCornersEnabled")
+        return
     HotCornersEnabled := !HotCornersEnabled
     ToggleFeatureFlag("Hot corners", HotCornersEnabled, "corners_en")
     SyncHotCornersTimer()
@@ -99,6 +103,8 @@ ToggleHotCorners() {
 
 ToggleCursorWrap() {
     global InfiniteWrapEnabled
+    if GameModeHolds("InfiniteWrapEnabled")
+        return
     InfiniteWrapEnabled := !InfiniteWrapEnabled
     ToggleFeatureFlag("Infinite cursor wrap", InfiniteWrapEnabled, "wrap")
     SyncCursorWrapTimer()
@@ -106,6 +112,8 @@ ToggleCursorWrap() {
 
 ToggleDimmer() {
     global MultiMonitorDimmerEnabled
+    if GameModeHolds("MultiMonitorDimmerEnabled")
+        return
     MultiMonitorDimmerEnabled := !MultiMonitorDimmerEnabled
     ToggleFeatureFlag("Multi-monitor dimmer", MultiMonitorDimmerEnabled, "multidimmer")
     SyncDimmerTimer()              ; also fades out and clears the dim overlays
@@ -126,12 +134,16 @@ ToggleSmartTaskbar() {
 ; grab & pan lives behind a #HotIf, which re-evaluates the flag on every press.
 ToggleMagneticGroups() {
     global MagneticGroupsEnabled
+    if GameModeHolds("MagneticGroupsEnabled")
+        return
     MagneticGroupsEnabled := !MagneticGroupsEnabled
     ToggleFeatureFlag("Magnetic window groups", MagneticGroupsEnabled, "magnetic")
 }
 
 ToggleGrabPan() {
     global GrabPanEnabled
+    if GameModeHolds("GrabPanEnabled")
+        return
     GrabPanEnabled := !GrabPanEnabled
     ToggleFeatureFlag("Grab & pan", GrabPanEnabled, "grabpan")
 }

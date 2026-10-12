@@ -167,21 +167,13 @@ SpotlightOnChange(ctrl, *) {
         return
     }
 
-    ; A fresh MSHTML document per keystroke is not cheap, but it is only reached
-    ; for arithmetic-looking input and a reused document has to be open()ed and
-    ; close()d to be re-writable - which fails silently inside this try and would
-    ; take the calculator with it. Left as it is on purpose.
-    ; The character class is the guard: only digits, whitespace, brackets and the
-    ; four operators ever reach eval, so nothing can escape arithmetic.
+    ; Arithmetic is evaluated natively (ArithmeticEval.ahk) - no script engine.
+    ; The character class still decides what is treated as a calculation.
     if RegExMatch(text, "^[\d\+\-\*\/\.\(\)\s]+$") && RegExMatch(text, "\d") {
-        try {
-            doc := ComObject("htmlfile")
-            doc.write("<body><script>document.write(eval('" text "'));</script></body>")
-            ans := doc.body.innerText
-            if (ans != "") {
-                SpotlightResult.Text := "= " ans
-                return
-            }
+        ans := CalcEvaluate(text)
+        if (ans != "") {
+            SpotlightResult.Text := "= " ans
+            return
         }
     }
 

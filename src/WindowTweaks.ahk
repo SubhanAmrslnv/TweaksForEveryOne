@@ -35,6 +35,7 @@
 #Include RenderCore.ahk
 #Include AnimationScheduler.ahk
 #Include MediaCore.ahk
+#Include ArithmeticEval.ahk
 
 ; ----- Substrate: settings, flags, logging -----
 #Include FeatureFlags.ahk
