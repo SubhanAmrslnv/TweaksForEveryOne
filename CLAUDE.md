@@ -71,6 +71,14 @@ Every toggle fires `Notify()` → `TrayTip`, so state changes are always visible
 
 Feature *flags* still live under `[memory]` (the section name is historical — it is the general flag bucket), plus `[corners]`, `[taskbar] smart`, `[snap]`, `[glide]`, `[mouse]`, `[window]` and `[snippets]` for the text expander. Every tunable *number* lives in a per-feature section owned by the tuning registry: `[snap]`, `[glide]`, `[breathing]`, `[ghost]`, `[border]`, `[dimmer]`, `[focus]`, `[wrap]`, `[corners]`, `[osd]`, `[trans]`, `[anim]`, `[mouse]`. See **The tuning registry** below — that table, not this one, is where a range is defined.
 
+### Dead-edge bridge — why crossing monitors was one-directional
+
+Infinite Cursor Wrap also owns the **dead-edge bridge** (`CursorBridgeStep` in `ScreenEdgeGestures.ahk`, run first on the same 20 ms timer). On the owner's desk DISPLAY1 is 0,0 1920x1200 and DISPLAY2 is 1920,58 1920x1080: every point of DISPLAY2's left edge has DISPLAY1 beside it, but DISPLAY1's right edge has nothing beside it for y < 58 and y >= 1138, and Windows clamps the pointer there. That is the whole "left-to-right is hard, right-to-left is easy" bug - the wrap never caused it and never helped, because it only looks at the outer edges of the whole desktop.
+
+A dead edge is an edge band of the pointer's monitor where the pixel beyond is on no monitor but some other monitor shares that edge line. Reaching it while still moving toward it (`[wrap] bridgespeed`, default 100 px/s, sampled the tick *before* contact) carries the pointer to the nearest point of the neighbour. 100 px/s is deliberately far below any ordinary crossing - the gate exists only so a pointer decelerating onto a maximised window's close box (which lives in that strip) is left alone. Four mirrored rows, real rects never monitor indices, so any count, vertical stacks and negative coordinates follow from the same rule.
+
+It measures and moves in **physical pixels**: `PhysicalMonitorRects()` (cached, invalidated with `ScreenMetrics`) and the step itself run under `PerMonitorDpiBegin()` / `PerMonitorDpiEnd()` (thread-only `SetThreadDpiAwarenessContext(-4)`), and it uses `SetCursorPos`, not `MouseMove`, which normalises through the process's system-DPI metrics. AutoHotkey 2.0 is only system-DPI aware, so with mixed scale factors the virtualised monitor rects need not even touch.
+
 ### Infinite Cursor Wrap — the intent model
 
 `CursorWrapMonitorStep` is not a threshold test; it is a small state machine, and the shape matters because the outer edge of the desktop is somewhere the pointer lands constantly (reaching a Back button, a close box, a scrollbar, the Start button). The original fired on any contact with the outermost pixel column, including mid-drag.
@@ -324,7 +332,7 @@ notes still reference no longer exist: `WindowCommands.ahk` became the six
 
 | File | Role |
 |---|---|
-| `src\SettingsWindow.ahk` | The sidebar-nav GUI. **Sole owner of `C`, `Win`, `Pages`, `NavItems`, `CurPage`**. Holds all ten non-ASCII lines |
+| `src\SettingsWindow.ahk` | The sidebar-nav GUI. **Sole owner of `C`, `Win`, `Pages`, `NavItems`, `CurPage`**. Pure ASCII since the nav moved from emoji labels to `NAV_PAGES` (plain-text keys + Segoe Fluent Icons glyphs via `Chr()`) |
 | `src\FeatureToggles.ahk` | Tray menu + every `Toggle*` flag handler + the `+!o` always-on-top binding |
 | `src\InputBindings.ahk` | The hotkey block and its `#HotIf` contexts, the keyboard hook, the hotstring expander |
 
@@ -927,7 +935,9 @@ first place.
 
 ## Packaging
 
-Two independent installers that must be kept in sync: `Install.ps1` and `build\Setup.cs` (WinForms). Both stop a running copy by command line (`*WindowTweaks.ahk*`); `Install.ps1` asks it to close first (`taskkill` without `/F`) so `Bye()` runs, and only then forces. Change install behaviour in both.
+Two independent installers that must be kept in sync: `Install.ps1` and `build\Setup.cs` (WinForms). Both stop a running copy by command line (`*WindowTweaks.ahk*`, and `*StealthPanicUI.ahk*`), and both ask it to close first (`taskkill` without `/F`) so `Bye()` runs, and only then force. Change install behaviour in both.
+
+**Settings precedence is one rule, implemented identically in both installers:** an existing `settings.ini` is the user's and is never touched; only an install folder with none is seeded from **`build\baseline-settings.ini`**; keys added after that are filled in by `LoadSettings()` defaults. Copy-if-absent is idempotent. The baseline is the owner's live configuration with the shadow-type effects (`[memory] breathing`, `[mouse] breathe`, `[mouse] copyfeedback`) forced to `0` and `[taskbar] clocklocation` blanked, so a fresh install makes no network request until a city is entered. It is UTF-16LE with a BOM, like the file `IniWrite` produces. `Setup.cs` embeds it as `base.settings.ini` - deliberately NOT under `res.`, because `Extract()` overwrites every `res.*` file unconditionally. `Uninstall.ps1` keeps the user's settings files unless `-RemoveSettings` is passed. Code defaults in `LoadSettings` stay factory values; `build\refs\settings.default.ini` tracks those, not the baseline.
 
 **Corporate / antivirus constraints (see `docs\SECURITY.md`, which ships with the program).** ExplorerPatcher is **opt-in** (`-ExplorerPatcher`): a pinned release, SHA-256 checked before it runs. Never return to downloading `releases/latest` or installing it by default. The bundled `.reg` holds only ExplorerPatcher's own settings, with no `Software\Classes\CLSID` entries. `-Silent` applies no tuning and does not restart Explorer, and Explorer is restarted only when something that needs it was applied. `Setup.cs` runs its child processes visibly. `Build-Installer.ps1` refuses to ship a module that is neither an entry point nor `#Include`d.
 
@@ -949,7 +959,7 @@ Three traps, all of which have cost real debugging time:
 
 - **AHK identifiers are case-insensitive.** A variable named `oR` collides with the `or` keyword; `SUB` collides with the `Sub()` GUI helper. Both fail with confusing errors far from the cause. Hence `oLeft/oTop/oRight/oBottom` and `cSub`.
 - **`Log` is a built-in** (logarithm). Never use it as a variable name.
-- **Keep `.ahk` files pure ASCII, no BOM.** AutoHotkey reads a BOM-less file in the system codepage, so smart quotes and dashes become mojibake in the UI on other machines. Four of the five files are clean; `WindowTweaks.ahk` retains 17 non-ASCII lines that are *functional* — the emoji sidebar labels (which double as the `Pages` map keys), the OSD speaker/mic glyphs, and the localized Picture-in-Picture title regex. Do not "fix" those without changing the UI and the PiP exclusion on purpose. Everything else, including default values written into `settings.ini`, stays ASCII.
+- **Keep `.ahk` files pure ASCII, no BOM.** AutoHotkey reads a BOM-less file in the system codepage, so smart quotes and dashes become mojibake in the UI on other machines. The non-ASCII lines that remain are *functional* — the OSD speaker/mic glyphs and the localized Picture-in-Picture title regex. The settings sidebar no longer has any: its emoji labels (which doubled as the `Pages` map keys) were replaced by plain-text keys and `Chr()` icon glyphs. Do not "fix" those without changing the UI and the PiP exclusion on purpose. Everything else, including default values written into `settings.ini`, stays ASCII.
 - **A Gui object's lifetime must cover its animation.** Pass the Gui object into the animation closure, not just its HWND, and finish with `Destroy()` — never `WinClose`, which only posts `WM_CLOSE` and leaves the object alive. `ShowSeamFlash` creates one of these on every single snap, so a leak here grows all session.
 - **Collect-then-delete when removing entries from a Map you are iterating.** Deleting the current item shifts the remainder under the enumerator index and silently skips the next one. `MC_Expire()` and `BreathingAnimatorStep()` show the pattern; `.Clone()` is the alternative.
 - **Guard long-running hotkey loops with `static busy`.** `#MaxThreadsPerHotkey 2` lets a second press interrupt the first, and two loops driving the same window from different origin snapshots fight each other.

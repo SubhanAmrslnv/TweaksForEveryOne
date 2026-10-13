@@ -82,10 +82,49 @@ ScreenMetrics() {
     return ScreenGeom
 }
 
+; Monitor rects in PHYSICAL pixels, cached. AutoHotkey 2.0 runs only system-DPI
+; aware, so with monitors at different scale factors MonitorGet/MouseGetPos hand
+; back rects that are virtualised per monitor and need not even touch each other.
+; The cursor edge bridge compares the pointer against the exact shared edge
+; between two monitors, so it reads both under a per-monitor-v2 thread context,
+; where the API returns real pixels. The CALLER must already have switched the
+; thread context (PerMonitorDpiBegin) - a rect list measured in one context and
+; compared in another is the bug this exists to avoid.
+global PhysMons := ""
+
+PhysicalMonitorRects() {
+    global PhysMons
+    if !IsObject(PhysMons) {
+        mons := []
+        try {
+            loop MonitorGetCount() {
+                MonitorGet(A_Index, &L, &T, &R, &B)
+                mons.Push({l: L, t: T, r: R, b: B})
+            }
+        }
+        PhysMons := mons
+    }
+    return PhysMons
+}
+
+; Switch this thread to DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 (-4) and return
+; the previous context for PerMonitorDpiEnd. 0 means the call is unavailable
+; (pre-1703) and the caller simply carries on in the process context.
+PerMonitorDpiBegin() {
+    try return DllCall("SetThreadDpiAwarenessContext", "ptr", -4, "ptr")
+    return 0
+}
+
+PerMonitorDpiEnd(prev) {
+    if (prev)
+        try DllCall("SetThreadDpiAwarenessContext", "ptr", prev, "ptr")
+}
+
 ; Boot() registers this for WM_DISPLAYCHANGE (0x007E).
 InvalidateScreenMetrics(*) {
-    global ScreenGeom, DimmerGuis, FocusModeEnabled, FocusBounds, FocusGuis
+    global ScreenGeom, PhysMons, DimmerGuis, FocusModeEnabled, FocusBounds, FocusGuis
     ScreenGeom := ""
+    PhysMons := ""
 
     ; Dropping the cache is not enough - the overlays SIZED from it are still on
     ; screen at the old geometry. After a resolution change or a monitor being

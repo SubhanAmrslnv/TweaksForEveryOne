@@ -40,6 +40,14 @@ requests**. There is no telemetry, no update check and no analytics.
 | `InputHook` with key-down notification | typing sounds, smooth caret, Spotlight/mic double-tap timing | only while one of those features is on |
 | `SetWinEventHook` (move/size start and end, menu popup) | magnetic snapping, glide, context-menu animation | always while running; out-of-context, no DLL is injected |
 | `RegisterShellHookWindow` | per-window cleanup, position memory, open animations | always while running |
+| `SetWinEventHook` (`EVENT_OBJECT_UNCLOAKED`) | start the open animation for windows that are created cloaked (Edge, Explorer, UWP apps) | always while running; out-of-context, no DLL is injected |
+
+The pointer itself is moved in exactly one place outside a gesture the user
+started: Infinite Cursor Wrap (off by default) calls `MouseMove`/`SetCursorPos` to
+carry it across an outer desktop edge or across the dead strip where two monitors
+of different height meet. It switches only its own thread to per-monitor DPI
+awareness (`SetThreadDpiAwarenessContext`) while it measures, so the coordinates
+are real pixels; nothing is changed process-wide or system-wide.
 
 No keystroke, clipboard content or window title is written to disk. The key hook
 uses only the virtual-key code, for timing and sound selection. The diagnostic
@@ -109,7 +117,11 @@ No script engine is used.
 | `settings.ini`, `window-positions.ini`, `snap.log`, `StealthPanic.ini`, `StealthPanicApps.txt`, `StealthPanic_Launch.log` | the program folder |
 | backups of changed system settings | `%LOCALAPPDATA%\Window Tweaks Backup` |
 
-The uninstaller removes all of them.
+A fresh install seeds `settings.ini` from `build\baseline-settings.ini` only
+when no `settings.ini` exists; an existing one is never overwritten by an install
+or an update. The uninstaller removes the program but KEEPS `settings.ini`,
+`window-positions.ini` and the Stealth Panic config, so a reinstall picks them up;
+`Uninstall.ps1 -RemoveSettings` deletes those too.
 
 ## If Bitdefender (or another product) blocks it
 
@@ -125,3 +137,13 @@ Do **not** disable protection or add exclusions yourself on a managed machine.
    setup executables are a common source of heuristic detections.
 4. If a single feature is the trigger, switch that feature off in the settings
    window. Every feature is independent.
+
+The development machine runs Bitdefender Endpoint Security Tools. No scan result
+is claimed here: an on-demand scan of the source and the built setup is
+something to run and record, for example (Bitdefender's own console tool, no
+exclusions, no policy change):
+
+    & "C:\Program Files\Bitdefender\Endpoint Security\product.console.exe" /c FileScan.OnDemand.RunScanTask custom path="<repo>\src"
+
+Exact command syntax depends on the installed version and on what the company
+policy allows from the console; if it is not permitted, ask IT to scan the files.

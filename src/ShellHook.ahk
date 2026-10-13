@@ -127,6 +127,15 @@ ShellEvent(wParam, lParam, *) {
                 ElasticEdgeStates.Delete(lParam)
             if ElasticAwayCounts.Has(lParam)
                 ElasticAwayCounts.Delete(lParam)
+            ; Open-animation state. A window closed mid-animation is otherwise
+            ; remembered as "already animated" for the session.
+            global PendingOpen, OpenAnimated, GhostHiddenWindows
+            if PendingOpen.Has(lParam)
+                PendingOpen.Delete(lParam)
+            if OpenAnimated.Has(lParam)
+                OpenAnimated.Delete(lParam)
+            if GhostHiddenWindows.Has(lParam)
+                GhostHiddenWindows.Delete(lParam)
             RS_RemoveHwnd(lParam)
             MC_RemoveHwnd(lParam)      ; MediaCore caches pid/exe per HWND forever otherwise
         }
@@ -167,14 +176,20 @@ ShellEvent(wParam, lParam, *) {
         ; a GPU-composited or full-screen one costs a redirection surface and can
         ; break exclusive full-screen presentation. Nothing we then chose not to
         ; animate should ever have paid that.
-        if (OpenAnim != "None" && WillAnimateOpen(hwnd)) {
-            try {
-                RS_SetAlphaLayer(hwnd, "open", 0.0, RS_PRI_ANIM)
-                RS_Commit()
+        ;
+        ; A window that is still DWM-cloaked here is not on screen yet and cannot
+        ; be judged; it is parked until EVENT_OBJECT_UNCLOAKED (WindowOpenAnim).
+        if (OpenAnim != "None") {
+            if OpenAnimWantsUncloak(hwnd)
+                OpenAnimPend(hwnd)
+            else if OpenAnimHide(hwnd)
                 GhostHiddenWindows[hwnd] := true
-            }
         }
-        SetTimer(() => HandleNewWindow(hwnd), -250)
+        ; A hidden window starts animating almost at once - it is invisible
+        ; until then, and the 250 ms this used to wait read as "the window
+        ; appeared, vanished, then slid in". A window we did not hide keeps the
+        ; longer settle, which only feeds position memory.
+        SetTimer(() => HandleNewWindow(hwnd), GhostHiddenWindows.Has(hwnd) ? -60 : -250)
     }
 }
 
@@ -194,22 +209,6 @@ HandleNewWindow(hwnd) {
     if !isHidden
         return
 
-    ; Re-check: 250 ms is long enough for the window to have been maximized,
-    ; closed or restyled since we hid it.
-    if (OpenAnim != "None" && WillAnimateOpen(hwnd)) {
-        if (OpenAnim == "Ghost Slide-In")
-            GhostSlideIn(hwnd, restoredRect)
-        else if (OpenAnim == "Portal Scale-In")
-            PortalScaleIn(hwnd, restoredRect)
-        else if (OpenAnim == "Window Unrolling")
-            UnrollWindow(hwnd, restoredRect)
-        ; Belt and braces: if the animation callback dies before its final
-        ; "Off", this un-hides the window anyway. A window we made invisible
-        ; must never be able to stay that way.
-        SetTimer(RevealWindow.Bind(hwnd), -1200)
-        return
-    }
-
-    RevealWindow(hwnd)
+    StartOpenAnimation(hwnd, restoredRect)
 }
 

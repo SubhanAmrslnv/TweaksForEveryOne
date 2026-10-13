@@ -88,6 +88,7 @@ global TUNE_SPEC := [
 , TS("wrapDelay"    , "wrap"     , "delay"       ,    250,     0,   2000,    25, 0, "multi"  , "Hold time"              , "ms against the edge, 0 = no wait")
 , TS("wrapSpeed"    , "wrap"     , "speed"       ,    250,     0,   3000,    50, 0, "multi"  , "Approach speed"         , "px/s minimum, 0 = any speed")
 , TS("wrapCool"     , "wrap"     , "cooldown"    ,    700,   100,   5000,    50, 0, "multi"  , "Cooldown"               , "ms before it can wrap again")
+, TS("wrapBridge"   , "wrap"     , "bridgespeed" ,    100,     0,   2000,    25, 0, "multi"  , "Dead-edge bridge speed" , "px/s toward a monitor edge with no neighbour at that height before the pointer is carried across, 0 = any approach")
 , TS("dimmerAlpha"  , "dimmer"   , "alpha"       ,     47,    10,     90,     5, 0, "multi"  , "Dim strength"           , "% on inactive monitors")
 , TS("breatheIdle"  , "breathing", "idle_mins"   ,     30,     1,   1440,     1, 0, "multi"  , "Breathe after"          , "minutes of inactivity")
 , TS("breatheAlpha" , "breathing", "alpha"       ,     70,    20,     95,     5, 0, "multi"  , "Breathe opacity"        , "% once dimmed")
@@ -255,8 +256,10 @@ TuneRow(pg, key, col, subCol, pos := "xm y+12") {
     ; leaves the text system-default black, which is unreadable on a dark one.
     C[key] := pg.AddEdit("x196 yp-3 w70 Background" EDITBG " c" EDITFG
         . (s.dec > 0 ? "" : " Number"), TuneText(key))
-    Sub(pg, 250, subCol, s.hint " (" TuneFormat(s, s.lo) "-" TuneFormat(s, s.hi)
-        . (s.step != 1 ? ", step " s.step : "") ")", "x+12 yp+3")
+    ; The step goes through TuneFormat like the bounds: a raw 0.05 stringifies
+    ; as 0.050000000000000003.
+    Sub(pg, 300, subCol, s.hint " (" TuneFormat(s, s.lo) "-" TuneFormat(s, s.hi)
+        . (s.step != 1 ? ", step " TuneFormat(s, s.step) : "") ")", "x+12 yp+3")
 }
 
 Clamp(v, lo, hi) => (v < lo) ? lo : (v > hi) ? hi : v

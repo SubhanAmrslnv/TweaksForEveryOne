@@ -3,13 +3,21 @@
     Removes Window Tweaks.
 
 .DESCRIPTION
-    Stops the program, deletes the shortcuts and the install folder.
+    Stops the program, deletes the shortcuts and the program files.
+
+    Your settings are KEPT by default - settings.ini, window-positions.ini and
+    the Stealth Panic config stay in the install folder, so a later reinstall
+    picks them up unchanged. Pass -RemoveSettings to delete them as well.
 
     AutoHotkey is left alone - remove it separately if you want:
         winget uninstall AutoHotkey.AutoHotkey
 #>
 [CmdletBinding()]
-param([switch]$Silent)
+param(
+    [switch]$Silent,
+    # Also delete settings.ini, window-positions.ini and the Stealth Panic config.
+    [switch]$RemoveSettings
+)
 
 $ErrorActionPreference = 'SilentlyContinue'
 function Say ($m, $c = 'Gray') { Write-Host "  $m" -ForegroundColor $c }
@@ -111,9 +119,23 @@ if (Test-Path $dest) {
         Say "You're running the copy inside the install folder." 'Yellow'
         Say "Delete it yourself once this window closes:" 'Yellow'
         Say $dest 'Yellow'
-    } else {
+    } elseif ($RemoveSettings) {
         Remove-Item $dest -Recurse -Force
-        Say "Deleted $dest" 'Green'
+        Say "Deleted $dest, including your settings" 'Green'
+    } else {
+        # Everything except the user's own configuration. Reinstalling then
+        # finds settings.ini and keeps it (see Install.ps1, "Settings precedence").
+        $keep = @('settings.ini', 'window-positions.ini', 'StealthPanic.ini', 'StealthPanicApps.txt')
+        Get-ChildItem $dest -Force | Where-Object { $keep -notcontains $_.Name } |
+            Remove-Item -Recurse -Force
+        $left = @(Get-ChildItem $dest -Force)
+        if ($left.Count -eq 0) {
+            Remove-Item $dest -Force
+            Say "Deleted $dest" 'Green'
+        } else {
+            Say "Removed the program. Kept your settings in $dest" 'Green'
+            Say "(run with -RemoveSettings to delete them too)" 'DarkGray'
+        }
     }
 } else {
     Say "Nothing installed at $dest"

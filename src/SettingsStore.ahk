@@ -15,6 +15,12 @@
 ; must let the program exit gracefully; taskkill without /F posts WM_CLOSE and
 ; lets OnExit(Bye) run, Stop-Process -Force does not and truncates the file.
 ;
+; WHERE A VALUE COMES FROM, in precedence order: the user's settings.ini; failing
+; that file, the installers' packaged baseline (build\baseline-settings.ini,
+; copied in only when no settings.ini exists - this file never sees it); failing
+; a key, the default written inline in LoadSettings() or the TUNE_SPEC row. Nothing
+; here ever rewrites a value the file already holds, so an update cannot reset one.
+;
 ; A SPACE FOLLOWED BY ; STARTS A COMMENT EVEN INSIDE A DOUBLE-QUOTED STRING.
 ; x := "a ; b" fails to load with Missing """; x := "a; b" is fine. That is why
 ; the shipped media_fallback default writes "a.exe; b.exe" and never

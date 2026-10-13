@@ -226,6 +226,23 @@ $un = Join-Path $repo 'Uninstall.ps1'
 if (Test-Path $un) { Copy-Item $un (Join-Path $dest 'Uninstall.ps1') -Force; $copied++ }
 Say "Copied $copied files" 'Green'
 
+# Settings precedence, the same rule as build\Setup.cs:
+#   1. an existing settings.ini is the user's and is NEVER touched - an update
+#      keeps every value, and keys added since are filled in by LoadSettings()
+#   2. otherwise the packaged baseline (build\baseline-settings.ini) seeds it
+#   3. otherwise the program writes its own factory defaults on first run
+# Copy-if-absent is idempotent: running the installer again changes nothing.
+$userIni     = Join-Path $dest 'settings.ini'
+$baselineIni = Join-Path $repo 'build\baseline-settings.ini'
+if (Test-Path $userIni) {
+    Say "Kept your existing settings.ini" 'Green'
+} elseif (Test-Path $baselineIni) {
+    Copy-Item $baselineIni $userIni
+    Say "Applied the packaged baseline settings" 'Green'
+} else {
+    Say "No baseline found - the program will write its defaults on first run" 'DarkGray'
+}
+
 # --------------------------------------------------------- 5. shortcuts ----
 Step 5 "Creating shortcuts"
 $WshShell = New-Object -ComObject WScript.Shell

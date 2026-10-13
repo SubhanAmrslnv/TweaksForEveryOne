@@ -110,7 +110,15 @@ foreach ($p in $payload) {
     # /resource:<file>,<name>  ->  name is what Setup.cs looks for
     $resArgs += '/resource:"{0}",res.{1}' -f $staged, $p.Res
 }
-Write-Host "  Embedding $($payload.Count) files ($($ahkFiles.Count) .ahk modules)" -ForegroundColor DarkGray
+# The settings baseline is NOT under res.: Extract() writes every res.* file
+# unconditionally, and a baseline written that way would overwrite the user's
+# settings.ini on every update. Setup.cs applies it only when none exists.
+$baseline = Join-Path $repo 'build\baseline-settings.ini'
+if (-not (Test-Path $baseline)) { throw "Missing payload file: build\baseline-settings.ini" }
+$stagedBase = Join-Path $stage 'baseline-settings.ini'
+Copy-Item $baseline $stagedBase -Force
+$resArgs += '/resource:"{0}",base.settings.ini' -f $stagedBase
+Write-Host "  Embedding $($payload.Count) files ($($ahkFiles.Count) .ahk modules) + settings baseline" -ForegroundColor DarkGray
 
 # --------------------------------------------------------------- compile ----
 $cscArgs = @(

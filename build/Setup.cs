@@ -214,6 +214,9 @@ namespace WindowTweaksSetup
                 Log("[3/5] Installing to " + dest);
                 int n = Extract(dest);
                 Log("      Wrote " + n + " files");
+                Log(ApplyBaselineSettings(dest)
+                    ? "      Applied the packaged baseline settings"
+                    : "      Kept your existing settings.ini");
 
                 Log("[4/5] Creating shortcuts");
                 string target = Path.Combine(dest, "WindowTweaks.ahk");
@@ -305,12 +308,18 @@ namespace WindowTweaksSetup
                     foreach (System.Management.ManagementObject obj in searcher.Get())
                     {
                         string cmd = obj["CommandLine"] as string;
-                        if (cmd != null && cmd.Contains("WindowTweaks.ahk"))
+                        if (cmd != null && (cmd.Contains("WindowTweaks.ahk") || cmd.Contains("StealthPanicUI.ahk")))
                         {
                             try
                             {
+                                // Ask first, force only as a fallback - the same
+                                // order as Install.ps1. Kill() skips the program's
+                                // exit handler, which is what writes pending
+                                // settings and hands back every window it changed.
                                 int pid = Convert.ToInt32(obj["ProcessId"]);
-                                Process.GetProcessById(pid).Kill();
+                                Process p = Process.GetProcessById(pid);
+                                RunVisible("taskkill.exe", "/PID " + pid);
+                                if (!p.WaitForExit(5000)) p.Kill();
                                 n++;
                             }
                             catch { }
@@ -320,6 +329,37 @@ namespace WindowTweaksSetup
             }
             catch { }
             return n;
+        }
+
+        static void RunVisible(string exe, string args)
+        {
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo(exe, args);
+                psi.UseShellExecute = false;
+                psi.CreateNoWindow = false;   // visible, like every child this setup runs (docs\SECURITY.md)
+                using (Process p = Process.Start(psi)) { p.WaitForExit(5000); }
+            }
+            catch { }
+        }
+
+        // Settings precedence, the same rule as Install.ps1: an existing
+        // settings.ini is the user's and is never touched; only a folder with
+        // none gets the packaged baseline. Idempotent by construction.
+        static bool ApplyBaselineSettings(string dest)
+        {
+            string target = Path.Combine(dest, "settings.ini");
+            if (File.Exists(target)) return false;
+            Assembly asm = Assembly.GetExecutingAssembly();
+            using (Stream s = asm.GetManifestResourceStream("base.settings.ini"))
+            {
+                if (s == null) return false;
+                using (FileStream fs = new FileStream(target, FileMode.CreateNew, FileAccess.Write))
+                {
+                    s.CopyTo(fs);
+                }
+            }
+            return true;
         }
 
         // ---- embedded files -------------------------------------------------

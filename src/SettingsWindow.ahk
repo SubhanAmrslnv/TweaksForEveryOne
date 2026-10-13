@@ -9,12 +9,13 @@
 ; into a checkbox goes through ToggleFeatureFlag() in FeatureToggles.ahk rather
 ; than reaching in here.
 ;
-; THIS FILE CARRIES THE ENCODING HAZARD. Ten lines are deliberately non-ASCII:
-; the emoji sidebar labels, which double as the Pages map keys, and the page
-; titles that must match them exactly. AutoHotkey reads a BOM-less file as UTF-8,
-; so this file must stay UTF-8 WITHOUT a BOM - Windows PowerShell 5.1 destroys
-; that (Set-Content/Out-File default to UTF-16LE, and -Encoding utf8 adds a BOM).
-; Mojibake here does not throw; it shows up as a nav page that never appears.
+; THE NAV IS PLAIN TEXT PLUS A GLYPH. The sidebar used emoji labels that doubled
+; as the Pages map keys, which made this the one file with an encoding hazard.
+; The keys are plain ASCII names now and the icons are Segoe Fluent Icons (MDL2
+; Assets as the fallback) written as Chr(codepoint) in NAV_PAGES, so the source
+; stays ASCII. Keep it that way: AutoHotkey reads a BOM-less file as UTF-8 and
+; Windows PowerShell 5.1 writes UTF-16LE or a BOM, and mojibake in a page key
+; does not throw - it shows up as a nav page that never appears.
 ;
 ; ApplyUi(writeBack): the debounced Change path passes false, LoseFocus and close
 ; pass true. Correcting an out-of-range number back into its control 600 ms after
@@ -28,7 +29,67 @@ global Win := "", Pages := Map(), NavItems := Map(), CurPage := ""
 
 global C := Map()
 
+; Sidebar order, label (= Pages key) and Segoe Fluent Icons glyph. The single
+; list the sidebar is built from.
+global NAV_PAGES := [
+    {name: "Window Management", icon: 0xE8A7},   ; OpenInNewWindow
+    {name: "Power Features",    icon: 0xE945},   ; LightningBolt
+    {name: "System & Media",    icon: 0xE767},   ; Volume
+    {name: "Multi-Monitor",     icon: 0xE7F4},   ; TVMonitor
+    {name: "Animation",         icon: 0xE7AD},   ; Rotate
+    {name: "Taskbar Clock",     icon: 0xE823},   ; Recent
+    {name: "Hot Corners",       icon: 0xE740},   ; FullScreen
+    {name: "General",           icon: 0xE713}    ; Setting
+]
+global NavHwnd := Map(), NavHover := ""
+global ACCENT := "", DIVIDER := "", HOVER := ""
+
 ; =========================================================== Settings window ===========================================================
+
+; Segoe UI Variable is the Windows 11 UI face; Segoe UI is the fallback on a
+; build without it. Checked once - the font list does not change under us.
+UiFont(kind := "text") {
+    static hasVar := ""
+    if (hasVar == "") {
+        hasVar := false
+        try hasVar := RegRead("HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts", "Segoe UI Variable (TrueType)") != ""
+    }
+    if !hasVar
+        return "Segoe UI"
+    return (kind == "display") ? "Segoe UI Variable Display" : "Segoe UI Variable Text"
+}
+
+IconFont() {
+    static face := ""
+    if (face == "") {
+        face := "Segoe MDL2 Assets"
+        try {
+            if (RegRead("HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts", "Segoe Fluent Icons (TrueType)") != "")
+                face := "Segoe Fluent Icons"
+        }
+    }
+    return face
+}
+
+; The user's Windows accent, in the shade Windows itself uses for the theme:
+; AccentPalette holds eight RGBA swatches from lightest to darkest, and dark
+; mode draws accents with Light 2 (index 1) while light mode uses Dark 1 (index
+; 4) - the raw base colour is often unreadable against one of the two.
+AccentColor(dark) {
+    try {
+        hex := RegRead("HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Accent", "AccentPalette")
+        i := dark ? 1 : 4
+        if (StrLen(hex) >= (i + 1) * 8)
+            return SubStr(hex, i * 8 + 1, 6)       ; RRGGBB of that swatch
+    }
+    return dark ? "4CC2FF" : "0067C0"
+}
+
+; "RRGGBB" -> COLORREF (0x00BBGGRR), for DwmSetWindowAttribute.
+RgbToColorRef(rgb) {
+    v := Integer("0x" rgb)
+    return ((v & 0xFF) << 16) | (v & 0xFF00) | ((v >> 16) & 0xFF)
+}
 
 IsDark() {
     try return (RegRead("HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
@@ -63,24 +124,33 @@ BuildWin() {
     global CurtainDropEnabled
     global TaskbarWaveEnabled, CustomClockEnabled, ClockLocation, ClockUnits, ClockAnchor, ClockWeatherEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled, CursorYawnEnabled, ShatterEnabled
     global RestoreEnabled, BreathingEnabled, OpenAnim, FlyMinimizeEnabled, RollUpEnabled, TrayMinimizeEnabled, BossKeyEnabled, AltDragEnabled, TaskbarScrollEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, MorphingPasteEnabled, ClipboardAppendEnabled, SmoothCaretEnabled, TypingSoundsEnabled, HotkeySoundsEnabled, CopyFeedbackEnabled, SmartCapsEnabled, SmartCapsAction, ParallaxEnabled, EP_Style, EP_IconSize
-    global NAV, SEL, SELF, FG, EDITBG, EDITFG
+    global NAV, SEL, SELF, FG, EDITBG, EDITFG, ACCENT, DIVIDER, HOVER, NavHwnd, NavHover
 
+    ; ---- Design tokens. Every colour in this window comes from this block.
+    ; Windows 11 neutrals: the sidebar is the darker "base" layer and the page
+    ; is the raised "layer" surface, separated by tone rather than by borders.
+    ; One accent - the user's own Windows accent - and it is used for exactly
+    ; one thing, the selected-page pill. No gradients, shadows or blur.
     dark := IsDark()
-    BG   := dark ? "1F1F1F" : "F5F5F5"      ; content background
-    NAV  := dark ? "171717" : "E6E6E6"      ; sidebar
-    FG   := dark ? "FFFFFF" : "141414"      ; primary text
-    cSub  := dark ? "9A9A9A" : "5A5A5A"      ; secondary text
-    SEL  := dark ? "0F5FA6" : "CCE4F7"      ; selected nav
-    SELF := dark ? "FFFFFF" : "0A0A0A"      ; selected nav text
+    BG      := dark ? "272727" : "FBFBFB"   ; page surface
+    NAV     := dark ? "202020" : "F3F3F3"   ; sidebar
+    FG      := dark ? "FFFFFF" : "1B1B1B"   ; primary text
+    cSub    := dark ? "A0A0A0" : "5F5F5F"   ; secondary text
+    SEL     := dark ? "2D2D2D" : "EAEAEA"   ; selected nav fill
+    SELF    := FG                           ; selected nav text
+    HOVER   := dark ? "292929" : "EDEDED"   ; hovered nav fill
+    DIVIDER := dark ? "383838" : "E5E5E5"   ; hairlines
+    ACCENT  := AccentColor(dark)
     ; EVERY Edit AND DropDownList NEEDS BOTH A BACKGROUND AND A TEXT COLOUR.
     ; The Gui BackColor reaches an input control's background but never its
     ; text, which stays the system default black - so in dark mode every input
     ; was black on near-black and could only be read while it was selected and
     ; the highlight inverted it. TuneRow builds most of them, hence the global.
-    EDITBG := dark ? "2B2B2B" : "FFFFFF"    ; input background
-    EDITFG := dark ? "F0F0F0" : "141414"    ; input text
+    EDITBG := dark ? "2D2D2D" : "FFFFFF"    ; input background
+    EDITFG := dark ? "F0F0F0" : "1B1B1B"    ; input text
 
-    W := 780, H := 700, SW := 196
+    ; 8 px grid. The sidebar is wide enough for the longest label at 125%.
+    W := 880, H := 700, SW := 232
 
     g := Gui("+Resize +OwnDialogs", "Window Tweaks")
     g.OnEvent("Size", Gui_Size)
@@ -88,29 +158,42 @@ BuildWin() {
     g.BackColor := BG
     g.MarginX := 0, g.MarginY := 0
     Win := g
-    Pages := Map(), NavItems := Map(), C := Map()
+    Pages := Map(), NavItems := Map(), C := Map(), NavHwnd := Map(), NavHover := ""
 
     ; --- sidebar ---
     g.SidebarBg := g.AddText("x0 y0 w" SW " h" H " Background" NAV)
-    g.SetFont("s13 bold", "Segoe UI")
-    g.AddText("x20 y22 w160 c" FG " Background" NAV, "Window Tweaks")
-    g.SetFont("s8 norm", "Segoe UI")
-    g.AddText("x21 y50 w160 c" cSub " Background" NAV, "version " VERSION)
+    g.SetFont("s12 w600", UiFont("display"))
+    g.AddText("x20 y24 w" (SW - 40) " c" FG " Background" NAV, "Window Tweaks")
+    g.SetFont("s9 norm", UiFont())
+    g.AddText("x20 y50 w" (SW - 40) " c" cSub " Background" NAV, "Version " VERSION)
 
-    g.SetFont("s10 norm", "Segoe UI")
     ny := 88
-    for name in ["🪟 Window Management", "⚡ Power Features", "🔊 System & Media", "🖥️ Multi-Monitor", "✨ Animation", "🕒 Taskbar Clock", "📐 Hot Corners", "⚙️ General"] {
-        t := g.AddText("x0 y" ny " w" SW " h42 +0x200 c" FG " Background" NAV, "    " name)
-        t.OnEvent("Click", NavClick.Bind(name))
-        NavItems[name] := t
-        ny += 42
+    for item in NAV_PAGES {
+        ; One row = accent pill + icon cell + label cell. Statics cannot be
+        ; rounded, so the row is three flat rectangles that recolour together.
+        pill := g.AddText("x8 y" (ny + 11) " w3 h18 Background" NAV)
+        g.SetFont("s12 norm", IconFont())
+        ic := g.AddText("x11 y" ny " w35 h40 +0x200 Center c" FG " Background" NAV, Chr(item.icon))
+        g.SetFont("s10 norm", UiFont())
+        ; +0x80 SS_NOPREFIX: "System & Media" would otherwise render the & as
+        ; a mnemonic underline under the M.
+        lb := g.AddText("x46 y" ny " w" (SW - 54) " h40 +0x200 +0x80 c" FG " Background" NAV, item.name)
+        ic.OnEvent("Click", NavClick.Bind(item.name))
+        lb.OnEvent("Click", NavClick.Bind(item.name))
+        NavItems[item.name] := {pill: pill, icon: ic, label: lb}
+        NavHwnd[ic.Hwnd] := item.name
+        NavHwnd[lb.Hwnd] := item.name
+        ny += 44
     }
 
-    g.SetFont("s8", "Segoe UI")
-    g.HintLbl := g.AddText("x20 y" (H - 40) " w160 c" cSub " Background" NAV, "Shift+Alt+W  opens this")
+    g.SetFont("s9 norm", UiFont())
+    g.HintLbl := g.AddText("x20 y" (H - 40) " w" (SW - 40) " c" cSub " Background" NAV, "Shift+Alt+W  opens this")
 
     ; --- content ---
-    CX := SW + 28, CW := W - SW - 56
+    ; SelectPage places pages at PageX/PageW, so the layout is defined once
+    ; here instead of being repeated as literals there.
+    CX := SW + 32, CW := W - SW - 64
+    g.PageX := CX, g.PageW := CW
 
     ; Registers under 'name' as well as building the page, so the nav key is
     ; written once. It used to be repeated in a trailing Pages[...] := pg, and
@@ -118,13 +201,13 @@ BuildWin() {
     CreatePage(name) {
         pg := Gui("+Parent" Win.Hwnd " -Caption")
         pg.BackColor := BG
-        pg.MarginX := 0, pg.MarginY := 26
+        pg.MarginX := 0, pg.MarginY := 32
         Pages[name] := pg
         return pg
     }
 
     ; ---- Window Management
-    pg := CreatePage("🪟 Window Management")
+    pg := CreatePage("Window Management")
     Head(pg, CW, FG, "Window Management")
     Sub(pg, CW, cSub, "Fluid, physics-based movement and snapping.", "xm y+10")
     
@@ -179,7 +262,7 @@ BuildWin() {
     b.OnEvent("Click", (*) => ForgetPositions())
 
     ; ---- Power Features
-    pg := CreatePage("⚡ Power Features")
+    pg := CreatePage("Power Features")
     Head(pg, CW, FG, "Power Features")
     Sub(pg, CW, cSub, "Advanced overlays, widgets, and shortcuts.", "xm y+10")
     
@@ -211,7 +294,7 @@ BuildWin() {
     Sub(pg, CW, cSub, "Press Space on any file in Explorer to preview files instantly.", "xm y+8")
 
     ; ---- System & Media
-    pg := CreatePage("🔊 System & Media")
+    pg := CreatePage("System & Media")
     Head(pg, CW, FG, "System & Media")
     Sub(pg, CW, cSub, "Audio, typing, and system-wide controls.", "xm y+10")
 
@@ -271,7 +354,7 @@ BuildWin() {
     Sub(pg, CW, cSub, "Executable names, comma or semicolon separated - used when no audio API reports playback.", "xm y+6")
 
     ; ---- Multi-Monitor
-    pg := CreatePage("🖥️ Multi-Monitor")
+    pg := CreatePage("Multi-Monitor")
     Head(pg, CW, FG, "Multi-Monitor & Visuals")
     Sub(pg, CW, cSub, "Dual/Triple monitor optimizations and focus effects.", "xm y+10")
     
@@ -307,8 +390,9 @@ BuildWin() {
     Sub(pg, CW, cSub, "Shows a 2x zoom loupe when selecting text.", "xm y+8")
     
     C["wrap"] := Box(pg, CW, FG, "Infinite Cursor Wrap (Shift+Alt+I)", InfiniteWrapEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Push the cursor into the left/right edge of the desktop and hold to teleport to the other side.", "xm y+8")
+    Sub(pg, CW, cSub, "Push the cursor into the left/right edge of the desktop and hold to teleport to the other side. Also carries the pointer across the dead strip where two monitors of different height meet.", "xm y+8")
     TuneRow(pg, "wrapTol",   FG, cSub)
+    TuneRow(pg, "wrapBridge", FG, cSub)
     TuneRow(pg, "wrapDelay", FG, cSub)
     TuneRow(pg, "wrapSpeed", FG, cSub)
     TuneRow(pg, "wrapCool",  FG, cSub)
@@ -328,7 +412,7 @@ BuildWin() {
     ; ---- Animation & Timing
     ; The cross-cutting motion values. Everything on this page affects more than
     ; one feature, so it does not belong under any single checkbox.
-    pg := CreatePage("✨ Animation")
+    pg := CreatePage("Animation")
     Head(pg, CW, FG, "Animation & Timing")
     Sub(pg, CW, cSub, "How long things take and how far they move. Lower is snappier.", "xm y+10")
 
@@ -354,7 +438,7 @@ BuildWin() {
     TuneRow(pg, "transMin",  FG, cSub)
 
     ; ---- Taskbar Clock
-    pg := CreatePage("🕒 Taskbar Clock")
+    pg := CreatePage("Taskbar Clock")
     Head(pg, CW, FG, "Taskbar Clock")
 
     C["customclock"] := Box(pg, CW, FG, "Show a clock block on the taskbar", CustomClockEnabled, "xm y+16")
@@ -383,7 +467,7 @@ BuildWin() {
 
 
     ; ---- Hot Corners
-    pg := CreatePage("📐 Hot Corners")
+    pg := CreatePage("Hot Corners")
     Head(pg, CW, FG, "macOS Hot Corners")
     Sub(pg, CW, cSub, "Throw your mouse into the corners of the screen to trigger actions.", "xm y+10")
     
@@ -412,7 +496,7 @@ BuildWin() {
     Lbl(pg, FG, "Bottom Right:", "xm y+14", 130)
     C["corner_br"] := pg.AddDropDownList("x140 yp-3 w180 Background" EDITBG " c" EDITFG " Choose" IndexOf(CORNER_ACTIONS, HotCornerBR), CORNER_ACTIONS)
     ; ---- General
-    pg := CreatePage("⚙️ General")
+    pg := CreatePage("General")
     Head(pg, CW, FG, "General Settings")
     
     C["auto"] := Box(pg, CW, FG, "Start with Windows", IsAutoStart(), "xm y+16")
@@ -482,8 +566,14 @@ BuildWin() {
         }
     }
 
+    ; Window chrome, both themes: rounded corners (DWMWA_WINDOW_CORNER_PREFERENCE
+    ; = DWMWCP_ROUND), the matching title-bar mode, and a caption painted in the
+    ; sidebar colour so the title bar reads as part of the window. Each is a
+    ; no-op on a build that lacks the attribute, hence try.
+    try DllCall("dwmapi\DwmSetWindowAttribute", "ptr", g.Hwnd, "uint", 33, "int*", 2, "uint", 4)
+    try DllCall("dwmapi\DwmSetWindowAttribute", "ptr", g.Hwnd, "uint", 20, "int*", dark ? 1 : 0, "uint", 4)
+    try DllCall("dwmapi\DwmSetWindowAttribute", "ptr", g.Hwnd, "uint", 35, "int*", RgbToColorRef(NAV), "uint", 4)
     if dark {
-        DllCall("dwmapi\DwmSetWindowAttribute", "ptr", g.Hwnd, "uint", 20, "int*", 1, "uint", 4)
         for ctl in g
             DarkThemeControl(ctl)
         for pname, cpg in Pages {
@@ -496,9 +586,10 @@ BuildWin() {
     g.IsDarkTheme := dark
     OnMessage(0x001A, OnSettingChange)    ; WM_SETTINGCHANGE
     OnMessage(0x0100, OnSettingsKeyDown)  ; WM_KEYDOWN
+    OnMessage(0x0200, OnSettingsMouseMove) ; WM_MOUSEMOVE - nav hover
 
     g.Show("w" W " h" H)
-    SelectPage("🪟 Window Management")
+    SelectPage("Window Management")
 }
 
 ; A DropDownList reports its Type as "DDL", not "ComboBox", so the dark theme
@@ -514,33 +605,42 @@ DarkThemeControl(ctl) {
         try DllCall("uxtheme\SetWindowTheme", "ptr", ctl.Hwnd, "wstr", theme, "ptr", 0)
 }
 
+; Text helpers set +0x80 (SS_NOPREFIX) so an & in a label renders as itself.
+; Page title, plus a hairline under it that separates the title from the
+; settings. Type ramp: 20 title / 10 body / 9 caption.
 Head(pg, w, col, txt, pos := "xm") {
-    pg.SetFont("s14 bold", "Segoe UI")
-    t := pg.AddText(pos " w" w " c" col, txt)
-    pg.SetFont("s9 norm", "Segoe UI")
+    global DIVIDER
+    pg.SetFont("s20 w600", UiFont("display"))
+    t := pg.AddText(pos " w" w " +0x80 c" col, txt)
+    pg.AddText("xm y+12 w" w " h1 Background" DIVIDER)
+    pg.SetFont("s9 norm", UiFont())
     return t
 }
 
 Sub(pg, w, col, txt, pos := "xm y+8") {
-    pg.SetFont("s9 norm", "Segoe UI")
-    return pg.AddText(pos " w" w " c" col, txt)
+    pg.SetFont("s9 norm", UiFont())
+    return pg.AddText(pos " w" w " +0x80 c" col, txt)
 }
 
 ; `w` defaults to the original 160 so every existing call is unchanged; the
 ; generated tuning rows pass a wider label because their names are longer.
 Lbl(pg, col, txt, pos := "xm y+16", w := 160) {
-    pg.SetFont("s10 norm", "Segoe UI")
-    t := pg.AddText(pos " w" w " c" col, txt)
-    pg.SetFont("s9 norm", "Segoe UI")
+    pg.SetFont("s10 norm", UiFont())
+    t := pg.AddText(pos " w" w " +0x80 c" col, txt)
+    pg.SetFont("s9 norm", UiFont())
     return t
 }
 
 Box(pg, w, col, txt, checked, pos := "xm y+16") {
-    pg.SetFont("s10 norm", "Segoe UI")
+    pg.SetFont("s10 norm", UiFont())
     ; 'ctl', not 'c' - AHK identifiers are case-insensitive, so 'c' is the
     ; global control Map C.
+    ; A checkbox has no SS_NOPREFIX, so a lone & would underline the next
+    ; letter and vanish ("Window Throw  Catch"). Normalise to exactly one
+    ; escaped && whether the caller wrote & or && already.
+    txt := StrReplace(StrReplace(txt, "&&", "&"), "&", "&&")
     ctl := pg.AddCheckbox(pos " w" w " c" col (checked ? " Checked" : ""), txt)
-    pg.SetFont("s9 norm", "Segoe UI")
+    pg.SetFont("s9 norm", UiFont())
     return ctl
 }
 
@@ -564,25 +664,60 @@ UpdatePageHint() {
 NavClick(name, *) => SelectPage(name)
 
 SelectPage(name) {
-    global Pages, NavItems, CurPage, Win, NAV, SEL, SELF, FG
+    global Pages, NavItems, CurPage, Win, NAV, SEL, ACCENT, NavHover
     if !Pages.Has(name)
         return
 
     for pname, pg in Pages {
         if (pname = name) {
             y_off := pg.HasOwnProp("Y_Offset") ? pg.Y_Offset : 0
-            pg.Show("x224 y" y_off " w528 NoActivate")
+            pg.Show("x" Win.PageX " y" y_off " w" Win.PageW " NoActivate")
         } else {
             pg.Hide()
         }
     }
     
     for pname, item in NavItems {
-        item.Opt((pname = name) ? "Background" SEL " c" SELF : "Background" NAV " c" FG)
-        item.Redraw()
+        on := (pname = name)
+        NavPaint(pname, on ? SEL : NAV)
+        item.pill.Opt("Background" (on ? ACCENT : NAV))
+        item.pill.Redraw()
     }
     CurPage := name
+    NavHover := ""
     UpdatePageHint()
+}
+
+; Recolour one nav row's fill. Text colour never changes - selection is carried
+; by the fill and the accent pill, not by recolouring the label.
+NavPaint(name, bg) {
+    global NavItems, FG
+    if !NavItems.Has(name)
+        return
+    it := NavItems[name]
+    for ctl in [it.icon, it.label] {
+        ctl.Opt("Background" bg " c" FG)
+        ctl.Redraw()
+    }
+}
+
+; Hover feedback on the sidebar. Process-wide like every OnMessage handler, so it
+; keys on the nav hwnds it built and returns nothing - the PiP handlers share
+; WM_MOUSEMOVE and must still see it.
+OnSettingsMouseMove(wParam, lParam, msg, hwnd) {
+    global Win, NavHwnd, CurPage, NavHover, NAV, HOVER
+    if !Win
+        return
+    name := NavHwnd.Has(hwnd) ? NavHwnd[hwnd] : ""
+    if (name = CurPage)
+        name := ""                       ; the selected row keeps its own fill
+    if (name == NavHover)
+        return
+    if (NavHover != "" && NavHover != CurPage)
+        NavPaint(NavHover, NAV)
+    if (name != "")
+        NavPaint(name, HOVER)
+    NavHover := name
 }
 
 Gui_Size(thisGui, minMax, width, height) {
@@ -666,7 +801,7 @@ CyclePage(dir) {
     global NavItems, CurPage
     order := []
     for name, item in NavItems {
-        item.GetPos(, &y)
+        item.label.GetPos(, &y)
         i := 1
         while (i <= order.Length && order[i].y < y)
             i++
@@ -748,6 +883,7 @@ CloseWin(g) {
     OnMessage(0x020A, OnMouseWheel, 0)
     OnMessage(0x001A, OnSettingChange, 0)
     OnMessage(0x0100, OnSettingsKeyDown, 0)
+    OnMessage(0x0200, OnSettingsMouseMove, 0)
     try g.Destroy()
     Win := ""
 }

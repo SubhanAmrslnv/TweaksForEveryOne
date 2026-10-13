@@ -50,6 +50,9 @@ Boot() {
     ; initialiser so the hooks cannot start delivering before the state their
     ; callbacks read has been declared.
     InstallDragHooks()
+    ; EVENT_OBJECT_UNCLOAKED, so windows that are created cloaked (Chromium,
+    ; UWP, Explorer) still get their open animation once they appear.
+    InstallOpenAnimHook()
 
     ; The shell tells us when a window is created, so there is no polling timer.
     OnMessage(DllCall("RegisterWindowMessage", "str", "SHELLHOOK", "uint"), ShellEvent)
@@ -280,6 +283,7 @@ Bye(*) {
         try DllCall("UnhookWinEvent", "ptr", MenuEventHook)
     if (MenuEventCb)
         try CallbackFree(MenuEventCb)
+    try RemoveOpenAnimHook()
 
     ; Both of these are normally deferred to an idle timer. On the way out there
     ; is no idle, so write straight through - a queued timer would never fire.

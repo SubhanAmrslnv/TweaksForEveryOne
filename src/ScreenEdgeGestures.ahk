@@ -103,6 +103,14 @@ CursorWrapMonitorStep() {
         return
     }
 
+    ; Interior dead edges first. A bridge moves the pointer, so the outer-wrap
+    ; sample taken above is stale and this tick is over.
+    if (CursorBridgeStep(now)) {
+        contactSide := 0
+        MouseGetPos(&lastX, &lastY)
+        return
+    }
+
     g := ScreenMetrics()
     tol := Tune("wrapTol")
 
@@ -185,6 +193,146 @@ CursorWrapMonitorStep() {
     cooldownUntil := now + Tune("wrapCool")
     contactSide := 0
     lastX := tx, lastY := ty
+}
+
+; ====== Dead-edge bridge ======
+;
+; THE ASYMMETRY THIS FIXES IS WINDOWS', NOT THE WRAP'S. Measured on the owner's
+; desk: DISPLAY1 0,0 1920x1200 and DISPLAY2 1920,58 1920x1080. Every point of
+; DISPLAY2's left edge has DISPLAY1 beside it, so right-to-left always crosses.
+; DISPLAY1's right edge has NOTHING beside it for y < 58 and y >= 1138, and
+; Windows clamps the pointer there - left-to-right only crossed if the hand
+; happened to be inside the overlap. The wrap never helped: it only ever looks
+; at the outer edges of the whole desktop.
+;
+; A dead edge is an edge band of the pointer's monitor where the pixel just
+; beyond is on no monitor, but another monitor shares that edge LINE somewhere
+; else. Reaching it while still moving toward it carries the pointer onto the
+; nearest point of that neighbour. The rule is written once per axis and
+; mirrored, reads real rects rather than monitor indices (enumeration order is
+; not physical order), and so holds for any count, vertical stacks and negative
+; coordinates alike.
+;
+; INTENT IS THE MOTION THAT ARRIVED, NOT SPEED AS A HURDLE. The dead strip on a
+; maximised window's side is where its close box lives, and a pointer that
+; decelerates onto a close box arrives at a crawl. wrap.bridgespeed (100 px/s)
+; is far below any ordinary crossing, which is the point: the old complaint was
+; having to move FAST. Sampled the tick before contact, because once Windows
+; clamps the pointer its measured speed is zero.
+;
+; Measured and moved in PHYSICAL pixels under a per-monitor-v2 thread context -
+; see PhysicalMonitorRects(). SetCursorPos rather than MouseMove for the same
+; reason: MouseMove normalises through the process's system-DPI metrics.
+;
+; Returns true when it moved the pointer.
+CursorBridgeStep(now) {
+    static lastX := 0, lastY := 0, lastAt := 0, cooldownUntil := 0
+    moved := false
+    prevCtx := PerMonitorDpiBegin()
+    try {
+        pt := Buffer(8, 0)
+        if !DllCall("GetCursorPos", "ptr", pt)
+            return false
+        mx := NumGet(pt, 0, "int"), my := NumGet(pt, 4, "int")
+        px := lastX, py := lastY, pAt := lastAt
+        lastX := mx, lastY := my, lastAt := now
+
+        ; A sample older than a few ticks (the timer was paused by a drag, a
+        ; button, Game Mode) describes some earlier gesture, not this one.
+        if (!pAt || now <= pAt || now - pAt > 100 || now < cooldownUntil)
+            return false
+
+        mons := PhysicalMonitorRects()
+        if (mons.Length < 2)
+            return false
+        cur := ""
+        for m in mons {
+            if (mx >= m.l && mx < m.r && my >= m.t && my < m.b) {
+                cur := m
+                break
+            }
+        }
+        if !IsObject(cur)
+            return false
+
+        tol := Tune("wrapTol")
+        minSpeed := Tune("wrapBridge")
+        dt := now - pAt
+        vx := (mx - px) * 1000 / dt, vy := (my - py) * 1000 / dt
+
+        ; One table, four mirrored rows: which band, which way is "toward", and
+        ; the pixel just past the edge. Bounds are exclusive on r/b.
+        sides := [
+            {inBand: mx >= cur.r - 1 - tol, v:  vx, ox: cur.r,     oy: my,        axis: "x", line: cur.r, dir:  1},
+            {inBand: mx <= cur.l + tol,     v: -vx, ox: cur.l - 1, oy: my,        axis: "x", line: cur.l, dir: -1},
+            {inBand: my >= cur.b - 1 - tol, v:  vy, ox: mx,        oy: cur.b,     axis: "y", line: cur.b, dir:  1},
+            {inBand: my <= cur.t + tol,     v: -vy, ox: mx,        oy: cur.t - 1, axis: "y", line: cur.t, dir: -1}
+        ]
+        for s in sides {
+            if (!s.inBand)
+                continue
+            ; Arrived moving toward it. With 0 any motion toward the edge counts,
+            ; but a pointer simply resting there never does.
+            if (s.v <= 0 || s.v < minSpeed)
+                continue
+            if (CursorPointOnAnyMonitor(mons, s.ox, s.oy))
+                continue                     ; Windows crosses this one itself
+
+            ; Nearest neighbour that shares this edge line and overlaps on the
+            ; other axis. 1 px of slack absorbs rounding between scale factors.
+            best := "", bestD := 0
+            for m in mons {
+                if (m == cur)
+                    continue
+                if (s.axis == "x") {
+                    near := (s.dir > 0) ? m.l : m.r
+                    if (Abs(near - s.line) > 1 || m.b <= cur.t || m.t >= cur.b)
+                        continue
+                    d := (my < m.t) ? m.t - my : (my >= m.b ? my - m.b + 1 : 0)
+                } else {
+                    near := (s.dir > 0) ? m.t : m.b
+                    if (Abs(near - s.line) > 1 || m.r <= cur.l || m.l >= cur.r)
+                        continue
+                    d := (mx < m.l) ? m.l - mx : (mx >= m.r ? mx - m.r + 1 : 0)
+                }
+                if (!IsObject(best) || d < bestD)
+                    best := m, bestD := d
+            }
+            if !IsObject(best)
+                continue                     ; a true outer edge - the wrap's job
+
+            ; Land clear of the neighbour's own edge band, at the closest point
+            ; to where the pointer was heading.
+            inset := tol + 2
+            if (s.axis == "x") {
+                tx := (s.dir > 0) ? best.l + inset : best.r - 1 - inset
+                ty := Max(best.t + inset, Min(my, best.b - 1 - inset))
+            } else {
+                ty := (s.dir > 0) ? best.t + inset : best.b - 1 - inset
+                tx := Max(best.l + inset, Min(mx, best.r - 1 - inset))
+            }
+            if DllCall("SetCursorPos", "int", tx, "int", ty) {
+                lastX := tx, lastY := ty
+                cooldownUntil := now + 150
+                moved := true
+            }
+            break
+        }
+    } catch {
+        ; A throw here would kill the wrap timer for the session.
+        moved := false
+    } finally {
+        PerMonitorDpiEnd(prevCtx)
+    }
+    return moved
+}
+
+CursorPointOnAnyMonitor(mons, x, y) {
+    for m in mons {
+        if (x >= m.l && x < m.r && y >= m.t && y < m.b)
+            return true
+    }
+    return false
 }
 
 HotCornersMonitorStep() {

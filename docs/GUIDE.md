@@ -217,7 +217,7 @@ Seven pages down the left:
 | **Window Management** | Snapping (distance, speed response, edge stickiness, corner boost, neighbour reach), ice glide (throw, slide time, throw distance, settle overshoot), drag opacity floor, tiling grid gap, rubber-band travel, alt-drag, fly-to-mouse minimize, grab & pan, roll-up, position memory |
 | **Power Features** | Spotlight, live PiP, ghost window (opacity, fade range, click range), always on bottom, middle-click close, minimize to tray, quick folder jump, Quick Look |
 | **System & Media** | Taskbar volume scroll, volume OSD (step, hold time, opacity), mic kill-switch, boss key, text expander, smart CapsLock, plain-text paste, "never dim these apps" |
-| **Multi-Monitor** | Cursor wrap (tolerance, hold time, approach speed, cooldown), focus dimmer strength, breathing (delay, opacity), shake to find, cursor yawn, keystroke and hotkey sounds (volume each, shared pitch), new-window animation |
+| **Multi-Monitor** | Cursor wrap (tolerance, dead-edge bridge speed, hold time, approach speed, cooldown), focus dimmer strength, breathing (delay, opacity), shake to find, cursor yawn, keystroke and hotkey sounds (volume each, shared pitch), new-window animation |
 | **Animation** | Durations and intensities shared across features — open animation, snap bounce, roll-up, gravity close, overlay fade, OSD slide, focus-mode dim / softness / corners, transparency wheel step and floor |
 | **Hot Corners** | Enable, corner size, hold time, plus an action per corner |
 | **General** | Start with Windows, gravity drop on close, debug log, smart auto-hide taskbar, taskbar style / icon size, restart Explorer, open log, open folder, hotkeys, this guide |
@@ -241,6 +241,28 @@ speed at `0` switches that one gate off.
 
 Opacities are always a percentage, durations always milliseconds, distances
 always pixels — the same everywhere in the app.
+
+### Moving between monitors of different heights
+
+When two monitors side by side are different heights, or one sits lower than the
+other, part of the taller one's inner edge has nothing next to it, and Windows
+stops the pointer there. With Infinite Cursor Wrap on (`Shift+Alt+I`), pushing
+into that strip at any normal speed carries the pointer onto the nearest point of
+the neighbouring monitor. Approaching slowly, for example onto a maximised
+window's close button, leaves it where it is. The threshold is **Dead-edge bridge
+speed** on the Multi-Monitor page (100 px/s; `0` = any approach).
+
+To check it on your own desk:
+
+1. Push the pointer across every inner monitor edge, both ways, at the very top
+   and the very bottom of the screen as well as the middle.
+2. Do it at a normal speed, then repeat back and forth without pausing. It should
+   never stick or bounce back.
+3. Slowly park the pointer on the top-right close button of a maximised window
+   next to the inner edge. It must stay put.
+4. With three monitors, go left → centre → right and back.
+5. Unplug and replug a monitor (or change a scale factor), then repeat step 1.
+6. Toggle wrap off and on with `Shift+Alt+I`. Off means Windows' own behaviour.
 
 ### Things that ship switched off
 
