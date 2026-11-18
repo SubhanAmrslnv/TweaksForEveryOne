@@ -35,7 +35,7 @@
 ;
 ; Work areas are read live rather than cached: the work area changes when the
 ; taskbar auto-hides and that raises no WM_DISPLAYCHANGE, so a cached copy would
-; be stale exactly when Smart Auto-Hide is on.
+; be stale whenever the taskbar is set to auto-hide.
 
 ; =========================================================== Window layout ===========================================================
 ; Keyboard positioning. Every function in this section is a ONE-SHOT producer:

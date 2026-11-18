@@ -12,10 +12,10 @@ software.** The program and its installer exe are unsigned.
   `build\Setup.cs` and the tuning scripts run as the signed-in user and write
   only under the user profile (`HKCU`, `%LOCALAPPDATA%`, the Start Menu and
   Startup folders).
-- **The single exception is opt-in:** `Install.ps1 -ExplorerPatcher` (or answering
-  `y` to its prompt) runs the third-party ExplorerPatcher setup, which asks for
-  UAC itself and installs into `C:\Windows`. It is never installed by default, never
-  by `-Silent`, and never by `Setup.exe`.
+- **No third-party shell extensions.** The program and its installers do not
+  download, install or configure ExplorerPatcher or any other shell replacement.
+  (Older versions could, as an opt-in. If you installed it that way, it stays
+  installed and keeps its own settings; uninstall it through its own setup.)
 - Hotkeys and window effects do not work against elevated windows unless the
   program itself is elevated. That is a Windows rule, and the program does not
   try to get around it.
@@ -25,7 +25,6 @@ software.** The program and its installer exe are unsigned.
 | When | Endpoint | What is sent |
 |---|---|---|
 | Install, only if AutoHotkey v2 is missing | winget community source (`winget install AutoHotkey.AutoHotkey`) | winget's own traffic |
-| `Install.ps1 -ExplorerPatcher` only | `github.com/valinet/ExplorerPatcher/releases/download/26100.8457.70.3/ep_setup.exe` | nothing; the file's SHA-256 is checked against a constant before it is run, and the download is deleted afterwards |
 | Taskbar clock, only when weather is enabled **and** a city is set | `geocoding-api.open-meteo.com`, `api.open-meteo.com` | the city name once, then its coordinates about every 15 minutes |
 | Spotlight, only when the user presses Enter on text that is not a file or command | the default browser opens a Google search | the typed text, by the browser |
 
@@ -63,8 +62,9 @@ an executable name.
 
 Opacity, position, size, z-order and clipping region of other applications'
 windows are changed only through `src\RenderCore.ahk`, and every one of them is
-restored when the program exits normally, including tray -> Restart. Always-on-
-bottom re-parents a window to the desktop (`SetParent`) and is undone on exit.
+restored when the program exits normally, including tray -> Restart. Nothing
+re-parents another application's window, and nothing moves, hides or resizes
+Explorer's own surfaces (the taskbar, notifications, the desktop).
 `Shift+Alt+Y` restores every window the program is holding at any time. A forced
 kill (`Stop-Process -Force`, `taskkill /F`) skips that restore. Close the program
 from the tray, or with `taskkill` without `/F`.
@@ -77,11 +77,9 @@ All writes are under `HKCU`; nothing is written under `HKLM`.
 |---|---|---|
 | `Control Panel\Desktop\DragFullWindows` | installer and program, required for the glide | `Uninstall.ps1` restores the backed-up value |
 | `Control Panel\Desktop`, `Mouse`, `WindowMetrics`, `Explorer\Advanced`, `Explorer`, `Themes\Personalize`, `DWM` | `scripts\Apply-Windows-Tuning.ps1`, only when tuning is chosen | `scripts\Restore-Windows-Tuning.ps1` (backup kept in `%LOCALAPPDATA%\Window Tweaks Backup`) |
-| `Software\ExplorerPatcher\OldTaskbar`, `Explorer\Advanced\TaskbarSmallIcons` | the settings window, when those options change | the same options |
-| `PatcherSettings\*.reg` (ExplorerPatcher's own keys) | `Install.ps1`, only with the ExplorerPatcher opt-in | ExplorerPatcher's own settings |
 
-The bundled `.reg` file is trimmed to ExplorerPatcher settings. It contains no
-`Software\Classes\CLSID` entries.
+The program does not write the registry itself apart from `DragFullWindows`. It
+never changes the taskbar's auto-hide state, style or icon size.
 
 ## Startup and persistence
 
@@ -96,10 +94,10 @@ services or drivers. The uninstallers remove every shortcut they created.
   AutoHotkey process.
 - **Applications the user configured:** Stealth Panic "safe apps", the hot-corner
   actions, Spotlight commands.
-- **`explorer.exe` restart:** only from the settings window's button, or at install
-  after Explorer tuning or ExplorerPatcher settings were applied. The installer
-  asks first and relaunches Explorer if Windows does not.
-- **Installers:** `winget`, `reg.exe import` (opt-in, visible),
+- **`explorer.exe` restart:** only at install, after Explorer tuning was applied.
+  The installer asks first and relaunches Explorer if Windows does not. The
+  program itself never kills or restarts Explorer.
+- **Installers:** `winget`,
   `powershell -ExecutionPolicy Bypass -File` for the bundled tuning script.
   `Setup.exe` shows those console windows rather than hiding them, and the bypass
   is process-scoped. `Install.bat` starts `Install.ps1` the same way.

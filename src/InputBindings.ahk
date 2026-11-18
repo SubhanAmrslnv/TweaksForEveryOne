@@ -37,11 +37,6 @@
 +!e::ToggleBreathing()
 +!Esc::ToggleBossKey()
 
-#HotIf !GameModeActive && (AlwaysOnBottomEnabled
-)
-+!b::ToggleAlwaysOnBottom()
-#HotIf !GameModeActive
-
 #HotIf !GameModeActive && (ProximityGhostEnabled
 )
 +!g::ToggleGhostMode()
@@ -126,12 +121,11 @@
 #HotIf !GameModeActive
 
 ; ----- Feature toggles: Shift+Alt+<key> ---------------------------------
-; These seven flags already persist to settings.ini; before this the only way to
+; These flags already persist to settings.ini; before this the only way to
 ; change one was to open the settings window.
 +!c::ToggleHotCorners()
 +!i::ToggleCursorWrap()
 +!d::ToggleDimmer()
-+!t::ToggleSmartTaskbar()
 +!j::ToggleMagneticGroups()
 +!Space::ToggleGrabPan()
 

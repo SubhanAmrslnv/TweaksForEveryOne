@@ -20,6 +20,11 @@
 >   added: the custom taskbar clock did not exist when this was written, and at
 >   546 lines with a geocoder and a retry back-off it does not belong inside
 >   `ShellSurfaceWatcher.ahk`.
+> - **`ShellSurfaceWatcher.ahk` was later deleted outright.** Its features
+>   (Smart Auto-Hide, Taskbar Icon Wave, Elastic Toasts) were removed for
+>   interfering with Explorer's own surfaces, along with Always-on-Bottom (from
+>   `PinnedWindowModes.ahk`) and the ExplorerPatcher style/icon-size settings
+>   (`EP_STYLES`, `EP_ICON_SIZES`). Rows below that name them are history.
 > - **`QPC()` went to `AnimationScheduler.ahk`**, which already owns the frame
 >   timebase. It was the one function with no feature home.
 > - **`TEARDOWN_SPEC` and `FEATURE_SPEC` were deliberately NOT built.** Both are
@@ -76,7 +81,7 @@ Existing `SnapCore.ahk`, `RenderCore.ahk`, `AnimationScheduler.ahk`, `MediaCore.
 | File | Responsibility | From lines |
 |---|---|---|
 | `WindowTweaks.ahk` | Entry only: process directives, the `#Include` manifest, one `Boot()` call | 1-27 + new |
-| `FeatureFlags.ahk` | Declared default of every boolean/string/enum setting + the enum lists (`OPEN_ANIMS`, `CAPS_ACTIONS`, `CORNER_ACTIONS`, `EP_STYLES`, `EP_ICON_SIZES`) | 51-165 |
+| `FeatureFlags.ahk` | Declared default of every boolean/string/enum setting + the enum lists (`OPEN_ANIMS`, `CAPS_ACTIONS`, `CORNER_ACTIONS`, `CLOCK_UNITS`, `CLOCK_ANCHORS`) | 51-165 |
 | `TuningRegistry.ahk` | `TUNE_SPEC` + the numeric load/clamp/persist/render runtime; owns `Clamp()` | 167-252, 330-466, 4395 |
 | `SettingsStore.ahk` | settings.ini read/write, `IniCache`, `LoadSettings`/`WriteSettings`/`SaveSettings`, Start-with-Windows | 31-38, 259, 276-329, 467-680, 738-751 |
 | `DiagnosticsLog.ahk` | Buffered log, rotation, `Notify` | 42-49, 681-737 |
@@ -110,9 +115,9 @@ Existing `SnapCore.ahk`, `RenderCore.ahk`, `AnimationScheduler.ahk`, `MediaCore.
 | `OnDemandOverlays.ahk` | Summoned-and-dismissed overlays: Quick Look, Spotlight, text magnifier | 5219-5313, 6154-6253, 7341-7478 |
 | `ScreenEdgeGestures.ahk` | Pointer reaching a screen boundary: hot corners, infinite wrap | 5420-5712 |
 | `AudioOsd.ahk` | Volume + mic OSDs and their input | 5713-5867, 6032-6153 |
-| `PinnedWindowModes.ahk` | Modes a user opts a *specific* window into and that must be released on exit: PiP, always-on-bottom, ghost, privacy blur | 5868-6031, 6437-6543, 6593-6755, 9124-9265 |
+| `PinnedWindowModes.ahk` | Modes a user opts a *specific* window into and that must be released on exit: PiP, ghost | 5868-6031, 6437-6543, 6593-6755, 9124-9265 |
 | `MouseGestureFx.ahk` | Pointer-motion/idle/wheel driven: breathe cursor, ripples, drag trail, shake-find, yawn, elastic scroll, motion blur | 6959-7183, 7238-7340, 7612-7818, 8388-8465 |
-| `ShellSurfaceWatcher.ahk` | The one poll that watches shell surfaces: taskbar auto-hide, wave, Start blur, toasts, lightsaber seam | 5314-5419, 8466-8845 |
+| ~~`ShellSurfaceWatcher.ahk`~~ | Removed - see the note at the top. Was: taskbar auto-hide, wave, Start blur, toasts, lightsaber seam | 5314-5419, 8466-8845 |
 | `WindowSpectacleFx.ahk` | One-shot desktop takeovers: gravity close, curtain drop, carousel Alt-Tab, black-hole delete, shatter | 3127-3285, 8099-8387, 8846-9123 |
 
 Names deliberately rejected per rule 3: `Utils`, `Common`, `Helpers`, `Misc`, and — the one that will tempt around Phase 10 — `Effects.ahk`. The three FX files are split by *what drives the effect*, which is also the axis the Phase 11 convergence commits operate along.
@@ -194,7 +199,7 @@ global FEATURE_SPEC := [
 ]
 ```
 
-`LoadSettings`, `WriteSettings`, `ApplyUi`'s read+release block, `BuildWin`'s hand-written `Box`+`Sub` pairs, and `ToggleFeatureFlag`'s eleven callers all collapse to loops over this table — exactly the way `TuneRow()` replaced the hand-written number rows. About 8 rows stay hand-written because they are genuinely not registry-shaped: `EP_Style`/`EP_IconSize` read the registry rather than the ini, and `BorderColor` is validated by shape, not membership.
+`LoadSettings`, `WriteSettings`, `ApplyUi`'s read+release block, `BuildWin`'s hand-written `Box`+`Sub` pairs, and `ToggleFeatureFlag`'s eleven callers all collapse to loops over this table — exactly the way `TuneRow()` replaced the hand-written number rows. About 8 rows stay hand-written because they are genuinely not registry-shaped: `BorderColor` is validated by shape, not membership.
 
 **Migration invariant, grep-checkable:** a settings.ini key appears in *exactly one* of `FEATURE_SPEC` or the hand-written lines — never both. Extract every `(sec, ini)` pair from the table and every `IniStr(`/`PutIni(` literal pair; the intersection must be empty and the union unchanged. Migrate ~10 rows per commit in settings-page order, so each commit's smoke test is "open that page and round-trip it".
 

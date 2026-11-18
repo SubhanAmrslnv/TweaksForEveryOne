@@ -34,12 +34,11 @@ global GAME_MODE_FEATURES := [
     "AltDragEnabled", "MiddleClickCloseEnabled", "RollUpEnabled", "ContextMenuAnimEnabled",
     "MagneticGroupsEnabled", "BreatheCursorEnabled", "BlackHoleMinimizeEnabled", "MomentumTiltEnabled",
     "CurtainDropEnabled",
-    "TaskbarWaveEnabled", "ToastBounceEnabled", "MonitorThrowEnabled", "BlackHoleDeleteEnabled",
+    "MonitorThrowEnabled", "BlackHoleDeleteEnabled",
     "ShatterEnabled", "ParallaxEnabled",
     "FlyMinimizeEnabled", "QuickFolderJumpEnabled", "PlainPasteEnabled", "SmoothCaretEnabled",
     "TypingSoundsEnabled", "HotkeySoundsEnabled", "PremiumVolumeOSDEnabled", "MicKillSwitchEnabled",
-    "TextExpanderEnabled", "ShakeFindEnabled", "GravityCloseEnabled", "GlideEnabled",
-    "AlwaysOnBottomEnabled"
+    "TextExpanderEnabled", "ShakeFindEnabled", "GravityCloseEnabled", "GlideEnabled"
 ]
 
 ToggleGameMode() {
@@ -192,7 +191,6 @@ GameModeSyncFeatures() {
     try SyncDimmerTimer()
     try SyncBreathingTimers()
     try SyncCursorFxTimer()
-    try SyncTaskbarUiTimer()
     try SyncShakeDetector()
     try SyncTextExpander()
     try UpdateKeyboardHook()

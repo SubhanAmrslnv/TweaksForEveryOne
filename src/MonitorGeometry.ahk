@@ -11,8 +11,8 @@
 ;
 ; WORK AREAS ARE NOT. WorkAreaOf/WorkAreaAt call MonitorGetWorkArea live, because
 ; the work area changes when the taskbar auto-hides and that raises no
-; WM_DISPLAYCHANGE - a cached copy would be stale exactly when Smart Auto-Hide is
-; on. These are hotkey-path calls, so the ~3 us is irrelevant.
+; WM_DISPLAYCHANGE - a cached copy would be stale whenever the taskbar is set to
+; auto-hide. These are hotkey-path calls, so the ~3 us is irrelevant.
 
 ; Which cached monitor contains (px, py)? A 1-based index into
 ; ScreenMetrics().mons, falling back to 1 for a point off every screen.
@@ -40,8 +40,8 @@ CursorMonitorIndex() {
 ; Work area (monitor minus taskbar) of monitor `idx`.
 ; The monitor RECTS come from the ScreenMetrics cache, but the work area is read
 ; live every time on purpose: it changes whenever the taskbar auto-hides, and
-; that raises no WM_DISPLAYCHANGE - so a cached copy would be stale exactly when
-; Smart Auto-Hide is on. This is a hotkey path, not a per-frame one, and
+; that raises no WM_DISPLAYCHANGE - so a cached copy would be stale whenever the
+; taskbar is set to auto-hide. This is a hotkey path, not a per-frame one, and
 ; MonitorGetWorkArea costs ~3 us.
 WorkAreaOf(idx, &wl, &wt, &wr, &wb) {
     try {

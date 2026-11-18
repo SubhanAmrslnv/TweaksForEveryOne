@@ -26,7 +26,6 @@ To remove it: run **`Uninstall.ps1`**.
 ## The Core Features
 
 ### 15 Power-User Tweaks (Newly Added)
-- **Smart Auto-Hide Taskbar**: Only hides the taskbar when windows maximize or touch the bottom edge.
 - **macOS "Quick Look"**: Press Space on any file in Explorer to instantly preview it.
 - **Multi-Monitor Focus Dimmer**: Dims inactive monitors by 50% to reduce eye strain.
 - **macOS "Hot Corners"**: Throw your mouse to screen corners to trigger actions (e.g. Hide windows, Task View).
@@ -36,7 +35,6 @@ To remove it: run **`Uninstall.ps1`**.
 - **Global Mic Kill-Switch**: Double-tap `Alt` to instantly mute/unmute your microphone system-wide.
 - **Infinite Cursor Wrap**: Teleport your cursor across screen edges for seamless multi-monitor navigation.
 - **Quick Spotlight Launcher**: Double-tap `Ctrl` for a minimalist, lightning-fast search and launch bar.
-- **Always on Bottom**: `Shift+Alt+B` pins any window permanently to your desktop background as a widget.
 - **Global Text Expander**: Type `@@mail`, `@@date`, etc., to instantly expand snippets anywhere.
 - **Middle-Click to Close**: Middle-click any window's title bar to instantly close it.
 - **Proximity Ghost Window**: `Shift+Alt+G` makes a window 80% transparent; it fades in and becomes clickable only when your mouse gets close.
@@ -108,10 +106,10 @@ removed rather than kept as a feature that mostly doesn't work.
 [TASKBAR-AND-INTERNALS.md](TASKBAR-AND-INTERNALS.md) records what was measured and
 why, so nobody has to rediscover it.
 
-What remains is the part that does work: **Smart Auto-Hide** (General page) hides
-the taskbar only when a window is maximized or reaches the bottom edge, and
-**Taskbar Volume Scroll** (System & Media) puts volume on the wheel while your
-mouse is over it.
+What remains is **Taskbar Volume Scroll** (System & Media), which puts volume on
+the wheel while your mouse is over the taskbar. The program does not change the
+taskbar's style, size or auto-hide setting, and it does not install
+ExplorerPatcher or any other shell replacement.
 
 ### The Full Feature Suite (40+ Tweaks & Animations)
 
@@ -199,7 +197,7 @@ bar, gone see-through, or disappeared into the tray, this brings it back.
 ### Switching a feature on or off
 
 `Shift + Alt +` … `C` hot corners, `I` cursor wrap,
-`D` multi-monitor dimmer, `T` smart auto-hide taskbar, `J` magnetic groups,
+`D` multi-monitor dimmer, `J` magnetic groups,
 `Space` grab & pan. Each shows a tray notification and remembers the new state.
 
 Several more hotkeys appear only when their feature is switched on.
@@ -215,12 +213,12 @@ Seven pages down the left:
 | Page | What's on it |
 |---|---|
 | **Window Management** | Snapping (distance, speed response, edge stickiness, corner boost, neighbour reach), ice glide (throw, slide time, throw distance, settle overshoot), drag opacity floor, tiling grid gap, rubber-band travel, alt-drag, fly-to-mouse minimize, grab & pan, roll-up, position memory |
-| **Power Features** | Spotlight, live PiP, ghost window (opacity, fade range, click range), always on bottom, middle-click close, minimize to tray, quick folder jump, Quick Look |
+| **Power Features** | Spotlight, live PiP, ghost window (opacity, fade range, click range), middle-click close, minimize to tray, quick folder jump, Quick Look |
 | **System & Media** | Taskbar volume scroll, volume OSD (step, hold time, opacity), mic kill-switch, boss key, text expander, smart CapsLock, plain-text paste, "never dim these apps" |
 | **Multi-Monitor** | Cursor wrap (tolerance, dead-edge bridge speed, hold time, approach speed, cooldown), focus dimmer strength, breathing (delay, opacity), shake to find, cursor yawn, keystroke and hotkey sounds (volume each, shared pitch), new-window animation |
 | **Animation** | Durations and intensities shared across features — open animation, snap bounce, roll-up, gravity close, overlay fade, OSD slide, focus-mode dim / softness / corners, transparency wheel step and floor |
 | **Hot Corners** | Enable, corner size, hold time, plus an action per corner |
-| **General** | Start with Windows, gravity drop on close, debug log, smart auto-hide taskbar, taskbar style / icon size, restart Explorer, open log, open folder, hotkeys, this guide |
+| **General** | Start with Windows, gravity drop on close, debug log, black-hole delete, open log, open folder, hotkeys, this guide |
 
 Changes apply as you make them — there's no OK button. Typed values apply about
 half a second after you stop typing. It follows your Windows light/dark theme.
@@ -302,9 +300,7 @@ Run **`scripts\Apply-Windows-Tuning.ps1`** for the optional polish, and
 | Nothing happens when I drag | Open settings → General → **Open log**. It records every drag and why it did or didn't snap. |
 | Hotkeys dead in one app | That app is running as administrator. Run Window Tweaks as admin too, or click a normal window first. |
 | A window keeps jumping somewhere | Position memory learned a bad spot. Settings → Window Management → **Forget saved positions**. |
-| Taskbar looks odd, or auto-hide is stuck | Settings → General → **Restart Explorer**. That's a guaranteed reset — and the program notices Explorer coming back and re-attaches itself. |
 | A window is stuck transparent or click-through | Ghost mode. Press `Shift + Alt + G` on it again. Exiting the program also restores every window it changed. |
-| A window won't come back from the desktop | Always-on-bottom. Press `Shift + Alt + B` on it, or exit the program. |
 | Position memory / new-window animations stopped working | Explorer restarted and the program lost its connection to it. This now repairs itself; if it doesn't, restart from the tray. |
 | Won't start at all | AutoHotkey **v2** must be installed. v1 can't run it. |
 

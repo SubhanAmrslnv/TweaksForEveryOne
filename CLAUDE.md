@@ -8,7 +8,7 @@ A Windows 11 tray utility written in **AutoHotkey v2** (magnetic window snapping
 
 **This repository now holds two independent implementations.** Everything in this file describes the Windows one (`src/`, `scripts/`, `build/`, `docs/`). A separate C++20/Qt6/CMake port for Linux lives in **`linux/`** and has its own **`linux/CLAUDE.md`** — read that before touching anything under `linux/`. The two share **no code**, only design: the render-arbitration and animation-scheduler concepts were ported deliberately, so if you change an invariant on one side, check the other. The Linux port is an early scaffold that does not build; do not treat its docs as a description of working software.
 
-**There is no taskbar-height engine any more.** `TaskbarCore.ahk`, the `TB_*` globals, `TB_HEIGHTS`, `IsHeight()` and the `Win+Alt+Up/Down/0` hotkeys were removed. What remains taskbar-related is Smart Auto-Hide (`SHAppBarMessage`, `[taskbar] smart`) and taskbar volume scroll. `docs\TASKBAR-AND-INTERNALS.md` keeps the measured findings from that work because the Win32 research is still valuable — but treat it as history, not as a description of the code.
+**There is no taskbar-height engine any more.** `TaskbarCore.ahk`, the `TB_*` globals, `TB_HEIGHTS`, `IsHeight()` and the `Win+Alt+Up/Down/0` hotkeys were removed. What remains taskbar-related is taskbar volume scroll and the custom taskbar clock. `docs\TASKBAR-AND-INTERNALS.md` keeps the measured findings from that work because the Win32 research is still valuable — but treat it as history, not as a description of the code.
 
 ## Features and hotkeys
 
@@ -42,13 +42,12 @@ A Windows 11 tray utility written in **AutoHotkey v2** (magnetic window snapping
 | `Shift+Alt+C` | Hot corners on / off | `ToggleHotCorners()` |
 | `Shift+Alt+I` | Infinite cursor wrap on / off | `ToggleCursorWrap()` |
 | `Shift+Alt+D` | Multi-monitor dimmer on / off | `ToggleDimmer()` |
-| `Shift+Alt+T` | Smart auto-hide taskbar on / off | `ToggleSmartTaskbar()` |
 | `Shift+Alt+J` | Magnetic window groups on / off | `ToggleMagneticGroups()` |
 | `Shift+Alt+Space` | Universal grab & pan on / off | `ToggleGrabPan()` |
 | `Esc Esc Esc` | Stealth Panic Mode on / off (see its own section) | `ToggleStealthPanic()` |
 | `(Tray Menu)` | Restart / Exit | `Reload()` / `ExitApp()` |
 
-Behind a `#HotIf` on their feature flag, so the key stays free until the feature is on: `Shift+Alt+B` (always-on-bottom), `Shift+Alt+G` (proximity ghost), `Shift+Alt+P` (live PiP), `Shift+Alt+L` (spotlight), `Shift+Alt+A` (mic kill-switch), `Shift+Alt+Q` (Quick Look, and only in Explorer), `Shift+Alt+F4` (shatter close, `FxShatter.ahk`), `Alt+F4` (gravity close, `$!F4` in `FxGravity.ahk`), `Win+Alt+D` (curtain drop, `#!d` in `FxGravity.ahk`), `Ctrl+Alt+V` (plain paste).
+Behind a `#HotIf` on their feature flag, so the key stays free until the feature is on: `Shift+Alt+G` (proximity ghost), `Shift+Alt+P` (live PiP), `Shift+Alt+L` (spotlight), `Shift+Alt+A` (mic kill-switch), `Shift+Alt+Q` (Quick Look, and only in Explorer), `Shift+Alt+F4` (shatter close, `FxShatter.ahk`), `Alt+F4` (gravity close, `$!F4` in `FxGravity.ahk`), `Win+Alt+D` (curtain drop, `#!d` in `FxGravity.ahk`), `Ctrl+Alt+V` (plain paste).
 
 The triple-`Esc` binding is `~Esc`, so Escape still reaches the focused window — it does not go through `IsDoublePress` and it lives in `src\StealthPanic.ahk`, not the hotkey block. Note `Escape` is already claimed behind two other `#HotIf` contexts (Spotlight and Quick Look).
 
@@ -69,7 +68,7 @@ Every toggle fires `Notify()` → `TrayTip`, so state changes are always visible
 | **Always on top** | Toggles `WS_EX_TOPMOST` on the active window. Hotkey only — no persisted setting, and it self-excludes by PID so it can't pin its own GUI | — | — |
 | **Position memory** | Each app reopens at its last size/position, keyed on `exe_class`. Dialogs, owned windows, `WS_EX_TOOLWINDOW`, anything without `WS_THICKFRAME`, and Picture-in-Picture (PiP) windows are excluded | `[memory]` `enabled` | `RestoreEnabled`, `POS_FILE` |
 
-Feature *flags* still live under `[memory]` (the section name is historical — it is the general flag bucket), plus `[corners]`, `[taskbar] smart`, `[snap]`, `[glide]`, `[mouse]`, `[window]` and `[snippets]` for the text expander. Every tunable *number* lives in a per-feature section owned by the tuning registry: `[snap]`, `[glide]`, `[breathing]`, `[ghost]`, `[border]`, `[dimmer]`, `[focus]`, `[wrap]`, `[corners]`, `[osd]`, `[trans]`, `[anim]`, `[mouse]`. See **The tuning registry** below — that table, not this one, is where a range is defined.
+Feature *flags* still live under `[memory]` (the section name is historical — it is the general flag bucket), plus `[corners]`, `[taskbar]`, `[snap]`, `[glide]`, `[mouse]`, `[window]` and `[snippets]` for the text expander. Every tunable *number* lives in a per-feature section owned by the tuning registry: `[snap]`, `[glide]`, `[breathing]`, `[ghost]`, `[border]`, `[dimmer]`, `[focus]`, `[wrap]`, `[corners]`, `[osd]`, `[trans]`, `[anim]`, `[mouse]`. See **The tuning registry** below — that table, not this one, is where a range is defined.
 
 ### Dead-edge bridge — why crossing monitors was one-directional
 
@@ -121,7 +120,6 @@ default. When something needs visual feedback, reach for a fade first.
 ### The Full Feature Suite (40+ Tweaks & Animations)
 
 **15 Power-User Tweaks (Newly Added):**
-- **Smart Auto-Hide Taskbar**: Only hides the taskbar when windows maximize or touch the bottom edge.
 - **macOS "Quick Look"**: Press Space on any file in Explorer to instantly preview it.
 - **Multi-Monitor Focus Dimmer**: Dims inactive monitors by 50% to reduce eye strain.
 - **macOS "Hot Corners"**: Throw your mouse to screen corners to trigger actions (e.g. Hide windows, Task View).
@@ -131,7 +129,6 @@ default. When something needs visual feedback, reach for a fade first.
 - **Global Mic Kill-Switch**: Double-tap `Alt` to instantly mute/unmute your microphone system-wide.
 - **Infinite Cursor Wrap**: Teleport your cursor across screen edges for seamless multi-monitor navigation.
 - **Quick Spotlight Launcher**: Double-tap `Ctrl` for a minimalist, lightning-fast search and launch bar.
-- **Always on Bottom**: `Shift+Alt+B` pins any window permanently to your desktop background as a widget.
 - **Global Text Expander**: Type `@@mail`, `@@date`, etc., to instantly expand snippets anywhere.
 - **Middle-Click to Close**: Middle-click any window's title bar to instantly close it.
 - **Proximity Ghost Window**: `Shift+Alt+G` makes a window 80% transparent; it fades in and becomes clickable only when your mouse gets close.
@@ -166,7 +163,6 @@ default. When something needs visual feedback, reach for a fade first.
 - **Dynamic Notch (OSD)**: Volume and brightness adjustments drop down a sleek iOS-style Dynamic Island pill from the top of the screen.
 - **Curtain Drop (Win+Alt+D)**: Showing the desktop drops all windows simultaneously with a kinetic fall.
 - **Overscroll Bounce**: Scrolling past the end of a page elastically stretches and springs back.
-- **Taskbar Icon Wave & Elastic Toasts**: Hovering over the taskbar creates a macOS-like icon wave, and notifications bounce elastically into view.
 - **Window Throw & Catch**: Forcefully flick a window towards another monitor, and it will kinetically fly across screens.
 - **Shatter to Close**: Shift+Alt+F4 smashes the active window into dozens of 3D glass shards that fall with gravity.
 
@@ -176,7 +172,7 @@ default. When something needs visual feedback, reach for a fade first.
 - **Restore Everything**: `Shift+Alt+Y` unrolls, un-ghosts and un-hides every window the program is holding — the recovery path for state a user cannot see.
 - **Reset Transparency**: `Shift+Alt+X`.
 
-**Feature Toggles (`Shift+Alt+<key>`):** hot corners `C`, cursor wrap `I`, multi-monitor dimmer `D`, smart auto-hide taskbar `T`, magnetic groups `J`, grab & pan `Space`. Each flips the flag, persists it, updates the settings checkbox if the window is open, notifies, and calls the feature's `Sync*` — that last step is what actually starts or stops the timer.
+**Feature Toggles (`Shift+Alt+<key>`):** hot corners `C`, cursor wrap `I`, multi-monitor dimmer `D`, magnetic groups `J`, grab & pan `Space`. Each flips the flag, persists it, updates the settings checkbox if the window is open, notifies, and calls the feature's `Sync*` — that last step is what actually starts or stops the timer.
 
 **Productivity & Window Management:**
 - **Transparency Control**: `Shift + Alt + Wheel` to adjust the opacity of any active window.
@@ -205,13 +201,13 @@ Add a new layout action by computing a frame rect and handing it to `ApplyLayout
 
 **Morph Maximize** (`MorphMaximize`) runs *after* the state change, not instead of it. `RS_*` has no concept of a maximize state - it queues explicit rects, and a window that merely covers the work area is not maximized to the OS or to the app. So Windows performs the state change, `MorphMaximize` reads where it landed, seeds one frame at the old rect and glides to the new one on the `"geom"` channel. The window is genuinely maximized throughout; only its rect is animated. It is skipped entirely when ice glide is off, so it inherits that preference rather than adding a setting.
 
-Work areas are read live via `MonitorGetWorkArea` rather than cached in `ScreenMetrics()`: the work area changes when the taskbar auto-hides and that raises no `WM_DISPLAYCHANGE`, so a cached copy would be stale exactly when Smart Auto-Hide is on. Only the *monitor* rects come from the cache (`MonitorIndexAt`). This is a hotkey path, so the ~3 µs is irrelevant.
+Work areas are read live via `MonitorGetWorkArea` rather than cached in `ScreenMetrics()`: the work area changes when the taskbar auto-hides and that raises no `WM_DISPLAYCHANGE`, so a cached copy would be stale whenever the user has the taskbar set to auto-hide. Only the *monitor* rects come from the cache (`MonitorIndexAt`). This is a hotkey path, so the ~3 µs is irrelevant.
 
 `LayoutUndo` and `SizeCycleIdx` are per-HWND Maps and are pruned in the `HSHELL_WINDOWDESTROYED` branch of the shell hook alongside `RolledUpWindows`.
 
 ## The tuning registry — where every user-tunable number lives
 
-`TUNE_SPEC` (near the top of `WindowTweaks.ahk`, right after `EP_ICON_SIZES`) is **one row per tunable number** and the single source of truth for its INI section/key, default, `lo`/`hi` bounds, `step`, decimal places, settings page, label and hint. Loading, clamping, persistence and the settings control are all generated from it.
+`TUNE_SPEC` (near the top of `WindowTweaks.ahk`, right after the enum lists) is **one row per tunable number** and the single source of truth for its INI section/key, default, `lo`/`hi` bounds, `step`, decimal places, settings page, label and hint. Loading, clamping, persistence and the settings control are all generated from it.
 
 It exists because the original five numeric settings repeated their range in three places — the declared default, the clamp block at the end of `LoadSettings`, and the `Clamp()` call in `ApplyUi` — and those had already drifted.
 
@@ -237,7 +233,7 @@ Two settings are deliberately *not* in the registry because they are not numbers
 
 **A space followed by `;` starts a comment even inside a double-quoted string.** `x := "a ; b"` fails to load with `Missing """`; `x := "a; b"` is fine. This is why the shipped `media_fallback` default writes `"a.exe; b.exe"` and never `"a.exe ; b.exe"`. Verified against 2.0 in this repo — check any literal that contains a semicolon.
 
-**Enumerated settings must be validated by membership, not range.** Every setting that feeds a DropDownList (`OpenAnim`, `SmartCapsAction`, the four `HotCorner*`, `EP_Style`, `EP_IconSize`) goes through `IniPick(section, key, allowedList, default)` in `LoadSettings`, and the control is built from the *same* list with `IndexOf()` for its `Choose<n>`. The lists live in one place — `OPEN_ANIMS`, `CAPS_ACTIONS`, `CORNER_ACTIONS`, `EP_STYLES`, `EP_ICON_SIZES` near the top of the file. Two things break if you skip this: `DropDownList.Choose("not in the list")` throws *inside* `BuildWin`, which leaves `Shift+Alt+W` permanently dead after one hand-edited `settings.ini`; and a value the dropdown cannot display leaves the GUI showing one thing while the engine uses another. Range-check the numeric settings; list-check these.
+**Enumerated settings must be validated by membership, not range.** Every setting that feeds a DropDownList (`OpenAnim`, `SmartCapsAction`, the four `HotCorner*`, `ClockUnits`, `ClockAnchor`) goes through `IniPick(section, key, allowedList, default)` in `LoadSettings`, and the control is built from the *same* list with `IndexOf()` for its `Choose<n>`. The lists live in one place — `OPEN_ANIMS`, `CAPS_ACTIONS`, `CORNER_ACTIONS`, `EP_STYLES`, `EP_ICON_SIZES` near the top of the file. Two things break if you skip this: `DropDownList.Choose("not in the list")` throws *inside* `BuildWin`, which leaves `Shift+Alt+W` permanently dead after one hand-edited `settings.ini`; and a value the dropdown cannot display leaves the GUI showing one thing while the engine uses another. Range-check the numeric settings; list-check these.
 
 Tray menu labels embed their hotkey after a literal tab — `"Magnetic snap\tWin+Ctrl+S"` (the source writes the tab as an AHK escape) — and that **entire string is the lookup key** used by `SyncTray()` to set tick marks. Renaming a label without updating both places silently breaks the checkmarks, with no error.
 
@@ -251,7 +247,7 @@ Deliberately **not** touched: `Win+Ctrl+←/→` (virtual desktops), `Win+Ctrl+D
 
 **The `Win+Ctrl` tier is gone.** That list of Windows-reserved chords is exactly *why*: the program originally lived on `Win+Ctrl+<key>` and kept colliding with it, so commit `3dadac4` moved everything onto the single `Shift+Alt` chord. The one `Win` chord left is curtain drop, `Win+Alt+D`, which Windows does not reserve. The historical consequences of the old scheme are still visible — "centre the window" is on `K` rather than the obvious `C`, because `C` was once needed to dodge `Win+Ctrl+C` and is now taken by hot corners; and left/right halves still have no arrow alias because `Win+←/→` already does that job.
 
-Before adding a hotkey: everything global is `Shift+Alt+<key>`, so the free letters are the constraint. Check the table at the top of this file (and `docs\HOTKEYS.md`) for what is taken - `V` is free again since Smart Active Border was removed — the chord space is nearly full, which is why `Space`, the arrows and `F5`/`F6` are already in use. Note that AutoHotkey wins against Windows for `Shift+Alt+S`, so Speech Recognition does not open while this runs.
+Before adding a hotkey: everything global is `Shift+Alt+<key>`, so the free letters are the constraint. Check the table at the top of this file (and `docs\HOTKEYS.md`) for what is taken - `V` is free again since Smart Active Border was removed, and `T` and `B` since Smart Auto-Hide and Always-on-Bottom were —  the chord space is nearly full, which is why `Space`, the arrows and `F5`/`F6` are already in use. Note that AutoHotkey wins against Windows for `Shift+Alt+S`, so Speech Recognition does not open while this runs.
 
 ## Commands
 
@@ -285,7 +281,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build\Build-Installer.ps1 
 
 **One AutoHotkey v2 process** for everything except the Stealth Panic settings GUI (below). `src\WindowTweaks.ahk` is the sole entry point; the `#Include` lines at the top pull the rest in at load time. `#SingleInstance Force` is the only cross-instance coordination.
 
-**44 modules, flat in `src\`.** The largest is 939 lines (`SettingsWindow.ahk`);
+**45 modules, flat in `src\`.** The largest is 939 lines (`SettingsWindow.ahk`);
 nothing else is close to the ~1000-line review threshold.
 
 Phase 12 (`de0525d`) split the last three grab-bags, so three names that older
@@ -357,9 +353,8 @@ notes still reference no longer exist: `WindowCommands.ahk` became the six
 | `src\AudioOsd.ahk` | Volume and microphone OSDs and their input |
 | `src\OnDemandOverlays.ahk` | Summoned and dismissed: Quick Look, Spotlight, text magnifier |
 | `src\FocusEmphasis.ahk` | Cinema / focus mode dimming |
-| `src\PinnedWindowModes.ahk` | Modes a window is opted into and must be released on exit: PiP, always-on-bottom, ghost |
+| `src\PinnedWindowModes.ahk` | Modes a window is opted into and must be released on exit: PiP, ghost |
 | `src\MouseGestureFx.ahk` | Pointer-motion / idle / wheel driven: shake-find, yawn, ripples, drag trail, clipboard feedback |
-| `src\ShellSurfaceWatcher.ahk` | The one poll over shell surfaces: auto-hide, taskbar wave, toasts |
 | `src\TaskbarClock.ahk` | The custom taskbar clock, and the only network egress in the program |
 | `src\FxGravity.ahk` | Gravity-drop close (`Alt+F4`) |
 | `src\FxShatter.ahk` | Shatter to close (`Shift+Alt+F4`) |
@@ -616,13 +611,13 @@ taskbar's own animations are a Windows setting (`TaskbarAnimations`), handled by
 
 ### Timers
 
-There is no single "the only timer" any more. `RenderFrame` at 16 ms while animating; then per-feature monitors, each started/stopped by its own `Sync*` function so a feature nobody enabled costs nothing: cursor wrap 20 ms, ghost proximity 25 ms, taskbar/UI 32 ms, shake+yawn detector 40 ms, hot corners / focus 50 ms, PiP / Quick Look 100 ms, breathing / dimmer / smart taskbar 200 ms, MediaCore 250 ms, breathe-cursor idle 1 s. Plus one-shot `SetTimer(..., -ms)` calls for deferred work.
+There is no single "the only timer" any more. `RenderFrame` at 16 ms while animating; then per-feature monitors, each started/stopped by its own `Sync*` function so a feature nobody enabled costs nothing: cursor wrap 20 ms, ghost proximity 25 ms, shake+yawn detector 40 ms, hot corners / focus 50 ms, PiP / Quick Look 100 ms, breathing / dimmer 200 ms, MediaCore 250 ms, breathe-cursor idle 1 s. Plus one-shot `SetTimer(..., -ms)` calls for deferred work.
 
-**Every polling timer must have a `Sync*`, and `Bye()` must stop it.** Three did not: `CheckTaskbarAndUI` (32 ms), `ShakeDetector` (40 ms) and `CheckMouseIdle` (1 s) were armed unconditionally at load and ran forever regardless of their flags — `CheckToasts` alone enumerates every top-level window with a title filter on each tick. They are now `SyncTaskbarUiTimer()`, `SyncShakeDetector()` and `SyncCursorFxTimer()`, called from the deferred-init block and from `ApplyUi`. `Bye()` stops all of them plus the nine private 16 ms FX loops; several of those can otherwise re-create an overlay *after* `RS_Shutdown()`, and `Bye()` is also the tray → Restart path.
+**Every polling timer must have a `Sync*`, and `Bye()` must stop it.** Three did not: `CheckTaskbarAndUI` (32 ms), `ShakeDetector` (40 ms) and `CheckMouseIdle` (1 s) were armed unconditionally at load and ran forever regardless of their flags — `CheckToasts` alone enumerates every top-level window with a title filter on each tick. The last two are now `SyncShakeDetector()` and `SyncCursorFxTimer()` (the first was deleted with the features it served), called from the deferred-init block and from `ApplyUi`. `Bye()` stops all of them plus the nine private 16 ms FX loops; several of those can otherwise re-create an overlay *after* `RS_Shutdown()`, and `Bye()` is also the tray → Restart path.
 
 **A monitor is a `SetTimer`, never a `RegisterAnimation`.** A poller was once registered as an animation whose callback always returned `true`, so `ActiveAnimations` was never empty, the scheduler never reached its idle shutdown, and enabling that feature pinned the 15 ms frame loop *and* `timeBeginPeriod(1)` for the whole session. Same mistake as the OSD auto-hides. If it polls rather than interpolates, it is a timer — and it must call `RS_Commit()` itself.
 
-**A feature that owns an overlay must tear it down when its flag goes false, and the flag test belongs *inside* that function.** Gating the call site instead means switching the feature off stops the only code that could ever clean up. Three separate overlays were stranded that way — a full-screen dimming sheet left over the desktop, a bar welded to a window edge, opaque sheets over marked windows — each visible with the feature that owned it disabled and no way left to reach it. `RenderTaskbarWave` has the right shape: `CheckTaskbarAndUI` calls its sub-checks unconditionally so they *can* clean up, and each tests its own flag as its first act.
+**A feature that owns an overlay must tear it down when its flag goes false, and the flag test belongs *inside* that function.** Gating the call site instead means switching the feature off stops the only code that could ever clean up. Three separate overlays were stranded that way — a full-screen dimming sheet left over the desktop, a bar welded to a window edge, opaque sheets over marked windows — each visible with the feature that owned it disabled and no way left to reach it. `SmoothCaretWatchdog` / `HideSmoothCaret()` have the right shape: the teardown path runs unconditionally and tests the flag itself.
 
 **Drag pipeline**: `SetWinEventHook` on `EVENT_SYSTEM_MOVESIZESTART`/`END` → `SampleVelocityStep` on the frame loop (EMA-smoothed velocity, parallax alpha) → `FinishDrag` deferred 50 ms with the start rect captured in the closure (it enumerates windows, so it must not run inside the hook) → `SnapWindow` → `Glide` → `VerifySnap` scheduled for after the glide lands. MOVESIZEEND also fires *after* the OS modal move loop, which is the only safe moment to reposition.
 
@@ -728,11 +723,11 @@ clock settings taught, recorded under **The settings window scrolls**.
 - **Two coordinate spaces.** Snapping measures with `DWMWA_EXTENDED_FRAME_BOUNDS` (attr 9); `WinGetPos` differs by the invisible DWM border. `GetRects()` in `SnapCore.ahk` returns *both*, and `SnapWindow` converts back (`destX := winX + (newL - L)`). Ignore this and every snap lands ~7px off.
 - **`DWMWA_CLOAKED` (attr 14)** filters UWP-suspended and other-virtual-desktop windows; `WS_VISIBLE` alone does not catch them.
 - **Position memory is keyed on exe + window class**, and excludes owned/tool/non-resizable and Picture-in-Picture windows — every Chrome popup shares a class with the main window.
-- **New windows are detected via `RegisterShellHookWindow`, not polling — and that registration does not survive an Explorer restart.** `TaskbarCreated` is broadcast when the shell comes back; handling it and re-registering is the only thing keeping position memory, the open animations, breathing seeding, fly-to-mouse minimize and per-window cleanup alive after an Explorer crash (or after this app's own "Restart Explorer" button).
+- **New windows are detected via `RegisterShellHookWindow`, not polling — and that registration does not survive an Explorer restart.** `TaskbarCreated` is broadcast when the shell comes back; handling it and re-registering is the only thing keeping position memory, the open animations, breathing seeding, fly-to-mouse minimize and per-window cleanup alive after an Explorer crash or restart.
 - **Never make a foreign window layered speculatively.** `WinSetTransparent` on a new window forces `WS_EX_LAYERED`; on a GPU-composited or full-screen window that costs a redirection surface and can break exclusive full-screen presentation. `WillAnimateOpen()` is the single eligibility test, applied *before* hiding a new window rather than after.
 - **Never `SendMessage` to a foreign window without a timeout.** A window whose thread is not pumping messages ("Not Responding") never returns, freezing this whole process — every timer and every hotkey — with it. Use `SendMessageTimeout` with `SMTO_ABORTIFHUNG` (see `AskWindowIcon()` and the `WM_NCHITTEST` probe in the `*MButton` handler).
 - **A timer callback that throws pops an error dialog and kills that timer** — the feature is then dead for the rest of the session. Any window query in a monitor must be inside `try` with an explicit fallback; `IsMouseOverTaskbar()` is the pattern to copy.
-- **`SetParent` across processes** (always-on-bottom) is not really supported by Win32 and is not undone by anything except `RestoreFromBottom()`. A window left parented to `WorkerW` cannot be alt-tabbed to, cannot be moved normally, and dies with the next Explorer restart — so exit-time restoration is mandatory, not polish.
+- **Never `SetParent` a foreign window across processes.** Win32 does not really support it: a window left parented to `WorkerW` cannot be alt-tabbed to, cannot be moved normally, and dies with the next Explorer restart. Always-on-Bottom did exactly that and was removed for it.
 
 ### Stealth Panic Mode
 
@@ -939,7 +934,7 @@ Two independent installers that must be kept in sync: `Install.ps1` and `build\S
 
 **Settings precedence is one rule, implemented identically in both installers:** an existing `settings.ini` is the user's and is never touched; only an install folder with none is seeded from **`build\baseline-settings.ini`**; keys added after that are filled in by `LoadSettings()` defaults. Copy-if-absent is idempotent. The baseline is the owner's live configuration with the shadow-type effects (`[memory] breathing`, `[mouse] breathe`, `[mouse] copyfeedback`) forced to `0` and `[taskbar] clocklocation` blanked, so a fresh install makes no network request until a city is entered. It is UTF-16LE with a BOM, like the file `IniWrite` produces. `Setup.cs` embeds it as `base.settings.ini` - deliberately NOT under `res.`, because `Extract()` overwrites every `res.*` file unconditionally. `Uninstall.ps1` keeps the user's settings files unless `-RemoveSettings` is passed. Code defaults in `LoadSettings` stay factory values; `build\refs\settings.default.ini` tracks those, not the baseline.
 
-**Corporate / antivirus constraints (see `docs\SECURITY.md`, which ships with the program).** ExplorerPatcher is **opt-in** (`-ExplorerPatcher`): a pinned release, SHA-256 checked before it runs. Never return to downloading `releases/latest` or installing it by default. The bundled `.reg` holds only ExplorerPatcher's own settings, with no `Software\Classes\CLSID` entries. `-Silent` applies no tuning and does not restart Explorer, and Explorer is restarted only when something that needs it was applied. `Setup.cs` runs its child processes visibly. `Build-Installer.ps1` refuses to ship a module that is neither an entry point nor `#Include`d.
+**Corporate / antivirus constraints (see `docs\SECURITY.md`, which ships with the program).** There is **no ExplorerPatcher integration** - no download, no `.reg` import, no taskbar-style or icon-size setting. It was removed because it installs a DLL into `C:\Windows` and the program wrote its registry values on every save; do not reintroduce it. `-Silent` applies no tuning and does not restart Explorer, and Explorer is restarted only when something that needs it was applied. `Setup.cs` runs its child processes visibly. `Build-Installer.ps1` refuses to ship a module that is neither an entry point nor `#Include`d.
 
 `build\Setup.cs` is compiled by the `csc.exe` that ships with the .NET Framework, i.e. a **C# 5 compiler**: no string interpolation, no expression-bodied members, no null-conditional. Keep it plain (the constraint is stated at `Setup.cs:6-8`).
 

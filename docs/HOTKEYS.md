@@ -80,7 +80,6 @@ a tray notification.
 | **Shift + Alt + C** | Hot corners |
 | **Shift + Alt + I** | Infinite cursor wrap |
 | **Shift + Alt + D** | Multi-monitor dimmer |
-| **Shift + Alt + T** | Smart auto-hide taskbar |
 | **Shift + Alt + J** | Magnetic window groups |
 | **Shift + Alt + Space** | Universal grab & pan |
 
@@ -92,7 +91,6 @@ settings.
 
 | Hotkey | Action | Requires |
 |---|---|---|
-| **Shift + Alt + B** | Always on bottom (desktop widget) | Always on Bottom |
 | **Shift + Alt + G** | Proximity ghost window | Proximity Ghost |
 | **Shift + Alt + P** | Live PiP thumbnail | Live PiP |
 | **Shift + Alt + L** | Spotlight launcher | Spotlight |

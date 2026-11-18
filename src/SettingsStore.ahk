@@ -28,12 +28,6 @@
 
 global INI      := A_ScriptDir "\settings.ini"
 
-; Single backslashes. AHK escapes with a backtick, so "HKCU\\Software\\..."
-; is a literal double backslash naming a key that cannot exist.
-global EP_KEY       := "HKCU\Software\ExplorerPatcher"
-
-global ADVANCED_KEY := "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-
 global IniCache := Map()
 
 ; Kept for any caller that wants a bare number; the tuning registry has its own
@@ -115,7 +109,6 @@ LoadSettings() {
     BlackHoleMinimizeEnabled := IniStr("memory", "blackhole", "1") = "1"
     MomentumTiltEnabled := IniStr("mouse", "momentum", "1") = "1"
     CurtainDropEnabled := IniStr("memory", "curtain", "1") = "1"
-    TaskbarWaveEnabled := IniStr("taskbar", "wave", "0") = "1"
     CustomClockEnabled := IniStr("taskbar", "customclock", "1") = "1"
     ClockLocation := CleanClockLocation(IniStr("taskbar", "clocklocation", "Baku"))
     ; Membership, not range - see the note on IniPick. A hand-edited value the
@@ -123,7 +116,6 @@ LoadSettings() {
     ClockUnits := IniPick("taskbar", "clockunits", CLOCK_UNITS, "Celsius")
     ClockAnchor := IniPick("taskbar", "clockanchor", CLOCK_ANCHORS, "TrayEdge")
     ClockWeatherEnabled := IniStr("taskbar", "clockweather", "1") = "1"
-    ToastBounceEnabled := IniStr("taskbar", "toastbounce", "1") = "1"
     MonitorThrowEnabled := IniStr("mouse", "monthrow", "1") = "1"
     BlackHoleDeleteEnabled := IniStr("mouse", "blackhole", "1") = "1"
     CursorYawnEnabled := IniStr("mouse", "cursoryawn", "1") = "1"
@@ -168,24 +160,11 @@ LoadSettings() {
     MicKillSwitchEnabled := IniStr("memory", "mickill", "1") = "1"
     InfiniteWrapEnabled := IniStr("memory", "wrap", "0") = "1"
     SpotlightEnabled := IniStr("memory", "spotlight", "0") = "1"
-    AlwaysOnBottomEnabled := IniStr("memory", "bottom", "1") = "1"
     TextExpanderEnabled := IniStr("memory", "expander", "1") = "1"
     MiddleClickCloseEnabled := IniStr("memory", "midclose", "1") = "1"
     ProximityGhostEnabled := IniStr("memory", "ghost", "1") = "1"
     ShakeFindEnabled := IniStr("mouse", "shakefind", "1") = "1"
-    SmartTaskbarEnabled := IniStr("taskbar", "smart", "0") = "1"
     MediaFallbackList := IniStr("memory", "media_fallback", "youtube.exe; spotify.exe; vlc.exe; potplayermini64.exe; mpc-hc64.exe; netflix.exe")
-    
-    OriginalTaskbarState := GetTaskbarState()
-    
-    ; Backslash is NOT an escape character in AHK (backtick is), so "HKCU\\..."
-    ; is a literal double backslash and the key can never be found. These reads
-    ; are wrapped in try, so getting it wrong fails completely silently.
-    ; Value names are ExplorerPatcher's own - see PatcherSettings\*.reg.
-    EP_Style := "Win11"
-    try EP_Style := RegRead(EP_KEY, "OldTaskbar", 0) != 0 ? "Win10" : "Win11"
-    EP_IconSize := "Large"
-    try EP_IconSize := RegRead(ADVANCED_KEY, "TaskbarSmallIcons", 0) != 0 ? "Small" : "Large"
 
     ; "auto" follows the Windows accent colour. Validated by shape, like the
     ; enumerated settings are validated by membership: a value the GUI cannot
@@ -242,13 +221,11 @@ WriteSettings() {
         PutIni(BlackHoleMinimizeEnabled ? 1 : 0, "memory", "blackhole")
         PutIni(MomentumTiltEnabled ? 1 : 0, "mouse", "momentum")
         PutIni(CurtainDropEnabled ? 1 : 0, "memory", "curtain")
-        PutIni(TaskbarWaveEnabled ? 1 : 0, "taskbar", "wave")
         PutIni(CustomClockEnabled ? 1 : 0, "taskbar", "customclock")
         PutIni(ClockLocation, "taskbar", "clocklocation")
         PutIni(ClockUnits, "taskbar", "clockunits")
         PutIni(ClockAnchor, "taskbar", "clockanchor")
         PutIni(ClockWeatherEnabled ? 1 : 0, "taskbar", "clockweather")
-        PutIni(ToastBounceEnabled ? 1 : 0, "taskbar", "toastbounce")
         PutIni(MonitorThrowEnabled ? 1 : 0, "mouse", "monthrow")
         PutIni(BlackHoleDeleteEnabled ? 1 : 0, "mouse", "blackhole")
         PutIni(CursorYawnEnabled ? 1 : 0, "mouse", "cursoryawn")
@@ -290,33 +267,14 @@ WriteSettings() {
         PutIni(MicKillSwitchEnabled ? 1 : 0, "memory", "mickill")
         PutIni(InfiniteWrapEnabled ? 1 : 0, "memory", "wrap")
         PutIni(SpotlightEnabled ? 1 : 0, "memory", "spotlight")
-        PutIni(AlwaysOnBottomEnabled ? 1 : 0, "memory", "bottom")
         PutIni(TextExpanderEnabled ? 1 : 0, "memory", "expander")
         PutIni(MiddleClickCloseEnabled ? 1 : 0, "memory", "midclose")
         PutIni(ProximityGhostEnabled ? 1 : 0, "memory", "ghost")
         PutIni(ShakeFindEnabled ? 1 : 0, "mouse", "shakefind")
-        PutIni(SmartTaskbarEnabled ? 1 : 0, "taskbar", "smart")
         PutIni(MediaFallbackList, "memory", "media_fallback")
-        ; ExplorerPatcher treats any non-zero OldTaskbar as "Win10 taskbar", and the
-        ; shipped .reg uses 2. Only write when the on/off state actually changes, so
-        ; selecting Win10 does not quietly rewrite a working 2 down to a 1.
-        ; WriteSettings is assume-global, so every name assigned here becomes a
-        ; global - keep these prefixed so they cannot collide with a local elsewhere.
-        try {
-            epCur := 0
-            try epCur := RegRead(EP_KEY, "OldTaskbar", 0)
-            epWant := (EP_Style == "Win10")
-            if (epWant != (epCur != 0))
-                RegWrite(epWant ? 1 : 0, "REG_DWORD", EP_KEY, "OldTaskbar")
-        }
-        ; Registry writes are cheap, but not free, and this one runs every save.
-        epIcon := (EP_IconSize == "Small") ? 1 : 0
-        if (!IniCache.Has("epIcon") || IniCache["epIcon"] != epIcon) {
-            try {
-                RegWrite(epIcon, "REG_DWORD", ADVANCED_KEY, "TaskbarSmallIcons")
-                IniCache["epIcon"] := epIcon
-            }
-        }
+        ; Nothing here writes the registry. The ExplorerPatcher taskbar-style and
+        ; icon-size controls that used to (OldTaskbar, TaskbarSmallIcons) were
+        ; removed; values an older version wrote are left as the user has them.
     } finally {
         OverlaysResuspend(wsOverlays)
     }

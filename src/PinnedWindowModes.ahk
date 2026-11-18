@@ -4,15 +4,16 @@
 ; Function definitions and global initialisers only, no top-level statements.
 ; This module opens and closes a bare #HotIf around its one binding.
 ;
-; PiP, always-on-bottom, proximity ghost and privacy blur are grouped because
-; they share the property that matters: each leaves a foreign window in a state
-; the user cannot undo by hand. That makes exit-time restoration mandatory, not
-; polish, and it is why Bye() calls into all four.
+; PiP and proximity ghost are grouped because they share the property that
+; matters: each leaves a foreign window in a state the user cannot undo by hand.
+; That makes exit-time restoration mandatory, not polish, and it is why Bye()
+; calls into both.
 ;
-; SetParent ACROSS PROCESSES IS NOT REALLY SUPPORTED BY WIN32 and is not undone
-; by anything except RestoreFromBottom(). A window left parented to WorkerW
-; cannot be alt-tabbed to, cannot be moved normally, and dies with the next
-; Explorer restart.
+; Always-on-Bottom used to live here and was REMOVED, not switched off: it
+; reparented a foreign window into Explorer's WorkerW with a cross-process
+; SetParent, which Win32 does not really support - the window could not be
+; alt-tabbed to, could not be moved normally, and died with the next Explorer
+; restart. Do not reintroduce it.
 ;
 ; ToggleGhostMode INSTALLS ITS ALPHA LAYER AT FACTOR 1.0 ON PURPOSE. "Off" (256,
 ; which strips WS_EX_LAYERED) may only be emitted for a STRUCTURALLY neutral
@@ -240,114 +241,6 @@ PiPMonitorStep() {
             }
         }
     }
-}
-
-; ====== Always on Bottom (Desktop Widget) ======
-
-GetDesktopHwnd() {
-    desktopHwnd := WinExist("ahk_class Progman")
-    hwnds := WinGetList("ahk_class WorkerW")
-    for w in hwnds {
-        if DllCall("FindWindowEx", "ptr", w, "ptr", 0, "str", "SHELLDLL_DefView", "ptr", 0) {
-            desktopHwnd := w
-            break
-        }
-    }
-    return desktopHwnd
-}
-
-ToggleAlwaysOnBottom() {
-    global BottomWindows
-    ; Deliberately NOT guarded with a `static busy` flag.
-    ; #MaxThreadsPerHotkey 2 does let a second press interrupt this one, but
-    ; every exit below is an early `return` - and AHK v2 has no `finally`, so a
-    ; guard would have to be cleared on each of a dozen paths. Miss one and the
-    ; flag latches true and the hotkey is dead for the rest of the session,
-    ; which is far worse than the race: re-entry here re-runs the same branch
-    ; and writes the same Map entry twice, which is idempotent.
-
-    hwnd := WinExist("A")
-    if !hwnd
-        return
-
-    cls := ""
-    try cls := WinGetClass(hwnd)
-    if (!cls || IsShellSurface(hwnd, cls))
-        return
-
-    if BottomWindows.Has(hwnd) {
-        RestoreFromBottom(hwnd)
-        return
-    }
-
-    desktop := GetDesktopHwnd()
-    if !desktop
-        return
-
-    X := "", Y := "", W := "", H := ""
-    try WinGetPos(&X, &Y, &W, &H, hwnd)
-
-    ; No GetParent() here on purpose. For a window without WS_CHILD - which is
-    ; every window this hotkey accepts - Win32 GetParent returns the OWNER, not
-    ; the parent. Recording that and handing it back to SetParent on restore
-    ; turned an owned top-level window into a CHILD of its owner: clipped to the
-    ; owner's client area, not alt-tabbable, and impossible to move back out.
-    ; A top-level window's parent is the desktop, so restore passes 0.
-    ;
-    ; The return value must also be checked BEFORE we record anything: SetParent
-    ; fails across integrity levels and for some shell/UWP windows, and on failure
-    ; the window used to be listed as pinned anyway and then teleported by the
-    ; ScreenToClient conversion below.
-    if !DllCall("SetParent", "ptr", hwnd, "ptr", desktop, "ptr") {
-        Notify("Cannot pin this window to the desktop")
-        return
-    }
-
-    ; Record the screen rect: reparenting is undone at exit, and the window has to
-    ; go back to where it was on screen, not to client coordinates of a desktop it
-    ; is no longer a child of.
-    BottomWindows[hwnd] := {x: X, y: Y, w: W, h: H}
-
-    if (X != "") {
-        pt := Buffer(8)
-        NumPut("Int", X, pt, 0)
-        NumPut("Int", Y, pt, 4)
-        DllCall("ScreenToClient", "ptr", desktop, "ptr", pt)
-        nX := NumGet(pt, 0, "Int")
-        nY := NumGet(pt, 4, "Int")
-
-        RS_SetPos(hwnd, nX, nY, W, H, RS_PRI_USER)
-        RS_Commit()
-    }
-}
-
-; Put a desktop-pinned window back where it came from. Shared by the hotkey and
-; by Bye(), because a window left parented to WorkerW cannot be alt-tabbed to,
-; cannot be moved normally, and dies with the next Explorer restart.
-RestoreFromBottom(hwnd) {
-    global BottomWindows
-    if !BottomWindows.Has(hwnd)
-        return
-    info := BottomWindows[hwnd]
-    BottomWindows.Delete(hwnd)
-
-    if !DllCall("IsWindow", "ptr", hwnd)
-        return
-
-    ; Where it is now, so a widget the user dragged around stays put. GetWindowRect
-    ; reports screen coordinates even for a child window, so this is still valid
-    ; while it is parented to the desktop. The pinning-time rect is the fallback.
-    x := info.x, y := info.y, w := info.w, h := info.h
-    try WinGetPos(&x, &y, &w, &h, hwnd)
-
-    ; 0 = the desktop, i.e. back to being a real top-level window. See the note in
-    ; ToggleAlwaysOnBottom for why the old GetParent() handle was wrong.
-    DllCall("SetParent", "ptr", hwnd, "ptr", 0, "ptr")
-
-    if (x != "")
-        RS_SetPos(hwnd, x, y, w, h, RS_PRI_USER)
-    RS_SetZOrder(hwnd, 0, 0x0013, RS_PRI_USER)      ; HWND_TOP
-    RS_Commit()
 }
 
 ; ====== Proximity Ghost Window ======

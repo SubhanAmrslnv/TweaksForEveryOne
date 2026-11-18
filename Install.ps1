@@ -7,40 +7,32 @@
     Desktop and Startup shortcuts, and starts it.
 
     No admin rights. No registry keys for the program itself. Nothing outside
-    your user profile. Uninstall.ps1 removes all of it. The one exception is
-    the optional ExplorerPatcher step (-ExplorerPatcher), which is a third-party
-    shell extension: its own setup asks for administrator rights (UAC) and puts
-    files under C:\Windows. It is never installed unless you ask for it.
+    your user profile. Uninstall.ps1 removes all of it.
 
-    Network access: winget, only if AutoHotkey v2 is missing; GitHub, only with
-    -ExplorerPatcher. See docs\SECURITY.md for everything the program touches.
+    Network access: winget, only if AutoHotkey v2 is missing. See
+    docs\SECURITY.md for everything the program touches.
 
 .PARAMETER Silent
     Skip every prompt and take the defaults: install + autostart, no Windows
-    tuning, no ExplorerPatcher, no Explorer restart.
+    tuning, no Explorer restart.
 
 .PARAMETER NoAutoStart
     Don't run at login.
 
 .PARAMETER Tuning
     Also apply the Windows animation and Explorer tuning (scripts\).
-
-.PARAMETER ExplorerPatcher
-    Also install ExplorerPatcher (pinned release, SHA-256 verified; needs UAC)
-    and import PatcherSettings\*.reg. Off by default.
 #>
 [CmdletBinding()]
 param(
     [switch]$Silent,
     [switch]$NoAutoStart,
-    [switch]$Tuning,
-    [switch]$ExplorerPatcher
+    [switch]$Tuning
 )
 
 $ErrorActionPreference = 'Stop'
 
 function Say ($m, $c = 'Gray') { Write-Host "  $m" -ForegroundColor $c }
-function Step($n, $m) { Write-Host "`n[$n/7] $m" -ForegroundColor Cyan }
+function Step($n, $m) { Write-Host "`n[$n/6] $m" -ForegroundColor Cyan }
 
 Write-Host ""
 Write-Host "  ===========================================" -ForegroundColor Cyan
@@ -83,91 +75,11 @@ if ($ahk) {
     Say "Installed $ahk" 'Green'
 }
 
-# ------------------------------------------------- 2. ExplorerPatcher ----
-Step 2 "Checking for ExplorerPatcher"
-$epInstalled = Test-Path "C:\Windows\dxgi.dll"
-if (-not $epInstalled) {
-    $epInstalled = Test-Path "C:\Windows\SystemApps\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\dxgi.dll"
-}
-
-# OPT-IN ONLY. ExplorerPatcher is a third-party shell extension that installs
-# into C:\Windows and needs UAC - on a managed machine that is IT's decision, not
-# a default. It used to be downloaded from "releases/latest" and run silently on
-# every install, unverified. Now: only on request, a pinned release, and the
-# file's SHA-256 must match before it is executed. To move to a newer release,
-# update both constants from the release's asset "digest" on the GitHub API.
-$EP_TAG    = '26100.8457.70.3'
-$EP_SHA256 = '8146db4d3a87201fb80ad1d3712ba8f56883e9a0811758bd39f62d73a9f2c586'
-$EP_URL    = "https://github.com/valinet/ExplorerPatcher/releases/download/$EP_TAG/ep_setup.exe"
-
-$wantEP = [bool]$ExplorerPatcher
-if (-not $wantEP -and -not $Silent) {
-    Say "ExplorerPatcher (optional, third-party) enables the Win10 taskbar style and" 'Gray'
-    Say "small-icon options. It needs administrator rights and may be blocked by" 'Gray'
-    Say "company policy. Window Tweaks works fully without it." 'Gray'
-    $answer = Read-Host "  Install ExplorerPatcher $EP_TAG and apply its settings? (y/N)"
-    $wantEP = ($answer -match '^[Yy]')
-}
-
-$epApplied = $false
-if ($epInstalled) {
-    Say "ExplorerPatcher is already installed." 'Green'
-} elseif (-not $wantEP) {
-    Say "Skipped (optional). Re-run with -ExplorerPatcher to add it." 'DarkGray'
-} else {
-    $epSetup = Join-Path $env:TEMP "ep_setup_$EP_TAG.exe"
-    try {
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Say "Downloading ExplorerPatcher $EP_TAG from GitHub..." 'DarkGray'
-        Invoke-WebRequest -Uri $EP_URL -OutFile $epSetup -UseBasicParsing -ErrorAction Stop
-        $hash = (Get-FileHash -Path $epSetup -Algorithm SHA256).Hash.ToLowerInvariant()
-        if ($hash -ne $EP_SHA256) {
-            Say "SHA-256 mismatch - refusing to run it." 'Red'
-            Say "  expected $EP_SHA256" 'Red'
-            Say "  got      $hash" 'Red'
-        } else {
-            Say "Checksum verified. Installing (accept the UAC prompt)..." 'Yellow'
-            $proc = Start-Process -FilePath $epSetup -Wait -PassThru
-            if ($proc.ExitCode -eq 0) {
-                Say "ExplorerPatcher installed." 'Green'
-                $epInstalled = $true
-            } else {
-                Say "ExplorerPatcher setup failed or was cancelled (exit $($proc.ExitCode))." 'Red'
-            }
-        }
-    } catch {
-        Say "Could not install ExplorerPatcher: $_" 'Red'
-    } finally {
-        Remove-Item $epSetup -Force -ErrorAction SilentlyContinue
-    }
-}
-
-# ------------------------------------------------- 2.5 ExplorerPatcher Settings ----
-Step 2.5 "ExplorerPatcher settings"
-# Only together with an explicit ExplorerPatcher opt-in. The .reg is trimmed to
-# ExplorerPatcher's own keys (see its header) and imported visibly.
-$regFile = Get-ChildItem -Path "$repo\PatcherSettings\ExplorerPatcher*.reg" -ErrorAction SilentlyContinue |
-           Select-Object -First 1
-if (-not $wantEP) {
-    Say "Skipped (ExplorerPatcher not requested)." 'DarkGray'
-} elseif (-not $epInstalled) {
-    Say "Skipped (ExplorerPatcher is not installed)." 'DarkGray'
-} elseif (-not $regFile) {
-    Say "No PatcherSettings\ExplorerPatcher*.reg found, skipping." 'DarkGray'
-} else {
-    Say "Importing $($regFile.Name) (HKCU only)..." 'Yellow'
-    $ErrorActionPreference = 'Continue'     # reg.exe reports success on stderr
-    & reg.exe import "$($regFile.FullName)" 2>&1 | ForEach-Object { Say "$_" 'DarkGray' }
-    $ErrorActionPreference = 'Stop'
-    if ($LASTEXITCODE -eq 0) { Say "Settings applied." 'Green'; $epApplied = $true }
-    else                     { Say "Failed to apply settings (reg.exe exit $LASTEXITCODE)." 'Red' }
-}
-
-# ------------------------------------------------------ 3. stop old copy ----
-Step 3 "Stopping any running copy"
+# ------------------------------------------------------ 2. stop old copy ----
+Step 2 "Stopping any running copy"
 # Ask first, force only as a fallback. A forced kill skips the program's exit
 # handler, which is what writes pending settings and hands back every window it
-# changed (always-on-bottom, ghosted, rolled-up, hidden to tray) - an upgrade
+# changed (ghosted, rolled-up, hidden to tray) - an upgrade
 # over a running copy used to strand those. taskkill without /F posts WM_CLOSE.
 $stopped = 0
 $procs = @(Get-CimInstance Win32_Process -Filter "Name like 'AutoHotkey%'" -ErrorAction SilentlyContinue |
@@ -188,8 +100,8 @@ foreach ($p in $procs) {
 }
 Say $(if ($stopped) { "Stopped $stopped" } else { "Nothing was running" })
 
-# ------------------------------------------------------------- 4. files ----
-Step 4 "Installing to $dest"
+# ------------------------------------------------------------- 3. files ----
+Step 3 "Installing to $dest"
 New-Item -ItemType Directory -Path $dest -Force | Out-Null
 
 # The program is installed flat: WindowTweaks.ahk includes SnapCore.ahk
@@ -243,8 +155,8 @@ if (Test-Path $userIni) {
     Say "No baseline found - the program will write its defaults on first run" 'DarkGray'
 }
 
-# --------------------------------------------------------- 5. shortcuts ----
-Step 5 "Creating shortcuts"
+# --------------------------------------------------------- 4. shortcuts ----
+Step 4 "Creating shortcuts"
 $WshShell = New-Object -ComObject WScript.Shell
 $icoPathDest = Join-Path $dest 'WindowTweaks.ico'
 
@@ -283,8 +195,8 @@ $auto = -not $NoAutoStart
 if ($auto) { New-Link $startup ; Say "Startup - runs at login" 'Green' }
 else       { if (Test-Path $startup) { Remove-Item $startup -Force }; Say "Autostart skipped" 'DarkGray' }
 
-# ----------------------------------------------------------- 6. Windows ----
-Step 6 "Windows settings"
+# ----------------------------------------------------------- 5. Windows ----
+Step 5 "Windows settings"
 
 # No runtime-compiled C# here any more. The only thing this step must guarantee
 # is DragFullWindows=1, and the program itself applies that live at startup
@@ -340,7 +252,7 @@ if ($applyExplorerTuning) {
 # Explorer is restarted only when something that needs it was applied, and never
 # without asking in an interactive install. It used to be force-killed on every
 # install, and nothing relaunched it if Windows did not.
-if ($applyExplorerTuning -or $epApplied) {
+if ($applyExplorerTuning) {
     $restart = $Silent
     if (-not $Silent) {
         $answer = Read-Host "  Restart Explorer now so the changes take effect? (Y/n)"
@@ -356,8 +268,8 @@ if ($applyExplorerTuning -or $epApplied) {
     }
 }
 
-# ------------------------------------------------------------ 7. launch ----
-Step 7 "Starting Window Tweaks"
+# ------------------------------------------------------------ 6. launch ----
+Step 6 "Starting Window Tweaks"
 Start-Process -FilePath $ahk -ArgumentList ('"' + (Join-Path $dest 'WindowTweaks.ahk') + '"') -WorkingDirectory $dest
 Start-Sleep -Seconds 2
 $running = Get-CimInstance Win32_Process -Filter "Name like 'AutoHotkey%'" -ErrorAction SilentlyContinue |

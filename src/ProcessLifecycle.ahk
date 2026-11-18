@@ -58,8 +58,7 @@ Boot() {
     OnMessage(DllCall("RegisterWindowMessage", "str", "SHELLHOOK", "uint"), ShellEvent)
     ; Explorer broadcasts TaskbarCreated to every top-level window when the shell
     ; restarts, and the shell-hook registration does NOT survive that. Without
-    ; re-registering, an Explorer crash - or this app's own "Restart Explorer"
-    ; button - silently killed position memory, the open animations, focus pulse,
+    ; re-registering, an Explorer crash or restart silently killed position memory, the open animations, focus pulse,
     ; breathing seeding, fly-to-mouse minimize and per-window cleanup for the rest
     ; of the session, with no error anywhere.
     OnMessage(DllCall("RegisterWindowMessage", "str", "TaskbarCreated", "uint"), TaskbarCreated)
@@ -87,10 +86,8 @@ Boot() {
     ; lazily on first use.
     SyncShakeDetector()
     SyncCursorFxTimer()
-    SyncTaskbarUiTimer()
     SyncBreathingTimers()
     SyncDimmerTimer()
-    SyncSmartTaskbar()
     SyncHotCornersTimer()
     SyncCursorWrapTimer()
     SyncTextExpander()
@@ -114,8 +111,8 @@ global VERSION := "1.0"
 Bye(*) {
     global TrayIcons, BossKeyActive, BossKeyWindows, BossKeyMuteState
     global WinEventHook, WinEventCb, RolledUpWindows, CustomTrans
-    global OriginalTaskbarState, SmartTaskbarEnabled, DimmerGuis, OsdGui, PipGuis, MicOsdGui, SpotlightGui
-    global WinCurrentAlpha, GhostWindows, BottomWindows, FocusGuis, AnimOwnerKey
+    global DimmerGuis, OsdGui, PipGuis, MicOsdGui, SpotlightGui
+    global WinCurrentAlpha, GhostWindows, FocusGuis, AnimOwnerKey
 
     ; Nothing may interrupt the teardown. A window created mid-way used to reach
     ; HandleNewWindow after the alpha sweep below and be left at alpha 0 -
@@ -144,7 +141,6 @@ Bye(*) {
     try SetTimer(BreathingMonitorStep, 0)
     try SetTimer(GhostMonitorStep, 0)
     try SetTimer(MonitorDimmerTickStep, 0)
-    try SetTimer(SmartTaskbarMonitorStep, 0)
     try SetTimer(HotCornersMonitorStep, 0)
     try SetTimer(CursorWrapMonitorStep, 0)
     try SetTimer(FocusMonitorStep, 0)
@@ -153,10 +149,8 @@ Bye(*) {
     try SetTimer(MC_Tick, 0)
     ; The rest of the timers in the program. Every one of these was left running
     ; through the whole teardown, and several of them re-create the very overlays
-    ; and window state Bye() exists to undo - CheckTaskbarAndUI can build a fresh
-    ; full-screen Start-menu blur AFTER RS_Shutdown() has run. Bye() is also the
-    ; tray -> Restart path, so this is not academic.
-    try SetTimer(CheckTaskbarAndUI, 0)
+    ; and window state Bye() exists to undo. Bye() is also the tray -> Restart
+    ; path, so this is not academic.
     try SetTimer(ShakeDetector, 0)
     try CancelAnimation("ShakeFind")
     try SetTimer(CheckMouseIdle, 0)
@@ -215,9 +209,6 @@ Bye(*) {
         try GuiDestroy(g)
     SmartGridGuis := []
 
-    if (SmartTaskbarEnabled && OriginalTaskbarState != -1)
-        SetTaskbarAutoHide(OriginalTaskbarState & 1)
-
     if (BossKeyActive) {
         for hwnd in BossKeyWindows {
             if DllCall("IsWindow", "ptr", hwnd)
@@ -251,8 +242,6 @@ Bye(*) {
     }
     for hwnd, info in GhostWindows.Clone()
         try UnGhostWindow(hwnd)
-    for hwnd, info in BottomWindows.Clone()
-        try RestoreFromBottom(hwnd)
 
     ; Two more maps that record foreign-window state we have to hand back, and
     ; that nothing else can. Both of these used to outlive the process:

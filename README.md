@@ -88,15 +88,11 @@ tool windows, and Picture-in-Picture (PiP) windows are deliberately excluded.
 The Windows 11 taskbar cannot be meaningfully shrunk by an ordinary program, so
 Window Tweaks doesn't pretend to — the height engine that tried was removed, and
 [docs/TASKBAR-AND-INTERNALS.md](docs/TASKBAR-AND-INTERNALS.md) records exactly what
-was measured and why. Instead it integrates with **ExplorerPatcher**, which can do
-it properly: `Install.ps1 -ExplorerPatcher` (opt-in; it needs UAC) installs a
-pinned, checksum-verified ExplorerPatcher release for you, and
-Window Tweaks gives you a clean UI to switch between Windows 10 and Windows 11
-taskbar styles and to turn on small icons.
+was measured and why. It does not install or configure third-party shell
+replacements, and it does not change the taskbar's style, size or auto-hide state.
 
-What Window Tweaks does to the taskbar itself is **Smart Auto-Hide** — hiding it
-only when a window is maximized or reaches the bottom edge — and putting volume on
-the mouse wheel while the pointer is over it.
+What Window Tweaks does with the taskbar is put volume on the mouse wheel while
+the pointer is over it, and (optionally) draw a clock block beside the tray.
 
 ### Everything is tunable
 
@@ -114,7 +110,6 @@ Context Menu Unfold. Turn on whichever you want in the settings window.
 ### The Full Feature Suite (40+ Tweaks & Animations)
 
 **15 Power-User Tweaks (Newly Added):**
-- **Smart Auto-Hide Taskbar**: Only hides the taskbar when windows maximize or touch the bottom edge.
 - **macOS "Quick Look"**: Press Space on any file in Explorer to instantly preview it.
 - **Multi-Monitor Focus Dimmer**: Dims inactive monitors by 50% to reduce eye strain.
 - **macOS "Hot Corners"**: Throw your mouse to screen corners to trigger actions (e.g. Hide windows, Task View).
@@ -124,7 +119,6 @@ Context Menu Unfold. Turn on whichever you want in the settings window.
 - **Global Mic Kill-Switch**: Double-tap `Alt` to instantly mute/unmute your microphone system-wide.
 - **Infinite Cursor Wrap**: Push the cursor into the left or right edge of the desktop and hold to teleport to the other side. Needs a deliberate push - approach speed, hold time, cooldown and edge tolerance are all configurable - so reaching for something at the screen edge never triggers it, and it never fires mid-drag.
 - **Quick Spotlight Launcher**: Double-tap `Ctrl` for a minimalist, lightning-fast search and launch bar.
-- **Always on Bottom**: `Shift+Alt+B` pins any window permanently to your desktop background as a widget.
 - **Global Text Expander**: Type `@@mail`, `@@date`, etc., to instantly expand snippets anywhere.
 - **Middle-Click to Close**: Middle-click any window's title bar to instantly close it.
 - **Proximity Ghost Window**: `Shift+Alt+G` makes a window 80% transparent; it fades in and becomes clickable only when your mouse gets close.
@@ -160,7 +154,6 @@ Context Menu Unfold. Turn on whichever you want in the settings window.
 - **Dynamic Notch (OSD)**: Volume and brightness adjustments drop down a sleek iOS-style Dynamic Island pill from the top of the screen.
 - **Curtain Drop (Win+Alt+D)**: Showing the desktop drops all windows simultaneously with a kinetic fall.
 - **Overscroll Bounce**: Scrolling past the end of a page elastically stretches and springs back.
-- **Taskbar Icon Wave & Elastic Toasts**: Hovering over the taskbar creates a macOS-like icon wave, and notifications bounce elastically into view.
 - **Window Throw & Catch**: Forcefully flick a window towards another monitor, and it will kinetically fly across screens.
 - **Shatter to Close**: Shift+Alt+F4 smashes the active window into dozens of 3D glass shards that fall with gravity.
 
@@ -177,7 +170,7 @@ Context Menu Unfold. Turn on whichever you want in the settings window.
 - **Reset Transparency**: `Shift + Alt + X` returns the active window to fully opaque.
 
 **Feature Toggles (`Shift + Alt + key`):**
-- Hot corners (`C`), infinite cursor wrap (`I`), multi-monitor dimmer (`D`), smart auto-hide taskbar (`T`), magnetic window groups (`J`), grab & pan (`Space`) — each toggles instantly, shows a tray notification, and saves the new state.
+- Hot corners (`C`), infinite cursor wrap (`I`), multi-monitor dimmer (`D`), magnetic window groups (`J`), grab & pan (`Space`) — each toggles instantly, shows a tray notification, and saves the new state.
 
 **Productivity & Window Management:**
 - **Transparency Control**: `Shift + Alt + Wheel` to adjust the opacity of any active window.
@@ -315,8 +308,7 @@ together — they don't conflict.
 ### Can I make a window always on top in Windows 11?
 
 Yes. `Shift + Alt + O` pins the active window above everything else, and press
-again to unpin. There is also **always on bottom** (`Shift + Alt + B`) to park a
-window on the desktop as a widget.
+again to unpin.
 
 ### How do I make a window transparent on Windows 11?
 
@@ -338,8 +330,7 @@ window, using DWM thumbnails rather than screen capture.
 
 No. Nothing is installed outside your user profile, there is no service, no
 scheduled task and no `Run` registry key — only a Startup shortcut. The optional
-Windows tuning writes to `HKCU` only and is fully reversible. The one exception
-is the optional ExplorerPatcher install, which is off unless you ask for it.
+Windows tuning writes to `HKCU` only and is fully reversible.
 [docs/SECURITY.md](docs/SECURITY.md) lists every hook, registry key, file and
 network request the program uses, for anyone reviewing it on a managed machine.
 

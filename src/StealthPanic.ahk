@@ -155,9 +155,6 @@ StealthSyncFeatures() {
 
     StealthCall("SyncBreathingTimers")
     StealthCall("SyncCursorFxTimer")
-    ; Stops the 32 ms poll, but only after one final pass that tears down the
-    ; Start-menu blur, the lightsaber glow and every privacy-blur sheet.
-    StealthCall("SyncTaskbarUiTimer")
     StealthCall("UpdateKeyboardHook")
     StealthCall("SyncMediaCore")
 }

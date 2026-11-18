@@ -122,8 +122,8 @@ BuildWin() {
     global GlideEnabled, GLIDE_THROW, GLIDE_MS
     global BlackHoleMinimizeEnabled, MomentumTiltEnabled
     global CurtainDropEnabled
-    global TaskbarWaveEnabled, CustomClockEnabled, ClockLocation, ClockUnits, ClockAnchor, ClockWeatherEnabled, ToastBounceEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled, CursorYawnEnabled, ShatterEnabled
-    global RestoreEnabled, BreathingEnabled, OpenAnim, FlyMinimizeEnabled, RollUpEnabled, TrayMinimizeEnabled, BossKeyEnabled, AltDragEnabled, TaskbarScrollEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, MorphingPasteEnabled, ClipboardAppendEnabled, SmoothCaretEnabled, TypingSoundsEnabled, HotkeySoundsEnabled, CopyFeedbackEnabled, SmartCapsEnabled, SmartCapsAction, ParallaxEnabled, EP_Style, EP_IconSize
+    global CustomClockEnabled, ClockLocation, ClockUnits, ClockAnchor, ClockWeatherEnabled, MonitorThrowEnabled, BlackHoleDeleteEnabled, CursorYawnEnabled, ShatterEnabled
+    global RestoreEnabled, BreathingEnabled, OpenAnim, FlyMinimizeEnabled, RollUpEnabled, TrayMinimizeEnabled, BossKeyEnabled, AltDragEnabled, TaskbarScrollEnabled, QuickFolderJumpEnabled, PlainPasteEnabled, MorphingPasteEnabled, ClipboardAppendEnabled, SmoothCaretEnabled, TypingSoundsEnabled, HotkeySoundsEnabled, CopyFeedbackEnabled, SmartCapsEnabled, SmartCapsAction, ParallaxEnabled
     global NAV, SEL, SELF, FG, EDITBG, EDITFG, ACCENT, DIVIDER, HOVER, NavHwnd, NavHover
 
     ; ---- Design tokens. Every colour in this window comes from this block.
@@ -278,9 +278,6 @@ BuildWin() {
     TuneRow(pg, "ghostRange", FG, cSub)
     TuneRow(pg, "ghostClick", FG, cSub)
 
-    C["bottom"] := Box(pg, CW, FG, "Always on Bottom / Widget (Shift+Alt+B)", AlwaysOnBottomEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Pins any window permanently to your desktop background, transforming it into a widget.", "xm y+8")
-    
     C["midclose"] := Box(pg, CW, FG, "Middle-Click Titlebar to Close", MiddleClickCloseEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Overrides Roll-Up. Middle-click any window's title bar to close it.", "xm y+8")
     
@@ -507,30 +504,11 @@ BuildWin() {
     C["debuglog"] := Box(pg, CW, FG, "Write a debug log (snap.log)", DEBUG, "xm y+16")
     Sub(pg, CW, cSub, "Only needed when reporting a problem. Buffered in memory, written when idle.", "xm y+8")
     
-    C["smart_tb"] := Box(pg, CW, FG, "Smart Auto-Hide Taskbar (Shift+Alt+T)", SmartTaskbarEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Only hides taskbar when windows maximize or touch the bottom edge.", "xm y+8")
-    
     C["deletehole"] := Box(pg, CW, FG, "Recycle Bin Black Hole (Delete Animation)", BlackHoleDeleteEnabled, "xm y+16")
     Sub(pg, CW, cSub, "Deleting a file visually sucks it into a top-left singularity (spaghettification).", "xm y+8")
-    
-    C["twave"] := Box(pg, CW, FG, "Taskbar Icon Wave", TaskbarWaveEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Hovering over the taskbar creates a magnifying glass bubble that tracks your mouse.", "xm y+8")
-    
+
     ; The taskbar clock has its own page, "Taskbar Clock", built above.
-    
-    C["toast"] := Box(pg, CW, FG, "Elastic Toast Notifications", ToastBounceEnabled, "xm y+16")
-    Sub(pg, CW, cSub, "Notifications slide in elastically with an overshoot bounce.", "xm y+8")
 
-    Lbl(pg, FG, "Taskbar Style", "xm y+16")
-    C["epStyle"] := pg.AddDropDownList("x170 yp-3 w100 Background" EDITBG " c" EDITFG " Choose" IndexOf(EP_STYLES, EP_Style), EP_STYLES)
-    Sub(pg, 220, cSub, "Win10 supports small icons", "x+16 yp+3")
-
-    Lbl(pg, FG, "Icon Size", "xm y+16")
-    C["epIconSize"] := pg.AddDropDownList("x170 yp-3 w100 Background" EDITBG " c" EDITFG " Choose" IndexOf(EP_ICON_SIZES, EP_IconSize), EP_ICON_SIZES)
-    
-    b2 := pg.AddButton("xm y+24 w150 h30", "Restart Explorer")
-    b2.OnEvent("Click", (*) => RestartExplorer())
-    
     b := pg.AddButton("xm y+24 w150 h30", "Open log")
     b.OnEvent("Click", (*) => OpenLog())
     b3 := pg.AddButton("x+12 yp w150 h30", "Open folder")
@@ -548,7 +526,7 @@ BuildWin() {
     g.OnEvent("Escape", (*) => CloseWin(g))
 
     for key, ctl in C {
-        if (key == "epStyle" || key == "epIconSize" || key == "clockanchor" || key == "clockunits")
+        if (key == "clockanchor" || key == "clockunits")
             ctl.OnEvent("Change", (*) => ApplyUi(true))
         else if InStr(ctl.Type, "CheckBox")
             ctl.OnEvent("Click", (*) => ApplyUi(true))
@@ -906,14 +884,12 @@ ApplyUi(writeBack := false) {
     ;
     ; ApplyUi is assume-global, so every name assigned here becomes a global -
     ; the ui* prefix keeps these from colliding with anything else.
-    uiAutoStart := "", uiOldSmartTb := ""
-    ; Turning a feature off has to undo what it already did. Ghost, always-on-
-    ; bottom and PiP are each driven by a hotkey inside `#HotIf <flag>`, so once
-    ; the flag is false the hotkey no longer exists and the user cannot undo the
-    ; state by hand: ghosted windows stay click-through and topmost, pinned windows
-    ; stay children of the desktop, thumbnails stay on screen.
+    uiAutoStart := ""
+    ; Turning a feature off has to undo what it already did. Ghost and PiP are
+    ; each driven by a hotkey inside `#HotIf <flag>`, so once the flag is false
+    ; the hotkey no longer exists and the user cannot undo the state by hand:
+    ; ghosted windows stay click-through and topmost, thumbnails stay on screen.
     uiOldGhost := ProximityGhostEnabled
-    uiOldBottom := AlwaysOnBottomEnabled
     uiOldPip := LivePipEnabled
     ; Same class of problem, one step smaller. The drag layer is installed by a
     ; frame callback that stops running the moment the flag is false, so unticking
@@ -957,7 +933,6 @@ ApplyUi(writeBack := false) {
         CopyFeedbackEnabled := C["copyfeedback"].Value
         MorphingPasteEnabled := C["morphingpaste"].Value
         ClipboardAppendEnabled := C["clipboardappend"].Value
-        TaskbarWaveEnabled := C["twave"].Value
         CustomClockEnabled := C["customclock"].Value
         ClockUnits := C["clockunits"].Text
         ClockAnchor := C["clockanchor"].Text
@@ -965,7 +940,6 @@ ApplyUi(writeBack := false) {
         ; Shape validation - it is not a number, so it is not a TUNE_SPEC row.
         ; Whatever survives goes straight into a URL.
         ClockLocation := CleanClockLocation(C["clockloc"].Value)
-        ToastBounceEnabled := C["toast"].Value
         MonitorThrowEnabled := C["monthrow"].Value
         BlackHoleDeleteEnabled := C["deletehole"].Value
         CursorYawnEnabled := C["cursoryawn"].Value
@@ -982,18 +956,11 @@ ApplyUi(writeBack := false) {
         HotCornerBL := C["corner_bl"].Text
         HotCornerBR := C["corner_br"].Text
 
-        AlwaysOnBottomEnabled := C["bottom"].Value
         TextExpanderEnabled := C["expander"].Value
         PlainPasteEnabled := C["plainpaste"].Value
         SmartCapsEnabled := C["smartcaps"].Value
         SmartCapsAction := C["smartcaps_act"].Text
         ParallaxEnabled := C["parallax"].Value
-
-        uiOldSmartTb := SmartTaskbarEnabled
-        SmartTaskbarEnabled := C["smart_tb"].Value
-
-        EP_Style       := C["epStyle"].Text
-        EP_IconSize    := C["epIconSize"].Text
 
         ; No validation beyond trimming: MC_ParseExeList already rejects paths
         ; and normalises separators, and an empty list is a legitimate value
@@ -1024,10 +991,6 @@ ApplyUi(writeBack := false) {
     if (uiAutoStart != "" && uiAutoStart != IsAutoStart())
         try SetAutoStart(uiAutoStart)
 
-    ; Switched off: hand the taskbar back the auto-hide state it had at startup.
-    if (uiOldSmartTb != "" && uiOldSmartTb && !SmartTaskbarEnabled && OriginalTaskbarState != -1)
-        try SetTaskbarAutoHide(OriginalTaskbarState & 1)
-
     ; Switched off: release whatever the feature is still holding, through the same
     ; functions the hotkeys and Bye() use.
     if (uiOldGhost && !ProximityGhostEnabled) {
@@ -1035,10 +998,6 @@ ApplyUi(writeBack := false) {
             try UnGhostWindow(hwnd)
         SetTimer(GhostMonitorStep, 0)
         SyncMediaCore()
-    }
-    if (uiOldBottom && !AlwaysOnBottomEnabled) {
-        for hwnd, info in BottomWindows.Clone()
-            try RestoreFromBottom(hwnd)
     }
     if (uiOldPip && !LivePipEnabled) {
         for src, pip in PipGuis.Clone()
@@ -1052,7 +1011,6 @@ ApplyUi(writeBack := false) {
     try UpdateKeyboardHook()         ; start/stop the keyboard hook to match the boxes
     try SyncTray()
     try SyncBreathingTimers()        ; start/stop the polling to match the checkbox
-    try SyncSmartTaskbar()
     try SyncDimmerTimer()
     try SyncHotCornersTimer()
     try SyncCursorWrapTimer()
@@ -1060,17 +1018,11 @@ ApplyUi(writeBack := false) {
     try SyncTextExpander()
     try SyncShakeDetector()
     try SyncCursorFxTimer()
-    try SyncTaskbarUiTimer()
     try SyncMediaCore()
     try SaveSettings()
 }
 
 NumOr(text, fallback) => IsNumber(text) ? Number(text) : fallback
-
-RestartExplorer() {
-    RunWait('taskkill /f /im explorer.exe', , "Hide")
-    Run "explorer.exe"
-}
 
 ; This listed 13 of the ~45 real bindings and claimed Ctrl+Win+V for plain paste,
 ; which is bound to Ctrl+Alt+V. Every toggle and the whole keyboard-layout set
@@ -1103,7 +1055,6 @@ ShowHotkeys() {
   . "C`t`tHot corners`n"
   . "I`t`tInfinite cursor wrap`n"
   . "D`t`tMulti-monitor dimmer`n"
-  . "T`t`tSmart auto-hide taskbar`n"
   . "J`t`tMagnetic window groups`n"
   . "Space`t`tUniversal grab and pan`n`n"
   . "RECOVERY  (Shift+Alt)`n"
@@ -1118,7 +1069,6 @@ ShowHotkeys() {
   . "WHEN A FEATURE IS ENABLED`n"
   . "Double-tap Ctrl`tQuick Spotlight Launcher`n"
   . "Double-tap Alt`tGlobal Mic Kill-Switch`n"
-  . "Shift+Alt+B`tAlways on bottom (desktop widget)`n"
   . "Shift+Alt+G`tProximity Ghost Window`n"
   . "Shift+Alt+P`tLive Window Picture-in-Picture`n"
   . "Shift+Alt+L`tQuick Spotlight Launcher`n"

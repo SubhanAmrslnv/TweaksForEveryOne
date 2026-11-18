@@ -119,17 +119,6 @@ ToggleDimmer() {
     SyncDimmerTimer()              ; also fades out and clears the dim overlays
 }
 
-ToggleSmartTaskbar() {
-    global SmartTaskbarEnabled, OriginalTaskbarState
-    SmartTaskbarEnabled := !SmartTaskbarEnabled
-    ToggleFeatureFlag("Smart auto-hide taskbar", SmartTaskbarEnabled, "smart_tb")
-    ; Switching off has to hand the taskbar back the way ApplyUi does, or it is
-    ; left auto-hiding with nothing left to un-hide it.
-    if (!SmartTaskbarEnabled && OriginalTaskbarState != -1)
-        try SetTaskbarAutoHide(OriginalTaskbarState & 1)
-    SyncSmartTaskbar()
-}
-
 ; No Sync* for these two: magnetic groups is read inline by the drag pipeline and
 ; grab & pan lives behind a #HotIf, which re-evaluates the flag on every press.
 ToggleMagneticGroups() {

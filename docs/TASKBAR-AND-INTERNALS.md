@@ -9,9 +9,11 @@
 >
 > The **magnetic snapping** sections below are current and accurate.
 >
-> What the program does to the taskbar now: Smart Auto-Hide (via
-> `SHAppBarMessage`) and volume on the wheel while the pointer is over it. Taskbar
-> style and small icons are handed to ExplorerPatcher.
+> What the program does with the taskbar now: volume on the wheel while the
+> pointer is over it, and an optional clock block beside the tray. It no longer
+> changes the auto-hide state (Smart Auto-Hide was removed), no longer moves
+> notification toasts or overlays the taskbar icons, and no longer integrates
+> with ExplorerPatcher.
 
 **Shift + Alt + W** opens the settings window. All hotkeys are in `HOTKEYS.md`,
 setup is in the repository `README.md`.
@@ -74,11 +76,11 @@ put one. If that's not what you want, turn it off with **Shift + Alt + M**.
 
 ## Taskbar management
 
-The Windows 11 taskbar cannot be meaningfully shrunk by an ordinary program. 
-Because of this, Window Tweaks now integrates directly with **ExplorerPatcher** to achieve a small, responsive taskbar.
-
-The installer automatically fetches the latest `ep_setup.exe` from GitHub and installs it with administrator privileges.
-Once installed, Window Tweaks provides a UI to switch between the Windows 10 style taskbar (which supports small icons) and the Windows 11 style.
+The Windows 11 taskbar cannot be meaningfully shrunk by an ordinary program.
+Window Tweaks used to offer an opt-in ExplorerPatcher install plus a taskbar
+style / icon-size switch for it. **That integration has been removed**: it
+installed a third-party DLL into `C:\Windows` and wrote that shell's settings
+on every save, which is the opposite of leaving Windows' own behaviour alone.
 
 The old method of manually cropping the taskbar (using `TaskbarCore.ahk`) has been completely removed as it was fundamentally broken on modern builds of Windows 11.
 
@@ -89,17 +91,10 @@ The old method of manually cropping the taskbar (using `TaskbarCore.ahk`) has be
 | Feature flag `29785184` | Is `TaskbarDynamicIconScaling`, already on by default; only shrinks icons when the bar is crowded |
 | Feature flag `61090762` | *"No configuration found in the Runtime store"* — the small-taskbar code is not in build 26200; it ships in 26300+ |
 
-**If you want a genuinely shorter taskbar** you need a tool that injects into
-`explorer.exe`. [ExplorerPatcher](https://github.com/valinet/ExplorerPatcher) is
-the free option (StartAllBack is the paid one). Check its release notes list
-your exact build as tested, run `ep_setup.exe` elevated, then right-click the
-taskbar → Properties → Taskbar → style **Windows 10** + **small taskbar
-buttons** for roughly 30px.
-
-The installer offers to fetch and install ExplorerPatcher for you
-(`Install.ps1`, step 2). It is opt-in and skipped when already present, but it is
-a real trade-off rather than a neutral one, so read these cautions before
-accepting:
+**A genuinely shorter taskbar** needs a tool that injects into `explorer.exe`
+(ExplorerPatcher, StartAllBack). Window Tweaks does not install or configure
+one. If you choose to install one yourself, these are the cautions that led to
+the integration being removed:
 
 - It installs `C:\Windows\dxgi.dll`, the textbook DLL-hijack path. Corporate
   EDR (Bitdefender, SentinelOne, CrowdStrike) commonly quarantines it, and per

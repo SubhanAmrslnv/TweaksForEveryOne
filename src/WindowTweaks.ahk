@@ -73,7 +73,6 @@
 #Include FocusEmphasis.ahk
 #Include PinnedWindowModes.ahk
 #Include MouseGestureFx.ahk
-#Include ShellSurfaceWatcher.ahk
 #Include TaskbarClock.ahk
 #Include FxGravity.ahk
 #Include FxCurtain.ahk

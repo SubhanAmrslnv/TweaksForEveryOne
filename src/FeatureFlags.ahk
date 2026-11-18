@@ -83,7 +83,6 @@ global MomentumTiltEnabled := true
 global CurtainDropEnabled := true
 global CurtainDropped := false
 global CurtainWindows := Map()
-global TaskbarWaveEnabled := false        ; OFF-BY-DEFAULT: never rendered until now
 global CustomClockEnabled := true
 global CustomClockWeather := ""
 global CustomClockWind := ""               ; second line of the info column, e.g. "12 km/h"
@@ -96,7 +95,6 @@ global ClockAnchor := "TrayEdge"           ; which element the block sits beside
 global ClockWeatherEnabled := true         ; the temperature column; a location gives it a value
 global ClockWarnedNoCity := false          ; the "set a city" tip is said once per session
 global WeatherWarnedFor := "-"             ; last location we complained about, so it is said once
-global ToastBounceEnabled := true
 global MonitorThrowEnabled := true
 global BlackHoleDeleteEnabled := true
 global CursorYawnEnabled := true
@@ -129,8 +127,6 @@ global HotkeySoundsEnabled := true
 global CopyFeedbackEnabled := false
 global SmartCapsEnabled := true
 global SmartCapsAction := "Escape"
-global SmartTaskbarEnabled := false
-global OriginalTaskbarState := -1
 global QuickLookEnabled := true
 global QuickLookGui := ""
 global MultiMonitorDimmerEnabled := false
@@ -148,8 +144,6 @@ global MicOsdGui := "", MicOsdHiding := false
 global InfiniteWrapEnabled := false
 global SpotlightEnabled := false
 global SpotlightGui := "", SpotlightInput := "", SpotlightResult := ""
-global AlwaysOnBottomEnabled := true
-global BottomWindows := Map()
 global TextExpanderEnabled := true
 global MiddleClickCloseEnabled := true
 global ProximityGhostEnabled := true
@@ -166,8 +160,6 @@ global GameModeEnteredTick := 0     ; see the overlay ordering note in WriteSett
 global OPEN_ANIMS     := ["None", "Ghost Slide-In", "Portal Scale-In", "Window Unrolling"]
 global CAPS_ACTIONS   := ["Escape", "Backspace"]
 global CORNER_ACTIONS := ["None", "Task View", "Show Desktop", "Action Center", "Start Menu", "Lock Screen", "Mute Volume"]
-global EP_STYLES      := ["Win10", "Win11"]
-global EP_ICON_SIZES  := ["Small", "Large"]
 global CLOCK_UNITS    := ["Celsius", "Fahrenheit"]
 ; Which taskbar element the clock block sits beside. Resolved by CLASS NAME at
 ; runtime, never by coordinate - see ResolveClockAnchor. It is a setting because

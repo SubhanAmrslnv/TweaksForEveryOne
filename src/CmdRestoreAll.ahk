@@ -33,11 +33,7 @@ RestoreAllWindows() {
     ; its feature flag, so switching the feature off strands the state with no way
     ; back - which is exactly what a panic key is for. Bye() already reverses all
     ; of them on exit; there was no reason for Shift+Alt+Y not to.
-    global BottomWindows, CustomTrans, CurtainWindows
-    for hwnd, info in BottomWindows.Clone() {
-        try RestoreFromBottom(hwnd)
-        n += 1
-    }
+    global CustomTrans, CurtainWindows
     for hwnd, alpha in CustomTrans.Clone() {
         if DllCall("IsWindow", "ptr", hwnd)
             n += 1

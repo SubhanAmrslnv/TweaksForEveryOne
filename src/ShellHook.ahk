@@ -12,7 +12,7 @@
 ; TaskbarCreated when the shell comes back; handling it and re-registering is the
 ; only thing keeping position memory, the open animations, focus pulse, breathing
 ; seeding, fly-to-mouse minimize and per-window cleanup alive after an Explorer
-; crash - or after this program's own "Restart Explorer" button.
+; crash or a user-initiated Explorer restart.
 ;
 ; POSITION MEMORY IS KEYED ON exe + WINDOW CLASS, and excludes dialogs, owned
 ; windows, WS_EX_TOOLWINDOW, anything without WS_THICKFRAME, and Picture-in-
@@ -45,12 +45,6 @@ RegisterShellHook() {
 TaskbarCreated(*) {
     ok := RegisterShellHook()
     WriteLog("explorer restarted - shell hook re-registered (" (ok ? "ok" : "FAILED") ")")
-    ; The taskbar we recorded the auto-hide state of no longer exists.
-    global SmartTaskbarEnabled, OriginalTaskbarState
-    if (OriginalTaskbarState == -1)
-        OriginalTaskbarState := GetTaskbarState()
-    if SmartTaskbarEnabled
-        SyncSmartTaskbar()
 }
 
 ShellEvent(wParam, lParam, *) {
