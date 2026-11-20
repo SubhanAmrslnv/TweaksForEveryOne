@@ -154,6 +154,9 @@ AltDragResize() {
     } catch
         return
 
+    Anim_Release(hwnd, "geom")
+    ReleaseWindowRollClip(hwnd)
+    RS_Commit()
 
     if !WinActive(hwnd)
         try WinActivate(hwnd)
@@ -216,7 +219,9 @@ AltDragResize() {
             }
             Sleep(10)
         }
+    } finally {
+        busy := false
     }
-    busy := false
+    RememberPosition(hwnd)
 }
 

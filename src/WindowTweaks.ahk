@@ -9,7 +9,7 @@
 ;
 ; THIS FILE IS THE ENTRY POINT AND NOTHING ELSE: process directives, the
 ; #Include manifest, and one Boot() call. It holds no globals, no functions and
-; no other top-level statement, and scripts\Check-Split.ps1 check 8 fails any
+; no other top-level statement, and scripts\Check-Split.bat check 8 fails any
 ; that reappear.
 ;
 ; MANIFEST ORDER IS DOCUMENTATION, NOT SEMANTICS - Boot() is what made that

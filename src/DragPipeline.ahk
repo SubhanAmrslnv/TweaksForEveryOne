@@ -226,12 +226,8 @@ ReadDragFullWindows() {
     return on
 }
 
-; DragFullWindows is a hard functional dependency of every drag-driven effect, and
-; the failure is completely silent: with it off Windows drags a hollow outline, so
-; the window rect does not move until release, SampleVelocityStep measures zero
-; speed on every frame, and parallax and the ice glide both do nothing at all.
-; That was documented in CLAUDE.md and checked by Install.ps1, neither of which
-; helps someone who turned the Windows setting off afterwards.
+; Outline dragging keeps the window rect stationary until release. Tell the user
+; why drag parallax and glide cannot sample it without changing their preference.
 CheckDragFullWindows() {
     global ParallaxEnabled, GlideEnabled
     if (!ParallaxEnabled && !GlideEnabled)
@@ -239,23 +235,7 @@ CheckDragFullWindows() {
     if ReadDragFullWindows()
         return
 
-    ; Turn it on rather than only complaining about it. SPIF_UPDATEINIFILE |
-    ; SPIF_SENDCHANGE (3) persists the change and broadcasts WM_SETTINGCHANGE, so
-    ; this is a real, system-wide edit to the user's machine and not a local
-    ; override - hence the log line and the notification. Bye() deliberately does
-    ; NOT put it back: the setting is a Windows default, the user is far more
-    ; likely to have hit it by accident than to want outline dragging, and
-    ; silently reverting it at exit would make the fix look intermittent.
-    try DllCall("SystemParametersInfoW", "uint", 0x25, "uint", 1, "ptr", 0, "uint", 3)
-
-    ; Confirm rather than assume. Group policy and some remote-desktop sessions
-    ; refuse this, and the old code reported success either way.
-    if ReadDragFullWindows() {
-        WriteLog("DragFullWindows was off - enabled it so drag transparency and ice glide can work")
-        Notify("Enabled 'Show window contents while dragging' (Parallax / Glide)")
-        return
-    }
-    WriteLog("DragFullWindows is off and could not be enabled - drag transparency and ice glide cannot work")
+    WriteLog("DragFullWindows is off - drag transparency and ice glide require full-window dragging")
     Notify("Windows is dragging window outlines only.`nTurn on Show window contents while dragging, or the drag effects do nothing.")
 }
 
@@ -347,9 +327,9 @@ SampleVelocityStep(dt, now) {
                 WriteLog("drag speed=" Round(speed) " px/s fade=" Round(p.fade, 2)
                     . " alpha=" Round(CurrentDragAlpha) "/255")
             }
-            RS_SetAlphaLayer(DragHwnd, "drag", CurrentDragAlpha / 255.0, RS_PRI_DRAG)
+            try RS_SetAlphaLayer(DragHwnd, "drag", CurrentDragAlpha / 255.0, RS_PRI_DRAG)
         } else {
-            RS_ClearAlphaLayer(DragHwnd, "drag", RS_PRI_DRAG)
+            try RS_ClearAlphaLayer(DragHwnd, "drag", RS_PRI_DRAG)
         }
     }
     
@@ -482,7 +462,8 @@ UngroupWindow(h) {
     }
     
     if (newGrp.Length == 1) {
-        MagGroups.Delete(newGrp[1])
+        if MagGroups.Has(newGrp[1])
+            MagGroups.Delete(newGrp[1])
     } else {
         for eh in newGrp
             MagGroups[eh] := newGrp

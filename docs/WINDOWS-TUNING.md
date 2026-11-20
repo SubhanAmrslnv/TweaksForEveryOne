@@ -4,14 +4,14 @@
 > findings below come from the machine this was developed on (Windows 11 25H2,
 > build 26200.8246, domain-joined, Intel Core Ultra 5 125U, 60 Hz panel, 15.5 GB
 > RAM). Your machine will differ — the *reasoning* is what transfers, not the
-> readings. Run `scripts\Apply-Windows-Tuning.ps1` and it reports your own
+> readings. Run `scripts\Apply-Windows-Tuning.bat` and it reports your own
 > values.
 
 Every change is in `HKCU` only. No admin rights were used, no system file, service,
 scheduled task, driver or security setting was touched. Windows Update and
 Microsoft Defender / Bitdefender were not modified.
 
-**To undo everything:** run `Restore-Windows-Tuning.ps1`, then sign out and back in.
+**To undo everything:** run `Restore-Windows-Tuning.bat`, then sign out and back in.
 The exact prior values are recorded in `%LOCALAPPDATA%\Window Tweaks Backup\tuning-backup.json`.
 
 ---

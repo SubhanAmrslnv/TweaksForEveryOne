@@ -67,15 +67,28 @@ btnSave.OnEvent("Click", SaveSettings)
 SG.Show()
 
 SaveSettings(*) {
+    timeoutStr := Trim(txtTimeout.Value)
+    if (timeoutStr == "" || !IsNumber(timeoutStr) || Integer(Number(timeoutStr)) < 100) {
+        MsgBox("Triple ESC Time Window must be a number of at least 100 ms.", "Stealth Panic Mode", "Iconx")
+        return
+    }
+    delayStr := Trim(txtDelay.Value)
+    if (delayStr == "" || !IsNumber(delayStr) || Integer(Number(delayStr)) < 0) {
+        MsgBox("Delay before launch must be a non-negative number (0 or greater).", "Stealth Panic Mode", "Iconx")
+        return
+    }
+    timeoutVal := String(Integer(Number(timeoutStr)))
+    delayVal := String(Integer(Number(delayStr)))
+
     ; One try around the lot. An IniWrite that throws used to abort the handler
     ; part-way through, leaving half the settings written, no message and no
     ; ExitApp - the window just sat there looking as though nothing happened.
     iniOk := true
     try {
         IniWrite(chkEnable.Value ? "1" : "0", StealthIni, "stealth", "enabled")
-        IniWrite(txtTimeout.Value, StealthIni, "stealth", "timeout")
+        IniWrite(timeoutVal, StealthIni, "stealth", "timeout")
         IniWrite(chkLaunchApps.Value ? "1" : "0", StealthIni, "stealth", "launchapps")
-        IniWrite(txtDelay.Value, StealthIni, "stealth", "delay")
+        IniWrite(delayVal, StealthIni, "stealth", "delay")
         IniWrite(chkRestore.Value ? "1" : "0", StealthIni, "stealth", "restore")
         IniWrite(chkMuteAudio.Value ? "1" : "0", StealthIni, "stealth", "muteaudio")
         IniWrite(chkMuteMic.Value ? "1" : "0", StealthIni, "stealth", "mutemic")
@@ -91,19 +104,23 @@ SaveSettings(*) {
     ; bug this whole change exists to remove.
     appsOk := StealthPanicConfig_WriteAppList(StealthIni, txtApps.Value)
 
-    ; This used to post to "Stealth Panic Mode.ahk ahk_class AutoHotkey". That
-    ; title only exists in the standalone build - when the engine runs inside
-    ; Window Tweaks the window is titled WindowTweaks.ahk, so the running engine
-    ; never saw a saved change at all. Reloading Window Tweaks wholesale is not
-    ; an option: it runs Bye(), which un-hides every window, tears down the tray
-    ; icons and cancels every animation, just to pick up a list. So only the
-    ; standalone runner is reloaded here, and Window Tweaks re-reads the
-    ; settings itself on the next activation (StealthPanicRefreshSettings).
-    for hw in WinGetList("ahk_class AutoHotkey") {
-        title := ""
-        try title := WinGetTitle(hw)
-        if InStr(title, "Stealth Panic Mode.ahk")
-            try PostMessage(0x0111, 65303, 0, , "ahk_id " hw)   ; ID_FILE_RELOADSCRIPT
+    ; Reload the standalone runner directly, and notify a hosted WindowTweaks
+    ; instance via a custom message so it refreshes StealthPanic settings in
+    ; memory without restarting the whole app.
+    reloadMsg := DllCall("RegisterWindowMessage", "str", "TFE_StealthPanic_ReloadConfig", "uint")
+    prevDetect := DetectHiddenWindows(true)
+    try {
+        for hw in WinGetList("ahk_class AutoHotkey") {
+            title := ""
+            try title := WinGetTitle(hw)
+            if InStr(title, "Stealth Panic Mode.ahk") {
+                try PostMessage(0x0111, 65303, 0, , "ahk_id " hw)   ; ID_FILE_RELOADSCRIPT
+            } else if InStr(title, "WindowTweaks.ahk") {
+                try PostMessage(reloadMsg, 0, 0, , "ahk_id " hw)
+            }
+        }
+    } finally {
+        DetectHiddenWindows(prevDetect)
     }
 
     if (appsOk && iniOk) {

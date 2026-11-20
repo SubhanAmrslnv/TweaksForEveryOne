@@ -83,7 +83,7 @@ FlushTransNotify() {
 ResetTransparency() {
     global CustomTrans, WinCurrentAlpha, WinTargetAlpha
     hwnd := WinExist("A")
-    if !hwnd || !IsRestorable(hwnd)
+    if !hwnd || !DllCall("IsWindow", "ptr", hwnd) || IsShellSurface(hwnd)
         return
     if CustomTrans.Has(hwnd)
         CustomTrans.Delete(hwnd)

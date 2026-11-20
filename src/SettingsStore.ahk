@@ -30,20 +30,6 @@ global INI      := A_ScriptDir "\settings.ini"
 
 global IniCache := Map()
 
-; Kept for any caller that wants a bare number; the tuning registry has its own
-; reader. Seeds the write cache like IniStr does, so a value that is already
-; correct on disk is not rewritten by the next save.
-IniNum(section, key, defaultVal) {
-    global INI, IniCache
-    try {
-        raw := IniRead(INI, section, key, defaultVal)
-        if (String(raw) == String(defaultVal))
-            IniCache[section "`n" key] := String(raw)
-        return Number(raw)
-    }
-    return defaultVal
-}
-
 ; Reads a string setting AND seeds the write cache with what was on disk, so the
 ; first save does not pointlessly rewrite the 38 keys that already hold the right
 ; value. The sentinel distinguishes "key absent" from "key present but empty" -
@@ -206,7 +192,9 @@ WriteSettings() {
     ; path and no throw can leave the two out of step.
     ;
     ; Stealth Panic is the same kind of overlay and gets the same bracket, so the
-    ; two are unwound together by OverlaysUnsuspend().
+    ; two are unwound together by OverlaysUnsuspend(). Critical prevents any
+    ; timer or hotkey from observing the transiently unsuspended globals.
+    wsPrevCrit := Critical("On")
     wsOverlays := OverlaysUnsuspend()
     try {
         PutIni(SnapEnabled ? 1 : 0,      "snap", "enabled")
@@ -277,6 +265,7 @@ WriteSettings() {
         ; removed; values an older version wrote are left as the user has them.
     } finally {
         OverlaysResuspend(wsOverlays)
+        Critical(wsPrevCrit)
     }
 }
 
@@ -318,8 +307,10 @@ OverlaysResuspend(done) {
 ; window during Game Mode re-enabled every suspended feature at once, and an edit
 ; made there was then overwritten by the stale held value on exit.
 OverlaysAdoptEdits() {
-    try GameModeAdoptEdits()
-    try StealthAdoptEdits()
+    try GameModeAdoptEdits(false)
+    try StealthAdoptEdits(false)
+    try GameModeResuspend()
+    try StealthResuspend()
 }
 
 StartupLink() => A_Startup "\Window Tweaks.lnk"

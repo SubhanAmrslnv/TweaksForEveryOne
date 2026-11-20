@@ -3,9 +3,9 @@
 Which Windows settings this program needs, which make it look better, and which
 one actively fights it.
 
-Run `scripts\Apply-Windows-Tuning.ps1 -Animations` to set all of these at once.
+Run `scripts\Apply-Windows-Tuning.bat -Animations` to set all of these at once.
 It writes to `HKCU` only, needs no admin rights, and
-`scripts\Restore-Windows-Tuning.ps1` puts everything back exactly as it was.
+`scripts\Restore-Windows-Tuning.bat` puts everything back exactly as it was.
 
 ---
 
@@ -22,9 +22,8 @@ Windows drags a hollow outline and only moves the real window when you let go.
 You would see nothing of the ice glide — the window would simply appear at its
 destination.
 
-*Check yours with the snippet at the bottom of this page. `Install.bat` turns
-this one on for you if it's off, because the program's headline feature is
-invisible without it.*
+*Check yours with the snippet at the bottom of this page. You can turn it on
+in Windows or use the optional animation tuning during installation.*
 
 ---
 
@@ -42,7 +41,7 @@ at the same quality so the glide doesn't stand out as the only smooth thing.
 | Fade out menu items after clicking | `UserPreferencesMask` bit | Same. |
 | Slide open combo boxes | `UserPreferencesMask` bit | Same. |
 
-*`scripts\Apply-Windows-Tuning.ps1 -Animations` sets all of these. If you prefer minimal RAM and CPU usage, run `scripts\Apply-Windows-Tuning.ps1 -MinimalAnimations` to set only the absolute essentials while disabling heavier features. See
+*`scripts\Apply-Windows-Tuning.bat -Animations` sets all of these. Use `scripts\Apply-Windows-Tuning.bat -MinimalAnimations` for full-window dragging, minimize and maximize animations, and shorter menu and hover delays. See
 [WINDOWS-TUNING.md](WINDOWS-TUNING.md) for what else it changes.*
 
 ---
@@ -76,7 +75,7 @@ keyboard shortcuts are worth keeping. Window Tweaks' real contribution is
 window-to-window magnetism, which works regardless.
 
 Turn it off only if you want edge drags to keep the window's size instead of
-resizing it to half the screen. `Apply-Windows-Tuning.ps1` does **not** touch
+resizing it to half the screen. `Apply-Windows-Tuning.bat` does **not** touch
 this — it's your call, and the script would be making it for you.
 
 ### Snap Assist suggestions

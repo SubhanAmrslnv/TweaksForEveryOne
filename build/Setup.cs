@@ -1,7 +1,7 @@
 // Window Tweaks - single-file installer.
 //
 // Every file the program needs is embedded as a manifest resource, so this one
-// .exe is the whole distribution. Build it with build\Build-Installer.ps1.
+// .exe is the whole distribution. Build it with build\Build-Installer.bat.
 //
 // NOTE: this is compiled by the csc.exe that ships with the .NET Framework,
 // which is a C# 5 compiler. No string interpolation ($".."), no expression
@@ -53,6 +53,7 @@ namespace WindowTweaksSetup
         TextBox log;
         Label heading;
         Label blurb;
+        bool installing;
 
         public SetupForm()
         {
@@ -96,7 +97,7 @@ namespace WindowTweaksSetup
 
             Label note = new Label();
             note.Text = "The tuning writes to HKCU only and saves your original values first.\r\n"
-                      + "Run scripts\\Restore-Windows-Tuning.ps1 to undo it at any time.";
+                      + "Run scripts\\Restore-Windows-Tuning.bat to undo it at any time.";
             note.ForeColor = Color.FromArgb(154, 154, 154);
             note.SetBounds(46, 164, 490, 36);
             Controls.Add(note);
@@ -128,23 +129,67 @@ namespace WindowTweaksSetup
             AcceptButton = btnInstall;
         }
 
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (installing)
+            {
+                e.Cancel = true;
+                return;
+            }
+            base.OnFormClosing(e);
+        }
+
         void Say(string line)
         {
+            if (IsDisposed) return;
+            if (InvokeRequired)
+            {
+                try
+                {
+                    if (!IsDisposed && IsHandleCreated)
+                        BeginInvoke(new Action<string>(Say), new object[] { line });
+                }
+                catch { }
+                return;
+            }
             log.AppendText(line + Environment.NewLine);
             log.SelectionStart = log.TextLength;
             log.ScrollToCaret();
-            Application.DoEvents();
         }
 
         void OnInstall(object sender, EventArgs e)
         {
+            if (installing) return;
+            installing = true;
             btnInstall.Enabled = false;
+            btnClose.Enabled = false;
             chkAutoStart.Enabled = false;
             chkTuning.Enabled = false;
             log.Clear();
 
-            Installer inst = new Installer(new Action<string>(Say));
-            bool ok = inst.Run(chkAutoStart.Checked, chkTuning.Checked);
+            bool autoStart = chkAutoStart.Checked;
+            bool tuning = chkTuning.Checked;
+
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                Installer inst = new Installer(new Action<string>(Say));
+                bool ok = inst.Run(autoStart, tuning);
+                if (!IsDisposed && IsHandleCreated)
+                {
+                    try
+                    {
+                        BeginInvoke(new Action<bool>(OnInstallComplete), new object[] { ok });
+                    }
+                    catch { }
+                }
+            });
+        }
+
+        void OnInstallComplete(bool ok)
+        {
+            if (IsDisposed) return;
+            installing = false;
+            btnClose.Enabled = true;
 
             if (ok)
             {
@@ -220,15 +265,22 @@ namespace WindowTweaksSetup
 
                 Log("[4/5] Creating shortcuts");
                 string target = Path.Combine(dest, "WindowTweaks.ahk");
-                MakeShortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs),
-                                          "Window Tweaks.lnk"), ahk, target, dest);
+                string targetArg = "\"" + target + "\"";
+                string icoPath = Path.Combine(dest, "WindowTweaks.ico");
+                string programsDir = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
+                MakeShortcut(Path.Combine(programsDir, "Window Tweaks.lnk"),
+                             ahk, targetArg, dest, "Window Tweaks", icoPath);
+                string spUi = Path.Combine(dest, "StealthPanicUI.ahk");
+                string spIni = Path.Combine(dest, "StealthPanic.ini");
+                MakeShortcut(Path.Combine(programsDir, "Stealth Panic Mode Settings.lnk"),
+                             ahk, "\"" + spUi + "\" \"" + spIni + "\"", dest, "Stealth Panic Mode Settings", null);
                 MakeShortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
-                                          "Window Tweaks.lnk"), ahk, target, dest);
+                                          "Window Tweaks.lnk"), ahk, targetArg, dest, "Window Tweaks", icoPath);
                 string startup = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup),
                                               "Window Tweaks.lnk");
                 if (autoStart)
                 {
-                    MakeShortcut(startup, ahk, target, dest);
+                    MakeShortcut(startup, ahk, targetArg, dest, "Window Tweaks", icoPath);
                     Log("      Start Menu, Desktop, Startup");
                 }
                 else
@@ -238,22 +290,29 @@ namespace WindowTweaksSetup
                 }
 
                 Log("[5/5] Windows settings");
-                EnsureDragFullWindows();
                 if (tuning)
                 {
-                    string script = Path.Combine(dest, "scripts\\Apply-Windows-Tuning.ps1");
-                    if (File.Exists(script))
+                    string script = Path.Combine(dest, "scripts\\Apply-Windows-Tuning.bat");
+                    if (!File.Exists(script))
                     {
-                        RunPowerShell(script);
-                        Log("      Applied the animation and Explorer tuning");
+                        Log("      The packaged Windows tuning script is missing.");
+                        return false;
                     }
+                    int exitCode = RunTuning(script);
+                    if (exitCode != 0)
+                    {
+                        Log("      Windows tuning failed (exit " + exitCode + ").");
+                        Log("      Run scripts\\Restore-Windows-Tuning.bat to undo any changes made.");
+                        return false;
+                    }
+                    Log("      Applied the animation and Explorer tuning");
                 }
                 else
                 {
-                    Log("      Required setting checked; run scripts\\Apply-Windows-Tuning.ps1 for the rest");
+                    Log("      Skipped Windows tuning");
                 }
 
-                Process.Start(new ProcessStartInfo(ahk, "\"" + target + "\"") { WorkingDirectory = dest });
+                using (Process started = Process.Start(new ProcessStartInfo(ahk, targetArg) { WorkingDirectory = dest })) { }
                 Log("      Started - look for the tray icon");
                 return true;
             }
@@ -291,9 +350,12 @@ namespace WindowTweaksSetup
                 // hidden window is the dropper shape endpoint security flags, and
                 // the user should see what is being installed or changed.
                 psi.CreateNoWindow = false;
-                Process p = Process.Start(psi);
-                p.WaitForExit(300000);
-                return true;
+                using (Process p = Process.Start(psi))
+                {
+                    if (p == null) return false;
+                    if (!p.WaitForExit(300000)) return false;
+                    return p.ExitCode == 0;
+                }
             }
             catch { return false; }
         }
@@ -304,25 +366,31 @@ namespace WindowTweaksSetup
             try
             {
                 using (var searcher = new System.Management.ManagementObjectSearcher("SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name LIKE 'AutoHotkey%'"))
+                using (var results = searcher.Get())
                 {
-                    foreach (System.Management.ManagementObject obj in searcher.Get())
+                    foreach (System.Management.ManagementObject obj in results)
                     {
-                        string cmd = obj["CommandLine"] as string;
-                        if (cmd != null && (cmd.Contains("WindowTweaks.ahk") || cmd.Contains("StealthPanicUI.ahk")))
+                        using (obj)
                         {
-                            try
+                            string cmd = obj["CommandLine"] as string;
+                            if (cmd != null && (cmd.Contains("WindowTweaks.ahk") || cmd.Contains("StealthPanicUI.ahk")))
                             {
-                                // Ask first, force only as a fallback - the same
-                                // order as Install.ps1. Kill() skips the program's
-                                // exit handler, which is what writes pending
-                                // settings and hands back every window it changed.
-                                int pid = Convert.ToInt32(obj["ProcessId"]);
-                                Process p = Process.GetProcessById(pid);
-                                RunVisible("taskkill.exe", "/PID " + pid);
-                                if (!p.WaitForExit(5000)) p.Kill();
-                                n++;
+                                try
+                                {
+                                    // Ask first, force only as a fallback - the same
+                                    // order as Install.bat. Kill() skips the program's
+                                    // exit handler, which is what writes pending
+                                    // settings and hands back every window it changed.
+                                    int pid = Convert.ToInt32(obj["ProcessId"]);
+                                    using (Process p = Process.GetProcessById(pid))
+                                    {
+                                        RunVisible("taskkill.exe", "/PID " + pid);
+                                        if (!p.WaitForExit(5000)) p.Kill();
+                                        n++;
+                                    }
+                                }
+                                catch { }
                             }
-                            catch { }
                         }
                     }
                 }
@@ -338,12 +406,15 @@ namespace WindowTweaksSetup
                 ProcessStartInfo psi = new ProcessStartInfo(exe, args);
                 psi.UseShellExecute = false;
                 psi.CreateNoWindow = false;   // visible, like every child this setup runs (docs\SECURITY.md)
-                using (Process p = Process.Start(psi)) { p.WaitForExit(5000); }
+                using (Process p = Process.Start(psi))
+                {
+                    if (p != null) p.WaitForExit(5000);
+                }
             }
             catch { }
         }
 
-        // Settings precedence, the same rule as Install.ps1: an existing
+        // Settings precedence, the same rule as Install.bat: an existing
         // settings.ini is the user's and is never touched; only a folder with
         // none gets the packaged baseline. Idempotent by construction.
         static bool ApplyBaselineSettings(string dest)
@@ -364,7 +435,7 @@ namespace WindowTweaksSetup
 
         // ---- embedded files -------------------------------------------------
         // Resource names look like "res.WindowTweaks.ahk" or
-        // "res.scripts_Apply-Windows-Tuning.ps1"; the underscore marks a
+        // "res.scripts_Apply-Windows-Tuning.bat"; the underscore marks a
         // subfolder, since resource names can't carry a path separator.
         static int Extract(string dest)
         {
@@ -391,7 +462,7 @@ namespace WindowTweaksSetup
         }
 
         // ---- shortcuts (late-bound COM, no interop assembly needed) ---------
-        static void MakeShortcut(string linkPath, string exe, string arg, string workDir)
+        static void MakeShortcut(string linkPath, string exe, string arguments, string workDir, string description, string iconPath)
         {
             Type shellType = Type.GetTypeFromProgID("WScript.Shell");
             object shell = Activator.CreateInstance(shellType);
@@ -399,54 +470,28 @@ namespace WindowTweaksSetup
                 BindingFlags.InvokeMethod, null, shell, new object[] { linkPath });
             Type lt = link.GetType();
             lt.InvokeMember("TargetPath", BindingFlags.SetProperty, null, link, new object[] { exe });
-            lt.InvokeMember("Arguments", BindingFlags.SetProperty, null, link, new object[] { "\"" + arg + "\"" });
+            lt.InvokeMember("Arguments", BindingFlags.SetProperty, null, link, new object[] { arguments });
             lt.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, link, new object[] { workDir });
-            lt.InvokeMember("Description", BindingFlags.SetProperty, null, link, new object[] { "Window Tweaks" });
+            lt.InvokeMember("Description", BindingFlags.SetProperty, null, link, new object[] { description });
+            if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
+                lt.InvokeMember("IconLocation", BindingFlags.SetProperty, null, link, new object[] { iconPath + ",0" });
             lt.InvokeMember("Save", BindingFlags.InvokeMethod, null, link, null);
         }
 
-        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
-        static extern bool SystemParametersInfo(uint uiAction, uint uiParam, IntPtr pvParam, uint fWinIni);
-
-        static void EnsureDragFullWindows()
+        static int RunTuning(string script)
         {
-            try
+            // Delayed expansion supplies the path after cmd's command parsing.
+            ProcessStartInfo psi = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                "/d /s /v:on /c \"\"!WINDOW_TWEAKS_TUNING_SCRIPT!\" -Animations -Explorer\"");
+            psi.WorkingDirectory = Path.GetDirectoryName(script);
+            psi.UseShellExecute = false;
+            psi.EnvironmentVariables["WINDOW_TWEAKS_TUNING_SCRIPT"] = script;
+            using (Process p = Process.Start(psi))
             {
-                Microsoft.Win32.RegistryKey k =
-                    Microsoft.Win32.Registry.CurrentUser.OpenSubKey("Control Panel\\Desktop", true);
-                if (k == null) return;
-                object v = k.GetValue("DragFullWindows");
-                if (v == null || v.ToString() != "1")
-                {
-                    string dest = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Window Tweaks Backup");
-                    Directory.CreateDirectory(dest);
-                    string backup = Path.Combine(dest, "drag-backup.txt");
-                    if (!File.Exists(backup))
-                        File.WriteAllText(backup, v == null ? "absent" : v.ToString());
-
-                    k.SetValue("DragFullWindows", "1", Microsoft.Win32.RegistryValueKind.String);
-                    SystemParametersInfo(0x0025, 1, IntPtr.Zero, 3);
-                }
-                k.Close();
+                if (p == null) throw new InvalidOperationException("Could not start the Windows tuning script.");
+                p.WaitForExit();
+                return p.ExitCode;
             }
-            catch { }
-        }
-
-        static void RunPowerShell(string script)
-        {
-            try
-            {
-                ProcessStartInfo psi = new ProcessStartInfo("powershell",
-                    "-NoProfile -ExecutionPolicy Bypass -File \"" + script + "\"");
-                psi.UseShellExecute = false;
-                // Visible on purpose: a setup that runs winget/PowerShell in a
-                // hidden window is the dropper shape endpoint security flags, and
-                // the user should see what is being installed or changed.
-                psi.CreateNoWindow = false;
-                Process p = Process.Start(psi);
-                p.WaitForExit(120000);
-            }
-            catch { }
         }
     }
 }

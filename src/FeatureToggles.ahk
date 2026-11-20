@@ -54,12 +54,25 @@ SyncTray() {
                          : A_TrayMenu.Uncheck(TRAY_BREATHING)
 }
 
+OverlayHolds(flagName) {
+    global StealthPanicActive, StealthSuspendedFeatures
+    if GameModeHolds(flagName)
+        return true
+    if (IsSet(StealthPanicActive) && StealthPanicActive
+        && IsSet(StealthSuspendedFeatures) && StealthSuspendedFeatures.Has(flagName)) {
+        Notify("Stealth Panic is active - press Esc Esc Esc to leave it first")
+        return true
+    }
+    return false
+}
+
 ToggleSnap() {
     global SnapEnabled, Win, C
-    if GameModeHolds("SnapEnabled")
+    if OverlayHolds("SnapEnabled")
         return
     SnapEnabled := !SnapEnabled
     SyncTray(), SaveSettings()
+    PlayHotkeySound(SnapEnabled ? "toggleon" : "toggleoff")
     if (Win && WinExist("ahk_id " Win.Hwnd))
         try C["snap"].Value := SnapEnabled
     Notify(SnapEnabled ? "Magnetic snap ON" : "Magnetic snap OFF")
@@ -67,8 +80,11 @@ ToggleSnap() {
 
 ToggleMemory() {
     global RestoreEnabled, Win, C
+    if OverlayHolds("RestoreEnabled")
+        return
     RestoreEnabled := !RestoreEnabled
     SyncTray(), SaveSettings()
+    PlayHotkeySound(RestoreEnabled ? "toggleon" : "toggleoff")
     if (Win && WinExist("ahk_id " Win.Hwnd))
         try C["mem"].Value := RestoreEnabled
     Notify(RestoreEnabled ? "Position memory ON" : "Position memory OFF")
@@ -94,7 +110,7 @@ ToggleFeatureFlag(label, isOn, ctrlKey) {
 
 ToggleHotCorners() {
     global HotCornersEnabled
-    if GameModeHolds("HotCornersEnabled")
+    if OverlayHolds("HotCornersEnabled")
         return
     HotCornersEnabled := !HotCornersEnabled
     ToggleFeatureFlag("Hot corners", HotCornersEnabled, "corners_en")
@@ -103,7 +119,7 @@ ToggleHotCorners() {
 
 ToggleCursorWrap() {
     global InfiniteWrapEnabled
-    if GameModeHolds("InfiniteWrapEnabled")
+    if OverlayHolds("InfiniteWrapEnabled")
         return
     InfiniteWrapEnabled := !InfiniteWrapEnabled
     ToggleFeatureFlag("Infinite cursor wrap", InfiniteWrapEnabled, "wrap")
@@ -112,7 +128,7 @@ ToggleCursorWrap() {
 
 ToggleDimmer() {
     global MultiMonitorDimmerEnabled
-    if GameModeHolds("MultiMonitorDimmerEnabled")
+    if OverlayHolds("MultiMonitorDimmerEnabled")
         return
     MultiMonitorDimmerEnabled := !MultiMonitorDimmerEnabled
     ToggleFeatureFlag("Multi-monitor dimmer", MultiMonitorDimmerEnabled, "multidimmer")
@@ -123,7 +139,7 @@ ToggleDimmer() {
 ; grab & pan lives behind a #HotIf, which re-evaluates the flag on every press.
 ToggleMagneticGroups() {
     global MagneticGroupsEnabled
-    if GameModeHolds("MagneticGroupsEnabled")
+    if OverlayHolds("MagneticGroupsEnabled")
         return
     MagneticGroupsEnabled := !MagneticGroupsEnabled
     ToggleFeatureFlag("Magnetic window groups", MagneticGroupsEnabled, "magnetic")
@@ -131,7 +147,7 @@ ToggleMagneticGroups() {
 
 ToggleGrabPan() {
     global GrabPanEnabled
-    if GameModeHolds("GrabPanEnabled")
+    if OverlayHolds("GrabPanEnabled")
         return
     GrabPanEnabled := !GrabPanEnabled
     ToggleFeatureFlag("Grab & pan", GrabPanEnabled, "grabpan")

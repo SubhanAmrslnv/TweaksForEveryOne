@@ -2,7 +2,7 @@
 #
 # The modularization of WindowTweaks.ahk is verified by a "motion proof": the
 # resolved #Include stream is sorted and hashed, and a pure code-motion commit
-# must not change that hash (scripts\Check-Split.ps1). With core.autocrlf=true
+# must not change that hash (scripts\Check-Split.bat). With core.autocrlf=true
 # and no rules here, files round-trip between LF and CRLF depending on which
 # tool last wrote them - src\RenderCore.ahk was already LF in the working tree
 # while every other .ahk was CRLF - and the hash then differs for reasons that
@@ -18,7 +18,7 @@
 # machine that committed it.
 
 *.ahk   text eol=crlf
-*.ps1   text eol=crlf
+*.bat   text eol=crlf
 *.cs    text eol=crlf
 *.md    text eol=crlf
 *.json  text eol=crlf

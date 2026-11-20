@@ -19,7 +19,7 @@ Double-click **`Install.bat`** and follow it. It will:
 
 No admin rights. No registry keys. Nothing outside your user profile.
 
-To remove it: run **`Uninstall.ps1`**.
+To remove it: run **`Uninstall.bat`**.
 
 ---
 
@@ -288,8 +288,8 @@ a screen edge triggers Windows' half-screen snap before this program sees it.
 Window-to-window magnetism still works. Leaving it on is usually the right call —
 turning it off also disables `Win + ←/→`.
 
-Run **`scripts\Apply-Windows-Tuning.ps1`** for the optional polish, and
-`scripts\Restore-Windows-Tuning.ps1` to undo it. Full detail in `ANIMATIONS.md`.
+Run **`scripts\Apply-Windows-Tuning.bat`** for the optional polish, and
+`scripts\Restore-Windows-Tuning.bat` to undo it. Full detail in `ANIMATIONS.md`.
 
 ---
 

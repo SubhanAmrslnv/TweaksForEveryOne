@@ -96,18 +96,41 @@ PiP_MouseEvents(wParam, lParam, msg, hwnd) {
         
     x := lParam << 48 >> 48
     y := lParam << 32 >> 48
-    
-    WinGetClientPos(,, &pw, &ph, hwnd)
-    try WinGetClientPos(,, &sw, &sh, sourceHwnd)
-    catch
+
+    ; WM_MOUSEWHEEL / WM_MOUSEHWHEEL deliver screen coordinates in lParam,
+    ; unlike other mouse messages which deliver client coordinates.
+    isWheel := (msg == 0x020A || msg == 0x020E)
+    if (isWheel) {
+        pt := Buffer(8, 0)
+        NumPut("int", x, "int", y, pt)
+        if !DllCall("ScreenToClient", "ptr", hwnd, "ptr", pt)
+            return 0
+        x := NumGet(pt, 0, "int")
+        y := NumGet(pt, 4, "int")
+    }
+
+    pw := 0, ph := 0, sw := 0, sh := 0
+    try {
+        WinGetClientPos(,, &pw, &ph, hwnd)
+        WinGetClientPos(,, &sw, &sh, sourceHwnd)
+    } catch
         return
         
     if (pw > 0 && ph > 0) {
         srcX := Round(x * (sw / pw))
         srcY := Round(y * (sh / ph))
+
+        if (isWheel) {
+            pt := Buffer(8, 0)
+            NumPut("int", srcX, "int", srcY, pt)
+            if !DllCall("ClientToScreen", "ptr", sourceHwnd, "ptr", pt)
+                return 0
+            srcX := NumGet(pt, 0, "int")
+            srcY := NumGet(pt, 4, "int")
+        }
         
-        newLParam := (srcY << 16) | (srcX & 0xFFFF)
-        PostMessage(msg, wParam, newLParam,, "ahk_id " sourceHwnd)
+        newLParam := ((srcY & 0xFFFF) << 16) | (srcX & 0xFFFF)
+        try PostMessage(msg, wParam, newLParam,, "ahk_id " sourceHwnd)
     }
     
     if (msg != 0x0200)
@@ -194,6 +217,7 @@ TogglePiP() {
     
     PipGui.OnEvent("Size", PipGuiResize)
     PipGui.OnEvent("ContextMenu", PipGuiContextMenu)
+    PipGui.OnEvent("Close", (*) => ClosePiP(srcHwnd))
     PipGuiResize(PipGui, 0, pw, ph)
     SetTimer(PiPMonitorStep, 100)
 }
@@ -226,7 +250,7 @@ PiPMonitorStep() {
     }
 
     for srcHwnd, pipGui in PipGuis.Clone() {
-        if !DllCall("IsWindow", "ptr", srcHwnd) {
+        if (!DllCall("IsWindow", "ptr", srcHwnd) || !DllCall("IsWindow", "ptr", pipGui.Hwnd)) {
             ClosePiP(srcHwnd)
             continue
         }
@@ -305,8 +329,12 @@ ToggleGhostMode() {
         RS_SetAlphaLayer(hwnd, "ghost", 1.0, RS_PRI_AMBIENT)
         RS_SetZOrder(hwnd, -1, 0x0013, RS_PRI_USER)
         RS_Commit()
-    } catch
+    } catch {
+        try WinSetExStyle("-0x20", hwnd)
+        try RS_ClearAlphaLayer(hwnd, "ghost", RS_PRI_AMBIENT)
+        try RS_Commit()
         return
+    }
 
     GhostWindows[hwnd] := {exStyle: exStyle}
     if (GhostWindows.Count == 1)

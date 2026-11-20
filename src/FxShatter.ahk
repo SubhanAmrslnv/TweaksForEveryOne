@@ -8,8 +8,12 @@
 #HotIf
 
 TriggerShatterClose(hwnd) {
-    global ActiveShatters
-    
+    global ActiveShatters, FRAME_MS
+
+    animKey := "Shatter_" . hwnd
+    if ActiveShatters.Has(animKey)
+        return
+
     try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
     catch
         return
@@ -28,10 +32,14 @@ TriggerShatterClose(hwnd) {
             
             guiObj := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
             guiObj.BackColor := "EEFFFF"
-            WinSetTransColor("EEFFFF", guiObj.Hwnd)
+            try WinSetTransColor("EEFFFF", guiObj.Hwnd)
             
             thumb := 0
-            DllCall("Dwmapi\DwmRegisterThumbnail", "ptr", guiObj.Hwnd, "ptr", hwnd, "ptr*", &thumb)
+            hr := DllCall("Dwmapi\DwmRegisterThumbnail", "ptr", guiObj.Hwnd, "ptr", hwnd, "ptr*", &thumb, "int")
+            if (hr != 0 || !thumb) {
+                try guiObj.Destroy()
+                continue
+            }
             
             srcX := (col - 1) * pieceW
             srcY := (row - 1) * pieceH
@@ -51,15 +59,9 @@ TriggerShatterClose(hwnd) {
             shards.Push({gui: guiObj, thumb: thumb, x: wx + srcX, y: wy + srcY, w: pieceW, h: pieceH, srcX: srcX, srcY: srcY, vx: vx, vy: vy, spinW: spinW, spinH: spinH})
         }
     }
-    
-    animKey := "Shatter_" . hwnd
 
-    ; Every other animation producer in this file cancels its own key before
-    ; re-registering. Without it a second Shift+Alt+F4 on the same window
-    ; overwrote the map entry and orphaned the first batch of 16 Guis and 16 DWM
-    ; thumbnails, with nothing left holding a reference that could free them.
-    CancelAnimation(animKey)
-    CleanShatter(animKey)
+    if !shards.Length
+        return
 
     ; The real window is parked far off-screen so only the shards are visible.
     ; wx/wy go into the map BEFORE that happens: this is the only record of where
@@ -77,17 +79,19 @@ TriggerShatterClose(hwnd) {
             CleanShatter(animKey)
             if (DllCall("IsWindow", "ptr", hwnd)) {
                 try RS_SetPos(hwnd, wx, wy, -1, -1, RS_PRI_USER)
+                RS_Commit()
                 try WinClose(hwnd)
             }
             return false
         }
         
+        steps := (dt > 0 ? dt : FRAME_MS) / FRAME_MS
         alpha := Round(255 * (1 - (t ** 2))) 
         
         for s in shards {
-            s.vy += 1.2 ; Gravity
-            s.x += s.vx
-            s.y += s.vy
+            s.vy += 1.2 * steps ; Gravity
+            s.x += s.vx * steps
+            s.y += s.vy * steps
             
             curW := s.w * Abs(Cos(t * 15 * s.spinW))
             curH := s.h * Abs(Cos(t * 15 * s.spinH))
@@ -100,10 +104,11 @@ TriggerShatterClose(hwnd) {
             curX := s.x + (s.w - curW)/2
             curY := s.y + (s.h - curH)/2
             
-            DllCall("SetWindowPos", "ptr", s.gui.Hwnd, "ptr", -1, "int", Round(curX), "int", Round(curY), "int", Round(curW), "int", Round(curH), "uint", 0x14 | 0x40) 
-            
-            ; See the DWM_THUMBNAIL_PROPERTIES layout in RS_UpdateDwmThumbnail.
-            RS_UpdateDwmThumbnail(s.thumb, [0, 0, Round(curW), Round(curH)], [Round(s.srcX), Round(s.srcY), s.w, s.h], alpha, true, true)
+            if DllCall("IsWindow", "ptr", s.gui.Hwnd) {
+                try DllCall("SetWindowPos", "ptr", s.gui.Hwnd, "ptr", -1, "int", Round(curX), "int", Round(curY), "int", Round(curW), "int", Round(curH), "uint", 0x14 | 0x40)
+                ; See the DWM_THUMBNAIL_PROPERTIES layout in RS_UpdateDwmThumbnail.
+                try RS_UpdateDwmThumbnail(s.thumb, [0, 0, Round(curW), Round(curH)], [Round(s.srcX), Round(s.srcY), s.w, s.h], alpha, true, true)
+            }
         }
         return true
     }
@@ -116,8 +121,13 @@ CleanShatter(animKey) {
     if (ActiveShatters.Has(animKey)) {
         obj := ActiveShatters[animKey]
         for s in obj.shards {
-            DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", s.thumb)
-            s.gui.Destroy()
+            if (s.thumb)
+                try DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", s.thumb)
+            gh := 0
+            try gh := s.gui.Hwnd
+            try s.gui.Destroy()
+            if gh
+                RS_RemoveHwnd(gh)
         }
         ActiveShatters.Delete(animKey)
     }
@@ -135,4 +145,5 @@ RestoreShatters() {
         try CancelAnimation(animKey)
         try CleanShatter(animKey)
     }
+    RS_Commit()
 }

@@ -210,9 +210,17 @@ TriggerCursorYawn() {
     ms := 1000
     
     Step(dt, now) {
+        if !DllCall("IsWindow", "ptr", guiObj.Hwnd) {
+            RS_RemoveHwnd(guiObj.Hwnd)
+            return false
+        }
         t := (now - start) / ms
         if (t >= 1) {
-            guiObj.Destroy()
+            gh := 0
+            try gh := guiObj.Hwnd
+            try guiObj.Destroy()
+            if gh
+                RS_RemoveHwnd(gh)
             return false
         }
         
@@ -278,6 +286,19 @@ ElasticScroll(hwnd, dir, startX, startY) {
     global ElasticHwnd, ElasticOffsetY, ElasticTargetY, ElasticVel, ElasticBaseX, ElasticBaseY
     global ElasticEdgeStates, ElasticAwayCounts
     
+    if (ElasticEdgeStates.Count > 32) {
+        dead := []
+        for h, unused in ElasticEdgeStates {
+            if !DllCall("IsWindow", "ptr", h)
+                dead.Push(h)
+        }
+        for h in dead {
+            ElasticEdgeStates.Delete(h)
+            if ElasticAwayCounts.Has(h)
+                ElasticAwayCounts.Delete(h)
+        }
+    }
+
     if !ElasticEdgeStates.Has(hwnd) {
         ElasticEdgeStates[hwnd] := 0
         ElasticAwayCounts[hwnd] := 0
@@ -351,8 +372,6 @@ ElasticScrollCallback(dt, now) {
     global DragHwnd, FRAME_MS
 
     if (!DllCall("IsWindow", "ptr", ElasticHwnd) || DragHwnd == ElasticHwnd) {
-        if (DragHwnd == ElasticHwnd)
-            try RS_SetPos(ElasticHwnd, ElasticBaseX, ElasticBaseY, -1, -1, RS_PRI_ANIM)
         ElasticHwnd := 0
         return false
     }
@@ -370,7 +389,7 @@ ElasticScrollCallback(dt, now) {
     ElasticOffsetY += ElasticVel * steps
 
     if (Abs(ElasticTargetY) < 1 && Abs(ElasticOffsetY) < 1 && Abs(ElasticVel) < 1) {
-        try RS_SetPos(ElasticHwnd, ElasticBaseX, ElasticBaseY + Round(ElasticOffsetY), -1, -1, RS_PRI_ANIM)
+        try RS_SetPos(ElasticHwnd, ElasticBaseX, ElasticBaseY, -1, -1, RS_PRI_ANIM)
         ElasticHwnd := 0
         return false
     }
@@ -398,6 +417,7 @@ global BreatheCursorActive := false
 global BreatheGui := ""
 
 global BreatheStart := 0
+global BreatheLastSize := -1
 
 CheckMouseIdle() {
     global BreatheCursorEnabled, BreatheCursorActive
@@ -418,7 +438,7 @@ CheckMouseIdle() {
 }
 
 StartBreatheCursor() {
-    global BreatheGui, BreatheStart
+    global BreatheGui, BreatheStart, BreatheLastSize
     if (!BreatheGui) {
         BreatheGui := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
         BreatheGui.BackColor := "White"
@@ -428,12 +448,16 @@ StartBreatheCursor() {
         BreatheGui.Show("NA")
     }
     BreatheStart := QPC()
-    RegisterAnimation("BreatheCursor", UpdateBreathe)
+    BreatheLastSize := -1
+    ; Low-frequency timer (~16 fps) instead of RegisterAnimation so idle breathing
+    ; never pins the 63 fps AnimationScheduler and timeBeginPeriod(1) indefinitely.
+    SetTimer(UpdateBreathe, 60)
 }
 
 StopBreatheCursor() {
-    global BreatheGui
-    CancelAnimation("BreatheCursor")
+    global BreatheGui, BreatheLastSize
+    SetTimer(UpdateBreathe, 0)
+    BreatheLastSize := -1
     if (BreatheGui) {
         RS_SetAlpha(BreatheGui.Hwnd, "Off", RS_PRI_ANIM)
         BreatheGui.Hide()
@@ -441,24 +465,33 @@ StopBreatheCursor() {
     }
 }
 
-UpdateBreathe(dt, now) {
-    global BreatheGui, BreatheStart, BreatheCursorActive
-    if (!BreatheCursorActive) {
-        RS_SetAlpha(BreatheGui.Hwnd, "Off", RS_PRI_ANIM)
-        BreatheGui.Hide()
-        return false
+UpdateBreathe() {
+    global BreatheGui, BreatheStart, BreatheCursorActive, BreatheLastSize
+    try {
+        if (!BreatheCursorActive || !BreatheGui) {
+            SetTimer(UpdateBreathe, 0)
+            if (BreatheGui) {
+                RS_SetAlpha(BreatheGui.Hwnd, "Off", RS_PRI_ANIM)
+                BreatheGui.Hide()
+                RS_Commit()
+            }
+            return
+        }
+        MouseGetPos(&mx, &my)
+        t := QPC() - BreatheStart
+        cycle := Mod(t, 3000) / 3000
+        val := (Sin(cycle * 6.28318 - 1.57079) + 1) / 2
+        size := Round(20 + 20 * val)
+        alpha := Round(20 + 40 * val)
+        
+        if (size != BreatheLastSize) {
+            RS_SetRegion(BreatheGui.Hwnd, "0-0 w" size " h" size " E", RS_PRI_ANIM)
+            BreatheLastSize := size
+        }
+        RS_SetAlpha(BreatheGui.Hwnd, alpha, RS_PRI_ANIM)
+        RS_SetPos(BreatheGui.Hwnd, mx - size//2, my - size//2, size, size, RS_PRI_ANIM)
+        RS_Commit()
     }
-    MouseGetPos(&mx, &my)
-    t := now - BreatheStart
-    cycle := Mod(t, 3000) / 3000
-    val := (Sin(cycle * 6.28318 - 1.57079) + 1) / 2
-    size := Round(20 + 20 * val)
-    alpha := Round(20 + 40 * val)
-    
-    RS_SetRegion(BreatheGui.Hwnd, "0-0 w" size " h" size " E", RS_PRI_ANIM)
-    RS_SetAlpha(BreatheGui.Hwnd, alpha, RS_PRI_ANIM)
-    RS_SetPos(BreatheGui.Hwnd, mx - size//2, my - size//2, -1, -1, RS_PRI_ANIM)
-    return true
 }
 
 global Ripples := []
@@ -487,7 +520,10 @@ SpawnRipple(x, y) {
     r.Start := QPC()
     r.x := x
     r.y := y
-    r.Gui.Show("NA")
+    RS_SetRegion(r.Gui.Hwnd, "0-0 w10 h10 E", RS_PRI_ANIM)
+    RS_SetAlpha(r.Gui.Hwnd, 0, RS_PRI_ANIM)
+    RS_Commit()
+    r.Gui.Show("NA x" (x - 5) " y" (y - 5) " w10 h10")
     
     RegisterAnimation("Ripple_" idx, RippleCallback.Bind(idx))
 }
@@ -523,7 +559,7 @@ global DragTrailActive := false
 global DragTrailX := 0, DragTrailY := 0, DragTrailVX := 0, DragTrailVY := 0
 
 CheckElasticDrag(dt, now) {
-    global DragTrailStartX, DragTrailStartY, DragTrailActive, DragTrailX, DragTrailY, DragTrailGui
+    global DragTrailStartX, DragTrailStartY, DragTrailActive, DragTrailX, DragTrailY, DragTrailVX, DragTrailVY, DragTrailGui
     if (!GetKeyState("LButton", "P")) {
         return false
     }
@@ -540,7 +576,8 @@ CheckElasticDrag(dt, now) {
         DragTrailVY := 0
         RS_SetAlpha(DragTrailGui.Hwnd, 80, RS_PRI_ANIM)
         RS_Commit()
-        DragTrailGui.Show("x-1000 y-1000 w16 h16 NoActivate")
+        offX := SysGet(76) - 4000, offY := SysGet(77) - 4000
+        DragTrailGui.Show("x" offX " y" offY " w16 h16 NoActivate")
         RegisterAnimation("DragTrail", DragTrailCallback)
         return false
     }
@@ -548,7 +585,7 @@ CheckElasticDrag(dt, now) {
 }
 
 DragTrailCallback(dt, now) {
-    global DragTrailGui, DragTrailActive, DragTrailX, DragTrailY, DragTrailVX, DragTrailVY
+    global DragTrailGui, DragTrailActive, DragTrailX, DragTrailY, DragTrailVX, DragTrailVY, FRAME_MS
     if (!GetKeyState("LButton", "P")) {
         DragTrailActive := false
         RS_SetAlpha(DragTrailGui.Hwnd, "Off", RS_PRI_ANIM)
@@ -556,15 +593,19 @@ DragTrailCallback(dt, now) {
         return false
     }
     
+    if (dt <= 0)
+        dt := FRAME_MS
+    steps := dt / FRAME_MS
     MouseGetPos(&mx, &my)
     dx := mx - DragTrailX
     dy := my - DragTrailY
-    DragTrailVX += dx * 0.2
-    DragTrailVY += dy * 0.2
-    DragTrailVX *= 0.7
-    DragTrailVY *= 0.7
-    DragTrailX += DragTrailVX
-    DragTrailY += DragTrailVY
+    DragTrailVX += dx * 0.2 * steps
+    DragTrailVY += dy * 0.2 * steps
+    damp := Exp(-0.3566749 * steps)          ; ln(1/0.7) per nominal frame
+    DragTrailVX *= damp
+    DragTrailVY *= damp
+    DragTrailX += DragTrailVX * steps
+    DragTrailY += DragTrailVY * steps
     
     RS_SetAlpha(DragTrailGui.Hwnd, 80, RS_PRI_ANIM)
     RS_SetPos(DragTrailGui.Hwnd, Round(DragTrailX - 8), Round(DragTrailY - 8), -1, -1, RS_PRI_ANIM)
@@ -610,9 +651,13 @@ RunClipAnim(yDir, duration, expand := false) {
     if (!cx)
         MouseGetPos(&cx, &cy)
         
-    ClipAnimGui.Show("NA x-1000 y-1000 w16 h16")
+    offX := SysGet(76) - 4000, offY := SysGet(77) - 4000
+    RS_SetAlpha(ClipAnimGui.Hwnd, 0, RS_PRI_ANIM)
+    RS_Commit()
+    ClipAnimGui.Show("NA x" offX " y" offY " w16 h16")
     start := QPC()
     animKey := "ClipAnim_" . ClipAnimGui.Hwnd
+    lastSize := -1
     
     Step(dt, now) {
         t := now - start
@@ -627,15 +672,13 @@ RunClipAnim(yDir, duration, expand := false) {
         
         yOff := yDir * ease
         size := expand ? Round(16 + 10 * ease) : Round(16 - 8 * ease)
-        if expand {
-            WinSetRegion("0-0 w" size " h" size " r8-8", ClipAnimGui.Hwnd)
-            RS_SetPos(ClipAnimGui.Hwnd, cx - size//2, cy - size//2 + yOff, size, size, RS_PRI_ANIM)
-            RS_SetAlpha(ClipAnimGui.Hwnd, Round(150 * (1 - p)), RS_PRI_ANIM)
-        } else {
-            WinSetRegion("0-0 w" size " h" size " r" (size//2) "-" (size//2), ClipAnimGui.Hwnd)
-            RS_SetPos(ClipAnimGui.Hwnd, cx - size//2, cy - size//2 + yOff, size, size, RS_PRI_ANIM)
-            RS_SetAlpha(ClipAnimGui.Hwnd, Round(200 * (1 - p)), RS_PRI_ANIM)
+        if (size != lastSize) {
+            reg := expand ? ("0-0 w" size " h" size " r8-8") : ("0-0 w" size " h" size " r" (size//2) "-" (size//2))
+            RS_SetRegion(ClipAnimGui.Hwnd, reg, RS_PRI_ANIM)
+            lastSize := size
         }
+        RS_SetPos(ClipAnimGui.Hwnd, cx - size//2, cy - size//2 + yOff, size, size, RS_PRI_ANIM)
+        RS_SetAlpha(ClipAnimGui.Hwnd, Round((expand ? 150 : 200) * (1 - p)), RS_PRI_ANIM)
         return true
     }
     RegisterAnimation(animKey, Step)
@@ -692,8 +735,10 @@ UpdateSmoothCaret() {
         CaretVelY := 0
     }
     
-    SmoothCaretGui.Show("NA x-1000 y-1000 w2 h20")
-    WinSetRegion("0-0 w2 h20 E", SmoothCaretGui.Hwnd)
+    offX := SysGet(76) - 4000, offY := SysGet(77) - 4000
+    RS_SetRegion(SmoothCaretGui.Hwnd, "0-0 w2 h20 E", RS_PRI_ANIM)
+    RS_Commit()
+    SmoothCaretGui.Show("NA x" offX " y" offY " w2 h20")
     ; Who it belongs to and when it last moved, so the watchdog can tell a live
     ; caret from an abandoned overlay. Armed here rather than at startup: a
     ; feature nobody is using costs nothing.
@@ -702,6 +747,7 @@ UpdateSmoothCaret() {
     SetTimer(SmoothCaretWatchdog, 250)
     
     animKey := "SmoothCaret_" . SmoothCaretGui.Hwnd
+    lastW := 2
     
     Step(dt, now) {
         if !CaretGetPos(&tx, &ty) {
@@ -730,13 +776,21 @@ UpdateSmoothCaret() {
             ; what takes it from here.
             LastCaretX := tx
             LastCaretY := ty
+            if (lastW != 2) {
+                RS_SetRegion(SmoothCaretGui.Hwnd, "0-0 w2 h20 E", RS_PRI_ANIM)
+                lastW := 2
+            }
             RS_SetPos(SmoothCaretGui.Hwnd, Round(LastCaretX), Round(LastCaretY), 2, 20, RS_PRI_ANIM)
             RS_SetAlpha(SmoothCaretGui.Hwnd, 200, RS_PRI_ANIM)
             return false
         }
         
         stretch := 1 + Abs(CaretVelX) * 0.05
-        w := Round(2 * stretch)
+        w := Max(2, Round(2 * stretch))
+        if (w != lastW) {
+            RS_SetRegion(SmoothCaretGui.Hwnd, "0-0 w" w " h20 E", RS_PRI_ANIM)
+            lastW := w
+        }
         
         RS_SetPos(SmoothCaretGui.Hwnd, Round(LastCaretX), Round(LastCaretY), w, 20, RS_PRI_ANIM)
         RS_SetAlpha(SmoothCaretGui.Hwnd, 200, RS_PRI_ANIM)
@@ -790,9 +844,11 @@ SmoothCaretWatchdog() {
         HideSmoothCaret()
 }
 
+global WordPopCount := 0
+
 WordPop() {
-    global SmoothCaretEnabled
-    if (!SmoothCaretEnabled)
+    global SmoothCaretEnabled, WordPopCount
+    if (!SmoothCaretEnabled || WordPopCount >= 8)
         return
     CaretGetPos(&cx, &cy)
     if (!cx)
@@ -800,19 +856,37 @@ WordPop() {
         
     g := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
     g.BackColor := "0078D7"
-    g.Show("NA x-1000 y-1000 w10 h20")
-    WinSetRegion("0-0 w10 h20 r4-4", g.Hwnd)
+    offX := SysGet(76) - 4000, offY := SysGet(77) - 4000
+    RS_SetRegion(g.Hwnd, "0-0 w10 h20 r4-4", RS_PRI_ANIM)
+    RS_SetAlpha(g.Hwnd, 0, RS_PRI_ANIM)
+    RS_Commit()
+    g.Show("NA x" offX " y" offY " w10 h20")
     
+    WordPopCount++
     animKey := "WordPop_" . g.Hwnd
     start := QPC()
+    popHwnd := g.Hwnd
+    cleaned := false
+
+    Cleanup() {
+        global WordPopCount
+        if cleaned
+            return
+        cleaned := true
+        WordPopCount := Max(0, WordPopCount - 1)
+        try g.Destroy()
+        if popHwnd
+            RS_RemoveHwnd(popHwnd)   ; a ToolWindow raises no shell destroy event
+    }
     
     Step(dt, now) {
+        if !DllCall("IsWindow", "ptr", popHwnd) {
+            Cleanup()
+            return false
+        }
         t := now - start
         if (t > 150) {
-            RS_SetAlpha(g.Hwnd, "Off", RS_PRI_ANIM)
-            popHwnd := g.Hwnd
-            g.Destroy()
-            RS_RemoveHwnd(popHwnd)   ; a ToolWindow raises no shell destroy event
+            Cleanup()
             return false
         }
         
@@ -820,8 +894,8 @@ WordPop() {
         alpha := Round(100 * (1 - p))
         size := 10 + 15 * p
         
-        RS_SetPos(g.Hwnd, cx - size//2, cy, size, 20, RS_PRI_ANIM)
-        RS_SetAlpha(g.Hwnd, alpha, RS_PRI_ANIM)
+        RS_SetPos(popHwnd, cx - size//2, cy, size, 20, RS_PRI_ANIM)
+        RS_SetAlpha(popHwnd, alpha, RS_PRI_ANIM)
         return true
     }
     RegisterAnimation(animKey, Step)

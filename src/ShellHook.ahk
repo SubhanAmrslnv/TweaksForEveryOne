@@ -33,9 +33,58 @@
 ; window rather than after - get that backwards and brand-new windows sit at
 ; alpha 0, invisible but focused and clickable.
 ;
-; The per-HWND state Maps are pruned in the HSHELL_WINDOWDESTROYED branch of the
-; shell hook. Anything keyed on hwnd anywhere in the program has to be pruned
-; there too, or it leaks for the session.
+; A window can leave the shell's task list while its HWND is still live.
+; EVENT_OBJECT_DESTROY also reaches windows that were hidden before they closed.
+
+global WindowDestroyCb := 0, WindowDestroyHook := 0
+
+InstallWindowDestroyHook() {
+    global WindowDestroyCb, WindowDestroyHook
+    WindowDestroyCb := CallbackCreate(WindowDestroyEvent, , 7)
+    WindowDestroyHook := DllCall("SetWinEventHook", "uint", 0x8001, "uint", 0x8001, "ptr", 0
+        , "ptr", WindowDestroyCb, "uint", 0, "uint", 0, "uint", 0x0002, "ptr")
+}
+
+RemoveWindowDestroyHook() {
+    global WindowDestroyCb, WindowDestroyHook
+    if WindowDestroyHook
+        DllCall("UnhookWinEvent", "ptr", WindowDestroyHook)
+    if WindowDestroyCb
+        CallbackFree(WindowDestroyCb)
+    WindowDestroyHook := 0, WindowDestroyCb := 0
+}
+
+WindowDestroyEvent(hook, event, hwnd, idObject, idChild, thread, time) {
+    global TrayIcons, CurtainWindows, RolledUpWindows, RollDownPending, UnrollPending
+    if (!hwnd || idObject != 0 || idChild != 0)
+        return
+    if !DllCall("IsWindow", "ptr", hwnd) {
+        ForgetDestroyedWindow(hwnd)
+    } else if (TrayIcons.Has(hwnd) || CurtainWindows.Has(hwnd) || RolledUpWindows.Has(hwnd)
+        || RollDownPending.Has(hwnd) || UnrollPending.Has(hwnd)) {
+        SetTimer(ForgetDestroyedWindow.Bind(hwnd), -100)
+    }
+}
+
+ForgetDestroyedWindow(hwnd) {
+    global CustomTrans, RolledUpWindows, RollDownPending, WinTargetAlpha, WinCurrentAlpha, WinLastActive
+    global WindowCmdLineCache, LayoutUndo, SizeCycleIdx, ElasticEdgeStates, ElasticAwayCounts
+    global PendingOpen, OpenAnimated, GhostHiddenWindows, UnrollPending, CurtainWindows, TrayIcons
+    if DllCall("IsWindow", "ptr", hwnd)
+        return
+    for state in [WindowCmdLineCache, CustomTrans, RolledUpWindows, RollDownPending
+        , WinTargetAlpha, WinCurrentAlpha, WinLastActive, LayoutUndo, SizeCycleIdx
+        , ElasticEdgeStates, ElasticAwayCounts, PendingOpen, OpenAnimated, GhostHiddenWindows
+        , UnrollPending, CurtainWindows] {
+        if state.Has(hwnd)
+            state.Delete(hwnd)
+    }
+    if TrayIcons.Has(hwnd)
+        try RemoveTrayIcon(hwnd)
+    Anim_Release(hwnd)
+    RS_RemoveHwnd(hwnd)
+    MC_RemoveHwnd(hwnd)
+}
 
 RegisterShellHook() {
     DllCall("DeregisterShellHookWindow", "ptr", A_ScriptHwnd)
@@ -44,6 +93,7 @@ RegisterShellHook() {
 
 TaskbarCreated(*) {
     ok := RegisterShellHook()
+    try ReAddAllTrayIcons()
     WriteLog("explorer restarted - shell hook re-registered (" (ok ? "ok" : "FAILED") ")")
 }
 
@@ -52,6 +102,8 @@ ShellEvent(wParam, lParam, *) {
     static HSHELL_GETMINRECT := 5
     
     if ((wParam & 0x7FFF) = HSHELL_GETMINRECT) {
+        if (!lParam)
+            return
         global FlyMinimizeEnabled, BlackHoleMinimizeEnabled
         if (BlackHoleMinimizeEnabled) {
             static bhCount := 0
@@ -92,47 +144,11 @@ ShellEvent(wParam, lParam, *) {
         }
     }
     
-    if ((wParam & 0x7FFF) = 2) { ; HSHELL_WINDOWDESTROYED
-        if (lParam) {
-            global CustomTrans, RolledUpWindows, WinTargetAlpha, WinCurrentAlpha, WinLastActive, WindowCmdLineCache
-            if WindowCmdLineCache.Has(lParam)
-                WindowCmdLineCache.Delete(lParam)
-            if CustomTrans.Has(lParam)
-                CustomTrans.Delete(lParam)
-            if RolledUpWindows.Has(lParam)
-                RolledUpWindows.Delete(lParam)
-            if WinTargetAlpha.Has(lParam)
-                WinTargetAlpha.Delete(lParam)
-            if WinCurrentAlpha.Has(lParam)
-                WinCurrentAlpha.Delete(lParam)
-            if WinLastActive.Has(lParam)
-                WinLastActive.Delete(lParam)
-            ; Same reasoning for the two layout maps: nothing else ever removes
-            ; from them, so without this they grow by one entry per window the
-            ; user has ever tiled or resized, for the whole session.
-            global LayoutUndo, SizeCycleIdx
-            if LayoutUndo.Has(lParam)
-                LayoutUndo.Delete(lParam)
-            if SizeCycleIdx.Has(lParam)
-                SizeCycleIdx.Delete(lParam)
-            ; Elastic scroll's per-window edge state, same growth problem.
-            global ElasticEdgeStates, ElasticAwayCounts
-            if ElasticEdgeStates.Has(lParam)
-                ElasticEdgeStates.Delete(lParam)
-            if ElasticAwayCounts.Has(lParam)
-                ElasticAwayCounts.Delete(lParam)
-            ; Open-animation state. A window closed mid-animation is otherwise
-            ; remembered as "already animated" for the session.
-            global PendingOpen, OpenAnimated, GhostHiddenWindows
-            if PendingOpen.Has(lParam)
-                PendingOpen.Delete(lParam)
-            if OpenAnimated.Has(lParam)
-                OpenAnimated.Delete(lParam)
-            if GhostHiddenWindows.Has(lParam)
-                GhostHiddenWindows.Delete(lParam)
-            RS_RemoveHwnd(lParam)
-            MC_RemoveHwnd(lParam)      ; MediaCore caches pid/exe per HWND forever otherwise
-        }
+    if ((wParam & 0x7FFF) = 2 && lParam) { ; HSHELL_WINDOWDESTROYED
+        ; Let a real destruction finish before checking the HWND. WinHide can
+        ; send the same shell notification while the window remains restorable.
+        SetTimer(ForgetDestroyedWindow.Bind(lParam), -100)
+        return
     }
 
     if ((wParam & 0x7FFF) = 4) { ; HSHELL_WINDOWACTIVATED

@@ -3,11 +3,19 @@
 #Include "StealthPanicConfig.ahk"
 global StealthPanicIniPath := A_ScriptDir "\StealthPanic.ini"
 
+StealthSafeInt(val, def, minVal := 0) {
+    s := Trim(String(val))
+    if (s == "" || !IsNumber(s))
+        return def
+    n := Integer(Number(s))
+    return (n < minVal) ? def : n
+}
+
 global StealthPanicEnabled := IniRead(StealthPanicIniPath, "stealth", "enabled", "1") == "1"
-global StealthPanicTimeout := Number(IniRead(StealthPanicIniPath, "stealth", "timeout", "600"))
+global StealthPanicTimeout := StealthSafeInt(IniRead(StealthPanicIniPath, "stealth", "timeout", "600"), 600, 100)
 global StealthLaunchSafeApps := IniRead(StealthPanicIniPath, "stealth", "launchapps", "1") == "1"
 global StealthSafeAppList := StealthPanicConfig_ReadAppList(StealthPanicIniPath)
-global StealthLaunchDelay := Number(IniRead(StealthPanicIniPath, "stealth", "delay", "500"))
+global StealthLaunchDelay := StealthSafeInt(IniRead(StealthPanicIniPath, "stealth", "delay", "500"), 500, 0)
 global StealthRestoreWorkspace := IniRead(StealthPanicIniPath, "stealth", "restore", "1") == "1"
 global StealthMuteAudio := IniRead(StealthPanicIniPath, "stealth", "muteaudio", "1") == "1"
 global StealthMuteMic := IniRead(StealthPanicIniPath, "stealth", "mutemic", "1") == "1"
@@ -17,7 +25,6 @@ global StealthSuspendBackground := IniRead(StealthPanicIniPath, "stealth", "susp
 
 global StealthPanicActive := false
 global StealthHiddenWindows := []
-global StealthOriginalMute := false
 global StealthOriginalMic := false
 global StealthSuspendedFeatures := Map()
 ; When panic was entered, so WriteSettings() can unwind it and Game Mode in the
@@ -26,10 +33,29 @@ global StealthEnteredTick := 0
 
 global StealthEscCount := 0
 global StealthEscTimer := 0
+global StealthEscHeld := false
+global StealthEscBusy := false
 
-#HotIf StealthPanicEnabled
+global STEALTH_RELOAD_MSG := DllCall("RegisterWindowMessage", "str", "TFE_StealthPanic_ReloadConfig", "uint")
+OnMessage(STEALTH_RELOAD_MSG, StealthOnConfigMessage)
+
+StealthOnConfigMessage(*) {
+    global StealthPanicActive
+    if (!StealthPanicActive)
+        StealthPanicRefreshSettings()
+}
+
+StealthHotkeyAllowed() {
+    global StealthPanicEnabled, GameModeActive
+    return StealthPanicEnabled && !(IsSet(GameModeActive) && GameModeActive)
+}
+
+#HotIf StealthHotkeyAllowed()
 ~Esc:: {
-    global StealthEscCount, StealthEscTimer, StealthPanicTimeout
+    global StealthEscCount, StealthEscTimer, StealthPanicTimeout, StealthEscHeld, StealthEscBusy
+    if (StealthEscHeld || StealthEscBusy)
+        return
+    StealthEscHeld := true
     StealthEscCount++
     if (StealthEscCount == 1) {
         StealthEscTimer := A_TickCount
@@ -39,7 +65,9 @@ global StealthEscTimer := 0
         if (elapsed <= StealthPanicTimeout) {
             SetTimer(ResetStealthEsc, 0)
             StealthEscCount := 0
-            ToggleStealthPanic()
+            StealthEscBusy := true
+            try ToggleStealthPanic()
+            finally StealthEscBusy := false
         } else {
             ; Reset if time window expired
             StealthEscCount := 1
@@ -49,6 +77,10 @@ global StealthEscTimer := 0
     }
 }
 #HotIf
+
+~Esc up:: {
+    global StealthEscHeld := false
+}
 
 ResetStealthEsc() {
     global StealthEscCount := 0
@@ -72,15 +104,14 @@ ToggleStealthPanic() {
 ; Window Tweaks. Reloading Window Tweaks instead is not an option: Bye() un-hides
 ; every window, drops the tray icons and cancels every animation.
 ;
-; Deliberately NOT on the way out. StealthMuteAudio and StealthMuteMic decide
-; whether the original mute state is handed back, so they have to still hold what
-; they held when that state was captured - otherwise turning "mute microphone"
-; off while panic is active would strand the mic muted.
+; Deliberately NOT on the way out. StealthMuteMic decides whether the captured
+; microphone state is handed back. Turning it off in memory while panic is
+; active would strand the mic muted.
 ;
 ; Cost is roughly ten IniRead calls at ~64 us each plus one small file read, on a
 ; path that only runs on an actual triple-ESC. Nowhere near an input hot path.
 StealthPanicRefreshSettings() {
-    global StealthPanicIniPath, StealthPanicTimeout, StealthLaunchSafeApps
+    global StealthPanicIniPath, StealthPanicEnabled, StealthPanicTimeout, StealthLaunchSafeApps
     global StealthSafeAppList, StealthLaunchDelay, StealthRestoreWorkspace
     global StealthMuteAudio, StealthMuteMic
     global StealthSuspendAnimations, StealthSuspendOverlays, StealthSuspendBackground
@@ -88,9 +119,10 @@ StealthPanicRefreshSettings() {
     ; Every read falls back to the value already in memory, so a locked or
     ; half-written ini leaves the engine on its last known-good settings instead
     ; of silently resetting it to the shipped defaults.
-    try StealthPanicTimeout := Number(IniRead(StealthPanicIniPath, "stealth", "timeout", StealthPanicTimeout))
+    try StealthPanicEnabled := IniRead(StealthPanicIniPath, "stealth", "enabled", StealthPanicEnabled ? "1" : "0") == "1"
+    try StealthPanicTimeout := StealthSafeInt(IniRead(StealthPanicIniPath, "stealth", "timeout", StealthPanicTimeout), StealthPanicTimeout, 100)
     try StealthLaunchSafeApps := IniRead(StealthPanicIniPath, "stealth", "launchapps", StealthLaunchSafeApps ? "1" : "0") == "1"
-    try StealthLaunchDelay := Number(IniRead(StealthPanicIniPath, "stealth", "delay", StealthLaunchDelay))
+    try StealthLaunchDelay := StealthSafeInt(IniRead(StealthPanicIniPath, "stealth", "delay", StealthLaunchDelay), StealthLaunchDelay, 0)
     try StealthRestoreWorkspace := IniRead(StealthPanicIniPath, "stealth", "restore", StealthRestoreWorkspace ? "1" : "0") == "1"
     try StealthMuteAudio := IniRead(StealthPanicIniPath, "stealth", "muteaudio", StealthMuteAudio ? "1" : "0") == "1"
     try StealthMuteMic := IniRead(StealthPanicIniPath, "stealth", "mutemic", StealthMuteMic ? "1" : "0") == "1"
@@ -102,6 +134,8 @@ StealthPanicRefreshSettings() {
     ; leave the feature unreachable with no way to tell why.
     if (!IsNumber(StealthPanicTimeout) || StealthPanicTimeout < 100)
         StealthPanicTimeout := 600
+    if (!IsNumber(StealthLaunchDelay) || StealthLaunchDelay < 0)
+        StealthLaunchDelay := 0
 
     ; ReadAppList never throws. An empty result is far more likely to be a
     ; transient read failure than a deliberate "launch nothing", and the user can
@@ -159,9 +193,94 @@ StealthSyncFeatures() {
     StealthCall("SyncMediaCore")
 }
 
+StealthIsShellSurface(hwnd, cls) {
+    try {
+        fn := %"IsShellSurface"%
+        if (fn is Func)
+            return fn(hwnd, cls)
+    }
+    static shellClasses := Map(
+        "Shell_TrayWnd", true,
+        "Shell_SecondaryTrayWnd", true,
+        "Progman", true,
+        "WorkerW", true,
+        "Windows.UI.Core.CoreWindow", true,
+        "XamlExplorerHostIslandWindow", true,
+        "TopLevelWindowForOverflowXamlIsland", true,
+        "ApplicationFrameInputSinkWindow", true,
+        "ForegroundStaging", true,
+        "TaskListThumbnailWnd", true,
+        "MultitaskingViewFrame", true,
+        "NotifyIconOverflowWindow", true
+    )
+    return shellClasses.Has(cls)
+}
+
+StealthIsCloaked(hwnd) {
+    try {
+        fn := %"IsCloaked"%
+        if (fn is Func)
+            return fn(hwnd)
+    }
+    cloaked := 0
+    DllCall("dwmapi\DwmGetWindowAttribute", "ptr", hwnd, "uint", 14, "uint*", &cloaked, "uint", 4)
+    return cloaked != 0
+}
+
+StealthGetMicMute() {
+    try {
+        fn := %"GetDefaultMicMute"%
+        if (fn is Func) {
+            st := fn()
+            if (st == 0 || st == 1)
+                return (st == 1)
+        }
+    }
+    try return (SoundGetMute(, "Microphone") == 1)
+    return false
+}
+
+StealthSetMicMute(state) {
+    try {
+        fn := %"SetDefaultMicMute"%
+        if (fn is Func) {
+            if fn(state ? true : false)
+                return true
+        }
+    }
+    try {
+        SoundSetMute(state ? 1 : 0, , "Microphone")
+        return true
+    }
+    return false
+}
+
+; Boss Key and Stealth Panic can overlap. The first owner saves the speaker
+; state and the last owner restores it, regardless of which mode ends first.
+; This also runs in standalone Stealth, where it has only one caller.
+PanicSetSpeakerMute(owner, active) {
+    static owners := Map(), originalMute := false
+    prevCritical := Critical("On")
+    try {
+        if (active) {
+            if (!owners.Count) {
+                try originalMute := SoundGetMute()
+                catch
+                    originalMute := false
+            }
+            owners[owner] := true
+            try SoundSetMute(true)
+        } else if (owners.Has(owner)) {
+            owners.Delete(owner)
+            if (!owners.Count)
+                try SoundSetMute(originalMute)
+        }
+    } finally Critical(prevCritical)
+}
+
 EnterStealthPanic() {
     global StealthEnteredTick
-    global StealthPanicActive, StealthHiddenWindows, StealthOriginalMute, StealthOriginalMic
+    global StealthPanicActive, StealthHiddenWindows, StealthOriginalMic
     global StealthMuteAudio, StealthMuteMic, StealthLaunchSafeApps, StealthLaunchDelay
 
     if (StealthPanicActive)
@@ -169,31 +288,44 @@ EnterStealthPanic() {
     
     StealthPanicActive := true
     StealthEnteredTick := A_TickCount
-    StealthHiddenWindows := []
+    kept := []
+    seen := Map()
+    for hwnd in StealthHiddenWindows {
+        if (DllCall("IsWindow", "ptr", hwnd) && !seen.Has(hwnd)) {
+            kept.Push(hwnd)
+            seen[hwnd] := true
+        }
+    }
+    StealthHiddenWindows := kept
     
     ; 1. Hide windows
     ownPid := DllCall("GetCurrentProcessId", "uint")
     hwnds := WinGetList()
     for hwnd in hwnds {
+        if (!StealthPanicActive)
+            return
         cls := ""
         try cls := WinGetClass(hwnd)
-        if (!cls || cls = "Progman" || cls = "WorkerW" || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd")
+        if (!cls || StealthIsShellSurface(hwnd, cls) || StealthIsCloaked(hwnd))
             continue
         pid := 0
         try pid := WinGetPID(hwnd)
         if (pid == ownPid)
             continue
         
-        StealthHiddenWindows.Push(hwnd)
+        if !seen.Has(hwnd) {
+            StealthHiddenWindows.Push(hwnd)
+            seen[hwnd] := true
+        }
         try WinHide(hwnd)
     }
+
+    if (!StealthPanicActive)
+        return
     
     ; 2. Mute audio
     if (StealthMuteAudio) {
-        try StealthOriginalMute := SoundGetMute()
-        catch
-            StealthOriginalMute := false
-        try SoundSetMute(true)
+        PanicSetSpeakerMute("Stealth", true)
         
         ; Stop any playing media if appropriate
         if (IsSet(MC_AnyMedia)) {
@@ -206,54 +338,40 @@ EnterStealthPanic() {
     
     ; 3. Mute Mic
     if (StealthMuteMic) {
-        ; Use Mic Kill Switch if available
-        if IsSet(ToggleDefaultMic) {
-            try StealthOriginalMic := (SoundGetMute(,"Microphone") == 1)
-            catch {
-                StealthOriginalMic := false
-            }
-            try SoundSetMute(1, , "Microphone")
-        } else {
-            try StealthOriginalMic := (SoundGetMute(,"Microphone") == 1)
-            catch {
-                StealthOriginalMic := false
-            }
-            try SoundSetMute(1, , "Microphone")
-        }
+        StealthOriginalMic := StealthGetMicMute()
+        StealthSetMicMute(true)
     }
     
     ; 4. Suspend features
     SuspendStealthFeatures()
     
     ; 5. Launch Safe Workspace
-    if (StealthLaunchSafeApps) {
-        SetTimer(LaunchSafeApps, -StealthLaunchDelay)
-    }
+    if (StealthPanicActive && StealthLaunchSafeApps)
+        SetTimer(LaunchSafeApps, -Max(1, StealthLaunchDelay))
 }
 
 RestoreStealthPanic() {
-    global StealthPanicActive, StealthHiddenWindows, StealthOriginalMute, StealthOriginalMic
-    global StealthRestoreWorkspace, StealthMuteAudio, StealthMuteMic
+    global StealthPanicActive, StealthHiddenWindows, StealthOriginalMic
+    global StealthRestoreWorkspace, StealthMuteMic
 
     if (!StealthPanicActive)
         return
         
     StealthPanicActive := false
+    SetTimer(LaunchSafeApps, 0)
     
     if (StealthRestoreWorkspace) {
         for hwnd in StealthHiddenWindows {
             if DllCall("IsWindow", "ptr", hwnd)
                 try WinShow(hwnd)
         }
+        StealthHiddenWindows := []
     }
-    StealthHiddenWindows := []
     
-    if (StealthMuteAudio) {
-        try SoundSetMute(StealthOriginalMute)
-    }
+    PanicSetSpeakerMute("Stealth", false)
     
     if (StealthMuteMic) {
-        try SoundSetMute(StealthOriginalMic, , "Microphone")
+        StealthSetMicMute(StealthOriginalMic)
     }
     
     RestoreStealthFeatures()
@@ -270,42 +388,46 @@ SuspendStealthFeatures() {
     global OpenAnim, ContextMenuAnimEnabled, RippleClickEnabled
     global ProximityGhostEnabled, LivePipEnabled
     global SpotlightEnabled, BreathingEnabled, CursorYawnEnabled
+    global GameModeActive, GameModeSuspendedFeatures
+
+    gmActive := IsSet(GameModeActive) && GameModeActive && IsSet(GameModeSuspendedFeatures)
+    RealVal(key, curVal) => (gmActive && GameModeSuspendedFeatures.Has(key)) ? GameModeSuspendedFeatures[key] : curVal
     
     if (StealthSuspendAnimations) {
         if IsSet(OpenAnim) {
-            StealthSuspendedFeatures["OpenAnim"] := OpenAnim
+            StealthSuspendedFeatures["OpenAnim"] := RealVal("OpenAnim", OpenAnim)
             OpenAnim := "None"
         }
         if IsSet(ContextMenuAnimEnabled) {
-            StealthSuspendedFeatures["ContextMenuAnimEnabled"] := ContextMenuAnimEnabled
+            StealthSuspendedFeatures["ContextMenuAnimEnabled"] := RealVal("ContextMenuAnimEnabled", ContextMenuAnimEnabled)
             ContextMenuAnimEnabled := false
         }
         if IsSet(RippleClickEnabled) {
-            StealthSuspendedFeatures["RippleClickEnabled"] := RippleClickEnabled
+            StealthSuspendedFeatures["RippleClickEnabled"] := RealVal("RippleClickEnabled", RippleClickEnabled)
             RippleClickEnabled := false
         }
     }
     if (StealthSuspendOverlays) {
         if IsSet(ProximityGhostEnabled) {
-            StealthSuspendedFeatures["ProximityGhostEnabled"] := ProximityGhostEnabled
+            StealthSuspendedFeatures["ProximityGhostEnabled"] := RealVal("ProximityGhostEnabled", ProximityGhostEnabled)
             ProximityGhostEnabled := false
         }
         if IsSet(LivePipEnabled) {
-            StealthSuspendedFeatures["LivePipEnabled"] := LivePipEnabled
+            StealthSuspendedFeatures["LivePipEnabled"] := RealVal("LivePipEnabled", LivePipEnabled)
             LivePipEnabled := false
         }
     }
     if (StealthSuspendBackground) {
         if IsSet(SpotlightEnabled) {
-            StealthSuspendedFeatures["SpotlightEnabled"] := SpotlightEnabled
+            StealthSuspendedFeatures["SpotlightEnabled"] := RealVal("SpotlightEnabled", SpotlightEnabled)
             SpotlightEnabled := false
         }
         if IsSet(BreathingEnabled) {
-            StealthSuspendedFeatures["BreathingEnabled"] := BreathingEnabled
+            StealthSuspendedFeatures["BreathingEnabled"] := RealVal("BreathingEnabled", BreathingEnabled)
             BreathingEnabled := false
         }
         if IsSet(CursorYawnEnabled) {
-            StealthSuspendedFeatures["CursorYawnEnabled"] := CursorYawnEnabled
+            StealthSuspendedFeatures["CursorYawnEnabled"] := RealVal("CursorYawnEnabled", CursorYawnEnabled)
             CursorYawnEnabled := false
         }
     }
@@ -373,7 +495,7 @@ StealthUnsuspendForWrite() {
 ; Settings-window edits made during panic become the held values; see
 ; OverlaysAdoptEdits() in SettingsStore.ahk. Assume-global for the dynamic
 ; %name% read, hence the sp prefix on its scratch variables.
-StealthAdoptEdits() {
+StealthAdoptEdits(resuspend := true) {
     global
     if (!StealthPanicActive)
         return
@@ -381,7 +503,8 @@ StealthAdoptEdits() {
         if IsSet(%spKey%)
             StealthSuspendedFeatures[spKey] := %spKey%
     }
-    StealthResuspend()
+    if (resuspend)
+        StealthResuspend()
 }
 
 StealthResuspend() {
@@ -397,7 +520,9 @@ StealthResuspend() {
 global StealthAppCache := Map()
 
 LaunchSafeApps() {
-    global StealthSafeAppList, StealthAppCache
+    global StealthPanicActive, StealthSafeAppList
+    if (!StealthPanicActive)
+        return
     ; Next to the program, like every other file it writes. It used to go to
     ; %APPDATA%, outside the program folder, where no uninstaller removed it.
     logPath := A_ScriptDir "\StealthPanic_Launch.log"
@@ -410,6 +535,8 @@ LaunchSafeApps() {
     LogLaunch("--- Starting Safe Workspace Launch ---")
     
     Loop Parse, StealthSafeAppList, "`n", "`r" {
+        if (!StealthPanicActive)
+            return
         appInput := Trim(A_LoopField)
         if (appInput == "")
             continue
@@ -457,7 +584,7 @@ LaunchSafeApps() {
         }
         
         ; 2. Existing Instance Activation
-        if (nameOnly != "" && extOnly == "exe") {
+        if (nameOnly != "" && StrLower(extOnly) == "exe") {
             LogLaunch("Checking existing instances...")
             if ActivateExistingInstance(nameOnly) {
                 LogLaunch("Launch successful (Activated existing instance).")
@@ -723,19 +850,20 @@ OnExit(ExitStealthPanic)
 
 ExitStealthPanic(ExitReason, ExitCode) {
     global StealthPanicActive, StealthHiddenWindows, StealthSuspendedFeatures
-    global StealthOriginalMute, StealthOriginalMic, StealthMuteAudio, StealthMuteMic
-    if (!StealthPanicActive)
-        return
+    global StealthOriginalMic, StealthMuteMic
+    SetTimer(LaunchSafeApps, 0)
     for hwnd in StealthHiddenWindows {
         if DllCall("IsWindow", "ptr", hwnd)
             try WinShow(hwnd)
     }
+    StealthHiddenWindows := []
+    PanicSetSpeakerMute("Stealth", false)
+    if (!StealthPanicActive)
+        return
     ; Exiting used to hand back the windows only: the speakers and microphone
     ; stayed muted after the program was gone, with nothing left to unmute them.
-    if (StealthMuteAudio)
-        try SoundSetMute(StealthOriginalMute)
     if (StealthMuteMic)
-        try SoundSetMute(StealthOriginalMic, , "Microphone")
+        StealthSetMicMute(StealthOriginalMic)
     ; Flags only, no Sync*: Bye() runs next and tears every feature down anyway.
     ; This runs before Bye() (registered at load), so its WriteSettings() sees
     ; the real values even without the bracket.

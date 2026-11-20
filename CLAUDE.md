@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Windows 11 tray utility written in **AutoHotkey v2** (magnetic window snapping, inertial "ice glide", window animations, ~40 power-user tweaks), plus a reversible HKCU tuning pass. Shipped two ways: a PowerShell installer and a single-file setup `.exe` compiled from C#.
+A Windows 11 tray utility written in **AutoHotkey v2** (magnetic window snapping, inertial "ice glide", window animations, ~40 power-user tweaks), plus a reversible HKCU tuning pass. Shipped two ways: a batch installer and a single-file setup `.exe` compiled from C#.
 
 **This repository now holds two independent implementations.** Everything in this file describes the Windows one (`src/`, `scripts/`, `build/`, `docs/`). A separate C++20/Qt6/CMake port for Linux lives in **`linux/`** and has its own **`linux/CLAUDE.md`** — read that before touching anything under `linux/`. The two share **no code**, only design: the render-arbitration and animation-scheduler concepts were ported deliberately, so if you change an invariant on one side, check the other. The Linux port is an early scaffold that does not build; do not treat its docs as a description of working software.
 
@@ -259,22 +259,21 @@ There is **no build system, no test runner, and no CI**. No `.sln`, no `.csproj`
 
 
 # Build the installer -> build\out\WindowTweaksSetup.exe
-.\build\Build-Installer.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File .\build\Build-Installer.ps1   # if policy is Restricted
+.\build\Build-Installer.bat
 
 # Install / uninstall (no admin required anywhere in this project)
-.\Install.ps1 [-Silent] [-Tuning] [-NoAutoStart]
-.\Uninstall.ps1 [-Silent]
+.\Install.bat [-Silent] [-Tuning] [-NoAutoStart]
+.\Uninstall.bat [-Silent] [-RemoveSettings]
 
 # Windows tuning
-.\scripts\Apply-Windows-Tuning.ps1 [-Animations | -Explorer | -All]
-.\scripts\Restore-Windows-Tuning.ps1
+.\scripts\Apply-Windows-Tuning.bat [-Animations | -Explorer | -All]
+.\scripts\Restore-Windows-Tuning.bat
 
 # Structural checks - the closest thing to a test suite. Run after every change
 # that moves code between modules. See "Architecture rules" below.
-.\scripts\Check-Split.ps1              # parse, motion proof, HotIf, case, hotkeys
-.\scripts\Check-Split.ps1 -IniCheck    # + settings.ini round-trip (launches the app ~3s)
-.\scripts\Check-Split.ps1 -Baseline    # re-anchor the references after an intended change
+.\scripts\Check-Split.bat              # parse, motion proof, HotIf, case, hotkeys
+.\scripts\Check-Split.bat -IniCheck    # + settings.ini round-trip (launches the app ~3s)
+.\scripts\Check-Split.bat -Baseline    # re-anchor the references after an intended change
 ```
 
 ## Architecture
@@ -369,7 +368,7 @@ notes still reference no longer exist: `WindowCommands.ahk` became the six
 | `src\StealthPanicConfig.ahk` | Storage for the Stealth Panic safe-app list. Included by both of the above |
 | `src\StealthPanicUI.ahk` | Stealth Panic settings GUI — **a separate process**, not part of the app shell |
 
-**The include contract.** Every module holds *function definitions and global initialisers only* — stated in its own header. **No module may contain a top-level call**; everything that has to run at startup goes in `Boot()`. `scripts\Check-Split.ps1` check 8 enforces this, and before `Boot()` existed the ordering hazard it removes had already produced two real bugs (see the `ProcessLifecycle.ahk` header). `MediaCore.ahk` is additionally kept free of `QPC()`, `RegisterAnimation()` and `WriteLog()` calls so a test harness can include it alone; every function that needs the clock takes `now` as a parameter.
+**The include contract.** Every module holds *function definitions and global initialisers only* — stated in its own header. **No module may contain a top-level call**; everything that has to run at startup goes in `Boot()`. `scripts\Check-Split.bat` check 8 enforces this, and before `Boot()` existed the ordering hazard it removes had already produced two real bugs (see the `ProcessLifecycle.ahk` header). `MediaCore.ahk` is additionally kept free of `QPC()`, `RegisterAnimation()` and `WriteLog()` calls so a test harness can include it alone; every function that needs the clock takes `now` as a parameter.
 
 **Coupling is by shared globals, not parameters.** Functions open with a bare `global` or a long global list. This is deliberate. Note the AHK v2 rule it relies on: a function may *read* a global without declaring it, but must declare it to *assign*. An assignment to an undeclared name silently creates a local instead — which is why `ApplyUi`, `LoadSettings` and `SaveSettings` use a bare `global`, and why any name assigned in those functions becomes a global (hence the `ui*` / `ep*` prefixes on their scratch variables).
 
@@ -379,7 +378,7 @@ SOLID, DRY, separation of concerns and single-source-of-truth are **requirements
 
 **Ownership.** One file, one responsibility. A file approaching ~1000 lines gets reviewed for natural boundaries; ~2000+ is an architectural problem unless there is a documented reason. **The split is done.** `src\WindowTweaks.ahk` went from 10,447 lines to 99 — an entry point and nothing else — across eleven behaviour-preserving commits; `docs\MODULARIZATION.md` records the phases and what was deliberately deferred. Do not append a new feature to `WindowTweaks.ahk` or to whichever module happens to be open: find the module that owns the responsibility, or add one.
 
-**Three rules the module layout depends on**, all enforced by `scripts\Check-Split.ps1`: modules stay **flat in `src\`** with **no underscore in any filename** (both installers glob `src\*.ahk`, and `build\Setup.cs` unflattens `_` to `\` on extract, so `Window_Commands.ahk` installs as `Window\Commands.ahk` and fails on end-user machines only); **no top-level calls** outside `Boot()`; and every module that defines a hotkey **opens and closes with a bare `#HotIf`**.
+**Three rules the module layout depends on**, all enforced by `scripts\Check-Split.bat`: modules stay **flat in `src\`** with **no underscore in any filename** (both installers glob `src\*.ahk`, and `build\Setup.cs` unflattens `_` to `\` on extract, so `Window_Commands.ahk` installs as `Window\Commands.ahk` and fails on end-user machines only); **no top-level calls** outside `Boot()`; and every module that defines a hotkey **opens and closes with a bare `#HotIf`**.
 
 **Single source of truth.** A value, rule, mapping or validation gets one authoritative definition. `TUNE_SPEC` is the worked example: one row per tunable number, and load/clamp/persist/UI are all generated from it. Adding a setting must not mean editing five unrelated functions. Where a mirror is required for performance (`SyncTuningGlobals`), say explicitly which copy is authoritative and which is derived.
 
@@ -387,12 +386,12 @@ SOLID, DRY, separation of concerns and single-source-of-truth are **requirements
 
 **Do not over-abstract.** No interface with one implementation, no pattern for a one-off, and above all **no `Utils.ahk` / `Common.ahk` / `Helpers.ahk` / `Misc.ahk`** — a module name must state a responsibility. Extract only where a real boundary exists; prefer incremental behaviour-preserving refactoring over any rewrite.
 
-**Verify structurally.** There is no test runner, so `scripts\Check-Split.ps1` is the safety net — run it after any change that moves code between modules. Its **motion proof** is the important one: it hashes the sorted code lines of the whole resolved `#Include` stream, so a pure code-motion commit must leave it byte-identical. If a commit legitimately changes behaviour, re-anchor with `-Baseline` **in that same commit**, so the next agent is comparing against something true. Reference artifacts live in `build\refs\` and are committed on purpose.
+**Verify structurally.** There is no test runner, so `scripts\Check-Split.bat` is the safety net — run it after any change that moves code between modules. Its **motion proof** is the important one: it hashes the sorted code lines of the whole resolved `#Include` stream, so a pure code-motion commit must leave it byte-identical. If a commit legitimately changes behaviour, re-anchor with `-Baseline` **in that same commit**, so the next agent is comparing against something true. Reference artifacts live in `build\refs\` and are committed on purpose.
 
 Two AHK v2 facts the split leans on, both easy to get wrong:
 
 - **A top-level `global X := ...` is a super-global** — visible inside every function in the whole script, including functions in other files defined textually earlier. That is why moving a feature into its own module cannot break name resolution. The inverse is silent: a declaration duplicated in two modules raises **no error**, and the later `#Include` wins.
-- **`#HotIf` is positional, not scoped, and bleeds across `#Include` boundaries.** A module ending with an open `#HotIf` applies that context to the first hotkeys of the next included file. Every module that defines a hotkey opens and closes with a bare `#HotIf`; `Check-Split.ps1` enforces it. The same applies to `#UseHook`, `#InputLevel`, `#MaxThreadsPerHotkey` and `#Warn`.
+- **`#HotIf` is positional, not scoped, and bleeds across `#Include` boundaries.** A module ending with an open `#HotIf` applies that context to the first hotkeys of the next included file. Every module that defines a hotkey opens and closes with a bare `#HotIf`; `Check-Split.bat` enforces it. The same applies to `#UseHook`, `#InputLevel`, `#MaxThreadsPerHotkey` and `#Warn`.
 
 ### The render pipeline — read this before touching any visual feature
 
@@ -607,7 +606,7 @@ costs ~260 µs and forces the target app to re-layout; `Glide`, `PulseStep` and
 
 There are **no taskbar animations** in this program — that engine was removed. The
 taskbar's own animations are a Windows setting (`TaskbarAnimations`), handled by
-`scripts\Apply-Windows-Tuning.ps1`.
+`scripts\Apply-Windows-Tuning.bat`.
 
 ### Timers
 
@@ -735,7 +734,7 @@ Triple-tap `Esc` (default window 600 ms) hides every window, mutes system audio 
 
 It is a **bolt-on**, not part of the app shell, and the seams matter:
 
-- `src\StealthPanic.ahk` is `#Include`d by `WindowTweaks.ahk` (hosted case) **and** runs on its own under `%LOCALAPPDATA%\Stealth Panic Mode` via `Stealth Panic Mode.ps1` (standalone case). Half the functions it wants to call — `SyncActiveBorderTimer`, `SyncBreathingTimers`, `ClosePiP`, `UnGhostWindow` — do not exist standalone. **A direct call to a missing function is a LOAD-time error that `try` cannot catch**, so every one of them goes through `StealthCall(name, args*)`, which resolves `%name%` at *runtime* and swallows the failure. Same reason the existing `IsSet(...)` guards are there; `IsSet` on an unknown identifier returns false rather than failing to load (verified).
+- `src\StealthPanic.ahk` is `#Include`d by `WindowTweaks.ahk` (hosted case) **and** runs on its own under `%LOCALAPPDATA%\Stealth Panic Mode` via `Stealth Panic Mode.bat` (standalone case). Half the functions it wants to call — `SyncActiveBorderTimer`, `SyncBreathingTimers`, `ClosePiP`, `UnGhostWindow` — do not exist standalone. **A direct call to a missing function is a LOAD-time error that `try` cannot catch**, so every one of them goes through `StealthCall(name, args*)`, which resolves `%name%` at *runtime* and swallows the failure. Same reason the existing `IsSet(...)` guards are there; `IsSet` on an unknown identifier returns false rather than failing to load (verified).
 - It has **its own config file** (`StealthPanic.ini`, section `[stealth]`) and **its own settings GUI in a separate process**. It does not use `IniStr` / `PutIni` / `IniCache` / `LoadSettings` / `WriteSettings` / `ApplyUi`. Note `StealthPanicUI.ahk` defines its own `SaveSettings(*)` — harmless while the processes are separate, a hard collision with `WindowTweaks.ahk:585` the moment anyone merges them.
 - The GUI takes the ini path as **argument 1** (`StealthPanicConfig_ResolveIniPath()`), falling back to `A_ScriptDir`. Both installers pass it. Without that handoff, a machine carrying both installs has the GUI editing one folder's config while the engine reads another's — settings that appear to save and then do nothing.
 - Saving does **not** reload Window Tweaks; that would run `Bye()` and un-hide every window, drop the tray icons and cancel every animation just to pick up a list. Instead `ToggleStealthPanic()` calls `StealthPanicRefreshSettings()` on the way **in** — and deliberately not on the way out, because `StealthMuteAudio`/`StealthMuteMic` decide whether the *original* mute state is handed back and must still hold what they held when it was captured. The reload `PostMessage` remains, but only targets the genuine standalone runner.
@@ -861,7 +860,7 @@ Four things that are easy to reintroduce:
   timer callback that throw pops an error dialog and kills the timer, so the feature
   had never once drawn anything. `FindTrayElement()` uses `FindWindowExW` at both
   levels and returns 0; keep the tick body behind the `try` in `UpdateCustomClock()`.
-- **The overlay must forward `WM_CLOSE` to `ExitApp`.** `taskkill`, `Install.ps1`'s
+- **The overlay must forward `WM_CLOSE` to `ExitApp`.** `taskkill`, `Install.bat`'s
   `StopRunning` and a Windows shutdown all post `WM_CLOSE` to the process's
   top-level windows. This is the first PERMANENTLY visible overlay in the program,
   so it is found before the script's own hidden main window and absorbs the request.
@@ -930,19 +929,24 @@ first place.
 
 ## Packaging
 
-Two independent installers that must be kept in sync: `Install.ps1` and `build\Setup.cs` (WinForms). Both stop a running copy by command line (`*WindowTweaks.ahk*`, and `*StealthPanicUI.ahk*`), and both ask it to close first (`taskkill` without `/F`) so `Bye()` runs, and only then force. Change install behaviour in both.
+Two independent installers that must be kept in sync: `Install.bat` and `build\Setup.cs` (WinForms). Both stop a running copy by command line (`*WindowTweaks.ahk*`, and `*StealthPanicUI.ahk*`), and both ask it to close first (`taskkill` without `/F`) so `Bye()` runs, and only then force. Change install behaviour in both.
 
-**Settings precedence is one rule, implemented identically in both installers:** an existing `settings.ini` is the user's and is never touched; only an install folder with none is seeded from **`build\baseline-settings.ini`**; keys added after that are filled in by `LoadSettings()` defaults. Copy-if-absent is idempotent. The baseline is the owner's live configuration with the shadow-type effects (`[memory] breathing`, `[mouse] breathe`, `[mouse] copyfeedback`) forced to `0` and `[taskbar] clocklocation` blanked, so a fresh install makes no network request until a city is entered. It is UTF-16LE with a BOM, like the file `IniWrite` produces. `Setup.cs` embeds it as `base.settings.ini` - deliberately NOT under `res.`, because `Extract()` overwrites every `res.*` file unconditionally. `Uninstall.ps1` keeps the user's settings files unless `-RemoveSettings` is passed. Code defaults in `LoadSettings` stay factory values; `build\refs\settings.default.ini` tracks those, not the baseline.
+The BAT entry points carry their PowerShell source after the
+`# POWERSHELL SCRIPT` marker. The launcher uses Windows PowerShell 5.1
+to run that source from a temporary file so the existing script parameters
+are bound normally. It removes the temporary file after execution.
 
-**Corporate / antivirus constraints (see `docs\SECURITY.md`, which ships with the program).** There is **no ExplorerPatcher integration** - no download, no `.reg` import, no taskbar-style or icon-size setting. It was removed because it installs a DLL into `C:\Windows` and the program wrote its registry values on every save; do not reintroduce it. `-Silent` applies no tuning and does not restart Explorer, and Explorer is restarted only when something that needs it was applied. `Setup.cs` runs its child processes visibly. `Build-Installer.ps1` refuses to ship a module that is neither an entry point nor `#Include`d.
+**Settings precedence is one rule, implemented identically in both installers:** an existing `settings.ini` is the user's and is never touched; only an install folder with none is seeded from **`build\baseline-settings.ini`**; keys added after that are filled in by `LoadSettings()` defaults. Copy-if-absent is idempotent. The baseline is the owner's live configuration with the shadow-type effects (`[memory] breathing`, `[mouse] breathe`, `[mouse] copyfeedback`) forced to `0` and `[taskbar] clocklocation` blanked, so a fresh install makes no network request until a city is entered. It is UTF-16LE with a BOM, like the file `IniWrite` produces. `Setup.cs` embeds it as `base.settings.ini` - deliberately NOT under `res.`, because `Extract()` overwrites every `res.*` file unconditionally. `Uninstall.bat` keeps the user's settings files unless `-RemoveSettings` is passed. Code defaults in `LoadSettings` stay factory values; `build\refs\settings.default.ini` tracks those, not the baseline.
+
+**Corporate / antivirus constraints (see `docs\SECURITY.md`, which ships with the program).** There is **no ExplorerPatcher integration** - no download, no `.reg` import, no taskbar-style or icon-size setting. It was removed because it installs a DLL into `C:\Windows` and the program wrote its registry values on every save; do not reintroduce it. `-Silent` applies no tuning and does not restart Explorer, and Explorer is restarted only when something that needs it was applied. `Setup.cs` runs its child processes visibly. `Build-Installer.bat` refuses to ship a module that is neither an entry point nor `#Include`d.
 
 `build\Setup.cs` is compiled by the `csc.exe` that ships with the .NET Framework, i.e. a **C# 5 compiler**: no string interpolation, no expression-bodied members, no null-conditional. Keep it plain (the constraint is stated at `Setup.cs:6-8`).
 
-`build\obj\` is a **generated staging directory** — `Build-Installer.ps1` wipes and repopulates it on every build, flattening `scripts\X.ps1` → `scripts_X.ps1` because manifest resource names cannot contain a path separator (`Setup.cs` reverses it with `Replace("_", "\\")`, so no payload filename may contain an underscore). It is gitignored. **Never edit anything under `build\obj\` — edit `src\`, `docs\`, or `scripts\`.**
+`build\obj\` is a **generated staging directory** — `Build-Installer.bat` wipes and repopulates it on every build, flattening `scripts\X.bat` → `scripts_X.bat` because manifest resource names cannot contain a path separator (`Setup.cs` reverses it with `Replace("_", "\\")`, so no payload filename may contain an underscore). It is gitignored. **Never edit anything under `build\obj\` — edit `src\`, `docs\`, or `scripts\`.**
 
-**The `.ahk` payload is discovered, not listed — and two rules keep that working.** Both installers used to enumerate the eight `.ahk` files by name, which meant a new module was a *load-time* failure of the installed copy that was invisible during development, because running from `src\` finds the file regardless. `Install.ps1` and `Build-Installer.ps1` now both glob `src\*.ahk` excluding `test_*`. Therefore:
+**The `.ahk` payload is discovered, not listed — and two rules keep that working.** Both installers used to enumerate the eight `.ahk` files by name, which meant a new module was a *load-time* failure of the installed copy that was invisible during development, because running from `src\` finds the file regardless. `Install.bat` and `Build-Installer.bat` now both glob `src\*.ahk` excluding `test_*`. Therefore:
 
-- **No module filename may contain an underscore.** `Setup.cs:335` unflattens `_` to `\`, so `Window_Commands.ahk` extracts as `Window\Commands.ahk` and the app fails to load on end-user machines and nowhere else. `Build-Installer.ps1` now throws at build time if you try.
+- **No module filename may contain an underscore.** `Setup.cs:335` unflattens `_` to `\`, so `Window_Commands.ahk` extracts as `Window\Commands.ahk` and the app fails to load on end-user machines and nowhere else. `Build-Installer.bat` now throws at build time if you try.
 - **The split stays flat in `src\`** — no `src\features\`, no `src\ui\`. Module names carry the grouping instead. The installers copy flat and `#Include` resolves against the entry file's own directory.
 - `test_*.ahk` are standalone harnesses and are deliberately excluded from both.
 
@@ -959,7 +963,7 @@ Three traps, all of which have cost real debugging time:
 - **Collect-then-delete when removing entries from a Map you are iterating.** Deleting the current item shifts the remainder under the enumerator index and silently skips the next one. `MC_Expire()` and `BreathingAnimatorStep()` show the pattern; `.Clone()` is the alternative.
 - **Guard long-running hotkey loops with `static busy`.** `#MaxThreadsPerHotkey 2` lets a second press interrupt the first, and two loops driving the same window from different origin snapshots fight each other.
 
-**No offline syntax check exists** — AHK 2.0 has no `/validate` (that is 2.1+). To parse-check the whole file without running it, copy `src\*.ahk` somewhere, prepend `ExitApp` to a copy of `WindowTweaks.ahk`, and run it with `/ErrorStdOut`: AHK parses the entire script before executing anything, so a load-time error is reported and `ExitApp` stops it before a single hook, timer or tray icon is installed. Exit code 0 and no output means it parses. **`scripts\Check-Split.ps1` does exactly this as its first check** — run that instead of doing it by hand, and get the six structural checks with it.
+**No offline syntax check exists** — AHK 2.0 has no `/validate` (that is 2.1+). To parse-check the whole file without running it, copy `src\*.ahk` somewhere, prepend `ExitApp` to a copy of `WindowTweaks.ahk`, and run it with `/ErrorStdOut`: AHK parses the entire script before executing anything, so a load-time error is reported and `ExitApp` stops it before a single hook, timer or tray icon is installed. Exit code 0 and no output means it parses. **`scripts\Check-Split.bat` does exactly this as its first check** — run that instead of doing it by hand, and get the six structural checks with it.
 
 Two traps that cost time while building that script, both about *empty* output rather than wrong output:
 
@@ -980,7 +984,7 @@ When adding new features or modifying the code, AI agents must strictly adhere t
 - Windows 11, developed and tested on 25H2 build 26200. All taskbar findings are build-specific; `docs\TASKBAR-AND-INTERNALS.md` documents four dead ends (`TaskbarSi`, `TaskbarSmallIcons`, two feature flags) so nobody retries them.
 - Hotkeys are inert against elevated windows unless the app itself is elevated.
 - **Windows' own Snap Assist wins at screen edges, by design** — the app skips windows Windows has maximised. Judge snapping by **window-to-window** magnetism, not screen edges.
-- `DragFullWindows=1` is a hard functional dependency, not cosmetic: with it off Windows drags a hollow outline, the window rect does not move until release, so `SampleVelocityStep` measures zero on every frame and drag parallax, the ice glide and velocity-based snapping all silently do nothing. **`CheckDragFullWindows()` now enables it at boot** rather than only warning — a persisted, system-wide `SPI_SETDRAGFULLWINDOWS` with `SPIF_UPDATEINIFILE | SPIF_SENDCHANGE`, logged and notified, re-read afterwards to confirm it took, and deliberately **not** reverted by `Bye()`. It only runs when parallax or glide is on.
+- `DragFullWindows=1` is required for drag parallax and ice glide. Outline dragging leaves the window rectangle stationary until release, so `SampleVelocityStep` measures no motion. At startup, `CheckDragFullWindows()` reads the setting and notifies the user when it is off and either effect is enabled. Users can enable it in Windows or apply the optional animation tuning.
 - **Title-bar drags cannot be automated.** Injected clicks don't engage the window's move loop.
 
 ## Docs
@@ -993,4 +997,4 @@ When adding new features or modifying the code, AI agents must strictly adhere t
 
 Two strays: `docs\FUTURE-ANIMATIONS.md` is a roadmap written mostly in Azerbaijani whose contents have largely shipped, and `docs\claude.md` is a one-line note (lowercase filename, distinct from this file on a case-sensitive host).
 
-**Linux port docs** live under `linux\docs\` and are governed by `linux\CLAUDE.md`: `IMPLEMENTATION-AUDIT.md` (what actually exists — read first), `ARCHITECTURE.md`, `FEATURE-MATRIX.md`, `WAYLAND-LIMITATIONS.md`, `INSTALLATION.md`. None of them are shipped by the Windows installer, whose payload is the five documents hardcoded in `Install.ps1` and `build\Build-Installer.ps1`.
+**Linux port docs** live under `linux\docs\` and are governed by `linux\CLAUDE.md`: `IMPLEMENTATION-AUDIT.md` (what actually exists — read first), `ARCHITECTURE.md`, `FEATURE-MATRIX.md`, `WAYLAND-LIMITATIONS.md`, `INSTALLATION.md`. None of them are shipped by the Windows installer, whose payload is the five documents hardcoded in `Install.bat` and `build\Build-Installer.bat`.

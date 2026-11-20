@@ -1,4 +1,22 @@
 global RolledUpWindows := Map()
+global RollDownPending := Map()     ; hwnd -> true while the returning window may still be clipped
+
+; Explicit resizes replace both sorts of roll animation. Keep the cleanup
+; tied to state as well as ownership so a retired callback cannot strand a clip.
+ReleaseWindowRollClip(hwnd) {
+    global RolledUpWindows, RollDownPending
+    wasClipped := RolledUpWindows.Has(hwnd) || RollDownPending.Has(hwnd)
+    openUnroll := ReleaseOpenUnrollClip(hwnd, RS_PRI_USER)
+    if openUnroll
+        RS_ClearAlphaLayer(hwnd, "open", RS_PRI_USER)
+    Anim_Release(hwnd, "region")
+    if RolledUpWindows.Has(hwnd)
+        RolledUpWindows.Delete(hwnd)
+    if RollDownPending.Has(hwnd)
+        RollDownPending.Delete(hwnd)
+    if (wasClipped && !openUnroll)
+        RS_SetRegion(hwnd, "", RS_PRI_USER)
+}
 
 ; Title-bar height: the difference between the window rect and the client rect.
 ; Falls back to 35 when the window reports something implausible (a custom-drawn
@@ -15,9 +33,13 @@ CaptionHeight(hwnd) {
 }
 
 ToggleRollUp(hwnd := 0) {
+    global RolledUpWindows, RollDownPending
     if !hwnd
         hwnd := WinExist("A")
-    if !hwnd || !IsRestorable(hwnd)
+    if !hwnd || !DllCall("IsWindow", "ptr", hwnd)
+        return
+    isRolled := RolledUpWindows.Has(hwnd)
+    if (!isRolled && !IsRestorable(hwnd))
         return
         
     animKey := "RollUp_" hwnd
@@ -29,21 +51,38 @@ ToggleRollUp(hwnd := 0) {
     ; and an uncaught WinGetPos in a hotkey thread is an error dialog.
     try
         WinGetPos(&x, &y, &w, &h, hwnd)
-    catch
+    catch {
+        if (isRolled) {
+            ReleaseWindowRollClip(hwnd)
+            RS_Commit()
+        }
         return
+    }
     caption := CaptionHeight(hwnd)
+    if ReleaseOpenUnrollClip(hwnd, RS_PRI_USER) {
+        RS_ClearAlphaLayer(hwnd, "open", RS_PRI_USER)
+        RS_Commit()
+    }
 
-    if RolledUpWindows.Has(hwnd) {
+    if (isRolled) {
         origH := RolledUpWindows[hwnd]
+        RollDownPending[hwnd] := true
         RolledUpWindows.Delete(hwnd)
+        clearQueued := false
 
         RollDownStep(dt, now) {
-            if !DllCall("IsWindow", "ptr", hwnd)
+            if (!RollDownPending.Has(hwnd) || !DllCall("IsWindow", "ptr", hwnd))
                 return false
+            if clearQueued {
+                if (RS_LastRegion.Get(hwnd, "") = "")
+                    RollDownPending.Delete(hwnd)
+                return false
+            }
             t := (now - start) / ms
             if (t >= 1) {
                 RS_SetRegion(hwnd, "", RS_PRI_ANIM)
-                return false
+                clearQueued := true
+                return true
             }
             ease := 1 - (1 - t) * (1 - t)
             curH := caption + Round((origH - caption) * ease)
@@ -53,9 +92,11 @@ ToggleRollUp(hwnd := 0) {
         Anim_Claim(hwnd, "region", animKey, RollDownStep)
     } else {
         RolledUpWindows[hwnd] := h
+        if RollDownPending.Has(hwnd)
+            RollDownPending.Delete(hwnd)
 
         RollUpStep(dt, now) {
-            if !DllCall("IsWindow", "ptr", hwnd)
+            if (!RolledUpWindows.Has(hwnd) || !DllCall("IsWindow", "ptr", hwnd))
                 return false
             t := (now - start) / ms
             if (t >= 1) {

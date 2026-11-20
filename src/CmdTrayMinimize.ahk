@@ -1,9 +1,60 @@
 global TrayIcons := Map()
+global TrayIdToHwnd := Map()
+global NextTrayIconId := 1
 
 TrayIconClick(wParam, lParam, msg, hwnd) {
+    global TrayIdToHwnd
     if (lParam == 0x0202) {
-        if TrayIcons.Has(wParam)
-            RestoreFromTray(wParam)
+        if TrayIdToHwnd.Has(wParam)
+            RestoreFromTray(TrayIdToHwnd[wParam])
+    }
+}
+
+AddTrayNotifyIcon(uid, title, hIcon) {
+    cbSize := A_PtrSize == 8 ? 976 : 956
+    nid := Buffer(cbSize, 0)
+    NumPut("uint", cbSize, nid, 0)
+    NumPut("ptr", A_ScriptHwnd, nid, A_PtrSize == 8 ? 8 : 4)
+    NumPut("uint", uid, nid, A_PtrSize == 8 ? 16 : 8)
+    NumPut("uint", 0x7, nid, A_PtrSize == 8 ? 20 : 12)
+    NumPut("uint", 0x1000, nid, A_PtrSize == 8 ? 24 : 16)
+    NumPut("ptr", hIcon, nid, A_PtrSize == 8 ? 32 : 20)
+    StrPut(SubStr(title, 1, 63), nid.Ptr + (A_PtrSize == 8 ? 40 : 24), "UTF-16")
+    return DllCall("shell32\Shell_NotifyIconW", "uint", 0, "ptr", nid)
+}
+
+DeleteTrayNotifyIcon(uid) {
+    cbSize := A_PtrSize == 8 ? 976 : 956
+    nid := Buffer(cbSize, 0)
+    NumPut("uint", cbSize, nid, 0)
+    NumPut("ptr", A_ScriptHwnd, nid, A_PtrSize == 8 ? 8 : 4)
+    NumPut("uint", uid, nid, A_PtrSize == 8 ? 16 : 8)
+    return DllCall("shell32\Shell_NotifyIconW", "uint", 2, "ptr", nid)
+}
+
+RemoveTrayIcon(hwnd) {
+    global TrayIcons, TrayIdToHwnd
+    if !TrayIcons.Has(hwnd)
+        return false
+    info := TrayIcons[hwnd]
+    DeleteTrayNotifyIcon(info.id)
+    TrayIcons.Delete(hwnd)
+    if TrayIdToHwnd.Has(info.id)
+        TrayIdToHwnd.Delete(info.id)
+    return true
+}
+
+ReAddAllTrayIcons() {
+    global TrayIcons
+    for hwnd, info in TrayIcons.Clone() {
+        if !DllCall("IsWindow", "ptr", hwnd) {
+            RemoveTrayIcon(hwnd)
+            continue
+        }
+        hIcon := info.hIcon
+        if !hIcon
+            hIcon := DllCall("LoadIcon", "ptr", 0, "ptr", 32512, "ptr")
+        AddTrayNotifyIcon(info.id, info.title, hIcon)
     }
 }
 
@@ -30,13 +81,13 @@ AskWindowIcon(hwnd) {
 }
 
 HideToTray(hwnd := 0) {
-    global TrayMinimizeEnabled
+    global TrayMinimizeEnabled, TrayIcons, TrayIdToHwnd, NextTrayIconId
     if (!TrayMinimizeEnabled)
         return
         
     if !hwnd
         hwnd := WinExist("A")
-    if !hwnd || !IsRestorable(hwnd)
+    if !hwnd || !IsRestorable(hwnd) || TrayIcons.Has(hwnd)
         return
         
     title := "Hidden Window"
@@ -48,47 +99,42 @@ HideToTray(hwnd := 0) {
     if !hIcon
         hIcon := DllCall("LoadIcon", "ptr", 0, "ptr", 32512, "ptr")
 
+    uid := NextTrayIconId
+    NextTrayIconId += 1
 
-    cbSize := A_PtrSize == 8 ? 976 : 956
-    nid := Buffer(cbSize, 0)
-    NumPut("uint", cbSize, nid, 0)
-    NumPut("ptr", A_ScriptHwnd, nid, A_PtrSize == 8 ? 8 : 4)
-    NumPut("uint", hwnd, nid, A_PtrSize == 8 ? 16 : 8)
-    NumPut("uint", 0x7, nid, A_PtrSize == 8 ? 20 : 12)
-    NumPut("uint", 0x1000, nid, A_PtrSize == 8 ? 24 : 16)
-    NumPut("ptr", hIcon, nid, A_PtrSize == 8 ? 32 : 20)
-    StrPut(SubStr(title, 1, 63), nid.Ptr + (A_PtrSize == 8 ? 40 : 24), "UTF-16")
+    if !AddTrayNotifyIcon(uid, title, hIcon)
+        return
     
-    DllCall("shell32\Shell_NotifyIconW", "uint", 0, "ptr", nid)
-    
-    TrayIcons[hwnd] := true
+    TrayIcons[hwnd] := {id: uid, title: title, hIcon: hIcon}
+    TrayIdToHwnd[uid] := hwnd
     try WinHide(hwnd)
+    if (!DllCall("IsWindow", "ptr", hwnd) || DllCall("IsWindowVisible", "ptr", hwnd))
+        RemoveTrayIcon(hwnd)
 }
 
-RestoreFromTray(hwnd) {
-    if TrayIcons.Has(hwnd) {
-        cbSize := A_PtrSize == 8 ? 976 : 956
-        nid := Buffer(cbSize, 0)
-        NumPut("uint", cbSize, nid, 0)
-        NumPut("ptr", A_ScriptHwnd, nid, A_PtrSize == 8 ? 8 : 4)
-        NumPut("uint", hwnd, nid, A_PtrSize == 8 ? 16 : 8)
-        
-        DllCall("shell32\Shell_NotifyIconW", "uint", 2, "ptr", nid)
-        TrayIcons.Delete(hwnd)
-        
-        try WinShow(hwnd)
-        try WinActivate(hwnd)
+RestoreFromTray(hwnd, activate := true) {
+    global TrayIcons
+    if !TrayIcons.Has(hwnd)
+        return false
+    if !DllCall("IsWindow", "ptr", hwnd) {
+        RemoveTrayIcon(hwnd)
+        return false
     }
+    try WinShow(hwnd)
+    if !DllCall("IsWindowVisible", "ptr", hwnd)
+        return false
+    RemoveTrayIcon(hwnd)
+    if activate
+        try WinActivate(hwnd)
+    return true
 }
 
 global BossKeyActive := false
 
 global BossKeyWindows := []
 
-global BossKeyMuteState := false
-
 ToggleBossKey() {
-    global BossKeyActive, BossKeyWindows, BossKeyMuteState, BossKeyEnabled
+    global BossKeyActive, BossKeyWindows, BossKeyEnabled
     ; Re-entry here is the most damaging of any toggle in the file: a second
     ; press during the WinGetList/WinHide loop would start a fresh BossKeyWindows
     ; array and the first pass's hidden windows would have no record left at all.
@@ -110,29 +156,28 @@ ToggleBossKey() {
                 try WinShow(hwnd)
         }
         BossKeyWindows := []
-        try SoundSetMute(BossKeyMuteState)
+        PanicSetSpeakerMute("BossKey", false)
         BossKeyActive := false
         ; Coming back only. On the way IN this mutes the system on purpose,
         ; so a sound announcing it would be exactly the wrong thing.
         PlayHotkeySound("alert")
     } else {
-        try BossKeyMuteState := SoundGetMute()
-        catch
-            BossKeyMuteState := false
-            
-        try SoundSetMute(true)
+        BossKeyActive := true
+        PanicSetSpeakerMute("BossKey", true)
         
         hwnds := WinGetList()
         BossKeyWindows := []
         ownPid := DllCall("GetCurrentProcessId", "uint")
 
         for hwnd in hwnds {
+            if (!BossKeyActive)
+                break
             cls := ""
             try cls := WinGetClass(hwnd)
             ; Shell_SecondaryTrayWnd is the taskbar on every non-primary monitor.
             ; Hiding it left those taskbars gone for good if this process died
             ; while Boss Key was active.
-            if (!cls || IsShellSurface(hwnd, cls))
+            if (!cls || IsShellSurface(hwnd, cls) || IsCloaked(hwnd))
                 continue
 
             ; Our own overlays (active border, monitor dimmers, the OSDs, the
@@ -148,7 +193,6 @@ ToggleBossKey() {
             try WinHide(hwnd)
         }
 
-        BossKeyActive := true
     }
     }
     busy := false

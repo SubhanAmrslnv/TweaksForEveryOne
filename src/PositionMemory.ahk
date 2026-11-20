@@ -146,19 +146,22 @@ RestorePosition(hwnd) {
     } catch {
     }
 
-    ; Ensure it restores on-screen. Guarded: a monitor can be removed between the
-    ; count and the query, and this runs from a timer.
+    ; Ensure it restores on-screen with meaningful visibility (at least 48x32 px
+    ; inside a work area, not a 1 px sliver). Guarded: a monitor can be removed
+    ; between the count and the query, and this runs from a timer.
     try {
         intersecting := false
         Loop MonitorGetCount() {
             MonitorGetWorkArea(A_Index, &wl, &wt, &wr, &wb)
-            if (rx < wr && rx + rw > wl && ry < wb && ry + rh > wt) {
+            overlapX := Min(rx + rw, wr) - Max(rx, wl)
+            overlapY := Min(ry + rh, wb) - Max(ry, wt)
+            if (overlapX >= 48 && overlapY >= 32) {
                 intersecting := true
                 break
             }
         }
         if (!intersecting) {
-            MonitorGetWorkArea(1, &wl, &wt, &wr, &wb)
+            MonitorGetWorkArea(MonitorGetPrimary(), &wl, &wt, &wr, &wb)
             if (rw > wr - wl)
                 rw := wr - wl
             if (rh > wb - wt)

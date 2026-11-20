@@ -23,7 +23,7 @@
 ; every module's declarations have run, so nothing it calls can be clobbered and
 ; #Include order is documentation rather than semantics.
 ;
-; scripts\Check-Split.ps1 check 8 enforces the other half of the rule - no
+; scripts\Check-Split.bat check 8 enforces the other half of the rule - no
 ; module may carry a top-level call of its own.
 
 Boot() {
@@ -53,6 +53,7 @@ Boot() {
     ; EVENT_OBJECT_UNCLOAKED, so windows that are created cloaked (Chromium,
     ; UWP, Explorer) still get their open animation once they appear.
     InstallOpenAnimHook()
+    InstallWindowDestroyHook()
 
     ; The shell tells us when a window is created, so there is no polling timer.
     OnMessage(DllCall("RegisterWindowMessage", "str", "SHELLHOOK", "uint"), ShellEvent)
@@ -109,10 +110,10 @@ global VERSION := "1.0"
 ; installed by the new process while the old one still holds the original, and
 ; Bye() hands every foreign window's state back.
 Bye(*) {
-    global TrayIcons, BossKeyActive, BossKeyWindows, BossKeyMuteState
-    global WinEventHook, WinEventCb, RolledUpWindows, CustomTrans
+    global TrayIcons, BossKeyActive, BossKeyWindows
+    global WinEventHook, WinEventCb, RolledUpWindows, RollDownPending, UnrollPending, CustomTrans
     global DimmerGuis, OsdGui, PipGuis, MicOsdGui, SpotlightGui
-    global WinCurrentAlpha, GhostWindows, FocusGuis, AnimOwnerKey
+    global WinCurrentAlpha, GhostWindows, FocusGuis
 
     ; Nothing may interrupt the teardown. A window created mid-way used to reach
     ; HandleNewWindow after the alpha sweep below and be left at alpha 0 -
@@ -120,19 +121,7 @@ Bye(*) {
     ; hook goes first, before anything is undone.
     Critical
     try DllCall("DeregisterShellHookWindow", "ptr", A_ScriptHwnd)
-
-    ; Windows a region animation is clipping right now. RolledUpWindows below only
-    ; knows the settled ones: a roll-DOWN removes its entry before it animates,
-    ; and the window-open unroll never has one, so stopping the scheduler
-    ; mid-animation left those windows cut off. Read before StopScheduler, which
-    ; forgets every owner.
-    byeClipped := []
-    try {
-        for byeKey, byeSlot in AnimOwnerKey {
-            if (byeSlot.channel = "region")
-                byeClipped.Push(byeSlot.hwnd)
-        }
-    }
+    try RemoveWindowDestroyHook()
 
     ; Stop producing before we start undoing, so no timer or animation frame can
     ; re-apply a state we have just cleaned up. Bye also runs on tray -> Restart,
@@ -214,31 +203,22 @@ Bye(*) {
             if DllCall("IsWindow", "ptr", hwnd)
                 try WinShow(hwnd)
         }
-        try SoundSetMute(BossKeyMuteState)
     }
+    PanicSetSpeakerMute("BossKey", false)
 
-    for hwnd in TrayIcons {
-        cbSize := A_PtrSize == 8 ? 976 : 956
-        nid := Buffer(cbSize, 0)
-        NumPut("uint", cbSize, nid, 0)
-        NumPut("ptr", A_ScriptHwnd, nid, A_PtrSize == 8 ? 8 : 4)
-        NumPut("uint", hwnd, nid, A_PtrSize == 8 ? 16 : 8)
-        DllCall("shell32\Shell_NotifyIconW", "uint", 2, "ptr", nid)
-        try WinShow(hwnd)
-    }
+    for hwnd in TrayIcons.Clone()
+        try RestoreFromTray(hwnd, false)
 
     ; Nothing here is left behind for the next process to trip over. Everything we
     ; changed about a foreign window has to be changed back, through the map that
     ; recorded it - a rolled-up window keeps its clipping region until something
     ; clears it, a dimmed one keeps its alpha, a ghost stays click-through and
     ; topmost, and a desktop-pinned widget stays a child of WorkerW.
-    for hwnd in RolledUpWindows {
-        if DllCall("IsWindow", "ptr", hwnd)
-            try RS_SetRegion(hwnd, "", RS_PRI_USER)
-    }
-    for hwnd in byeClipped {
-        if DllCall("IsWindow", "ptr", hwnd)
-            try RS_SetRegion(hwnd, "", RS_PRI_USER)
+    for clips in [RolledUpWindows, RollDownPending, UnrollPending] {
+        for hwnd in clips {
+            if DllCall("IsWindow", "ptr", hwnd)
+                try RS_SetRegion(hwnd, "", RS_PRI_USER)
+        }
     }
     for hwnd, info in GhostWindows.Clone()
         try UnGhostWindow(hwnd)

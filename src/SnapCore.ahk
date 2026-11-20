@@ -129,10 +129,9 @@ CollectEdges(hwnd, L, T, R, B, &vLines, &hLines, proximity := 0) {
 ; Returns the visual frame rect plus the raw WinGetPos origin, so callers can
 ; convert between the two.
 GetRects(hwnd, &fL, &fT, &fR, &fB, &winX, &winY) {
-    ; One buffer for the life of the process. CollectEdges calls this once per
-    ; window per snap, and a fresh Buffer(16) measured 0.43 us more than reusing
-    ; one - pure garbage on a path that already runs N times per drag.
-    static rc := Buffer(16, 0)
+    ; Local buffer rather than static: hooks, timers and the frame loop can
+    ; interrupt each other mid-call, and a shared buffer would be overwritten.
+    rc := Buffer(16, 0)
 
     try WinGetPos(&winX, &winY, &ww, &wh, hwnd)
     catch

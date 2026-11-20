@@ -2,7 +2,7 @@ import os
 import re
 from collections import defaultdict
 
-src_dir = r'c:\Users\emras\OneDrive\Рабочий стол\TweaksForEveryOne\src'
+src_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src')
 
 globals_found = defaultdict(list)
 functions_found = defaultdict(list)

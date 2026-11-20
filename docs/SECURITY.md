@@ -8,7 +8,7 @@ software.** The program and its installer exe are unsigned.
 
 ## Privileges
 
-- **No administrator rights.** The program, `Install.ps1`, `Uninstall.ps1`,
+- **No administrator rights.** The program, `Install.bat`, `Uninstall.bat`,
   `build\Setup.cs` and the tuning scripts run as the signed-in user and write
   only under the user profile (`HKCU`, `%LOCALAPPDATA%`, the Start Menu and
   Startup folders).
@@ -75,10 +75,10 @@ All writes are under `HKCU`; nothing is written under `HKLM`.
 
 | Key | Written by | Reversible by |
 |---|---|---|
-| `Control Panel\Desktop\DragFullWindows` | installer and program, required for the glide | `Uninstall.ps1` restores the backed-up value |
-| `Control Panel\Desktop`, `Mouse`, `WindowMetrics`, `Explorer\Advanced`, `Explorer`, `Themes\Personalize`, `DWM` | `scripts\Apply-Windows-Tuning.ps1`, only when tuning is chosen | `scripts\Restore-Windows-Tuning.ps1` (backup kept in `%LOCALAPPDATA%\Window Tweaks Backup`) |
+| `Control Panel\Desktop\DragFullWindows` | optional animation tuning, required for the glide | the tuning restore script restores the backed-up value |
+| `Control Panel\Desktop`, `Mouse`, `WindowMetrics`, `Explorer\Advanced`, `Explorer`, `Themes\Personalize`, `DWM` | `scripts\Apply-Windows-Tuning.bat`, only when tuning is chosen | `scripts\Restore-Windows-Tuning.bat` (backup kept in `%LOCALAPPDATA%\Window Tweaks Backup`) |
 
-The program does not write the registry itself apart from `DragFullWindows`. It
+The running program reads Windows preferences from the registry. It
 never changes the taskbar's auto-hide state, style or icon size.
 
 ## Startup and persistence
@@ -97,11 +97,10 @@ services or drivers. The uninstallers remove every shortcut they created.
 - **`explorer.exe` restart:** only at install, after Explorer tuning was applied.
   The installer asks first and relaunches Explorer if Windows does not. The
   program itself never kills or restarts Explorer.
-- **Installers:** `winget`,
-  `powershell -ExecutionPolicy Bypass -File` for the bundled tuning script.
-  `Setup.exe` shows those console windows rather than hiding them, and the bypass
-  is process-scoped. `Install.bat` starts `Install.ps1` the same way.
-  `Apply-Windows-Tuning.ps1` and `Uninstall.ps1` compile a tiny
+- **Installers:** `winget` and the bundled tuning BAT.
+  `Setup.exe` runs tuning visibly. The BAT files contain the PowerShell logic
+  and use a process-scoped execution-policy setting for the temporary script.
+  `Apply-Windows-Tuning.bat` and `Uninstall.bat` compile a tiny
   `SystemParametersInfo` P/Invoke with `Add-Type`, so that Windows applies the
   restored settings immediately rather than at the next sign-in.
 
@@ -119,7 +118,12 @@ A fresh install seeds `settings.ini` from `build\baseline-settings.ini` only
 when no `settings.ini` exists; an existing one is never overwritten by an install
 or an update. The uninstaller removes the program but KEEPS `settings.ini`,
 `window-positions.ini` and the Stealth Panic config, so a reinstall picks them up;
-`Uninstall.ps1 -RemoveSettings` deletes those too.
+`Uninstall.bat -RemoveSettings` deletes those too.
+
+If Windows tuning restoration is skipped or fails, the uninstaller keeps the
+backup and the available recovery scripts so you can retry. The standalone
+Stealth Panic uninstaller also keeps its configuration by default and accepts
+`-RemoveSettings`.
 
 ## If Bitdefender (or another product) blocks it
 

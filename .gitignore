@@ -15,7 +15,7 @@ StealthPanic.ini
 StealthPanicApps.txt
 StealthPanicApps.txt.tmp
 
-# Per-machine backup of registry values, written by Apply-Windows-Tuning.ps1.
+# Per-machine backup of registry values, written by Apply-Windows-Tuning.bat.
 # Committing this would push one PC's original settings onto another.
 scripts/tuning-backup.json
 animations-backup.json

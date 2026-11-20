@@ -60,8 +60,9 @@ ToggleFocusMode() {
             g := Gui("-Caption -DPIScale +ToolWindow +E0x20", "FocusModeOverlay" A_Index)
             g.BackColor := "000000"
             g.MarginX := 0, g.MarginY := 0
-            g.Show("x" vx " y" vy " w" vw " h" vh " NoActivate")
             RS_SetAlpha(g.Hwnd, 0, RS_PRI_ANIM)
+            RS_Commit()
+            g.Show("x" vx " y" vy " w" vw " h" vh " NoActivate")
             FocusGuis.Push({gui: g, targetAlpha: alphas[A_Index], currentAlpha: 0})
         }
         
@@ -107,47 +108,50 @@ ToggleFocusMode() {
 
 ZOrderSpotlight() {
     global FocusGuis, FocusTargetHwnd
-    if !FocusTargetHwnd || !DllCall("IsWindow", "ptr", FocusTargetHwnd)
-        return
-        
-    isTopmost := 0
-    try isTopmost := WinGetExStyle(FocusTargetHwnd) & 0x8
-    prevHwnd := FocusTargetHwnd
-    for layer in FocusGuis {
-        if (isTopmost)
-            WinSetExStyle("+0x8", layer.gui.Hwnd)
-        else
-            WinSetExStyle("-0x8", layer.gui.Hwnd)
-        try RS_SetZOrder(layer.gui.Hwnd, prevHwnd, 0x0013, RS_PRI_ANIM)
-        prevHwnd := layer.gui.Hwnd
+    try {
+        if !FocusTargetHwnd || !DllCall("IsWindow", "ptr", FocusTargetHwnd)
+            return
+            
+        isTopmost := 0
+        try isTopmost := WinGetExStyle(FocusTargetHwnd) & 0x8
+        prevHwnd := FocusTargetHwnd
+        for layer in FocusGuis {
+            if !DllCall("IsWindow", "ptr", layer.gui.Hwnd)
+                continue
+            try WinSetExStyle(isTopmost ? "+0x8" : "-0x8", layer.gui.Hwnd)
+            try RS_SetZOrder(layer.gui.Hwnd, prevHwnd, 0x0013, RS_PRI_ANIM)
+            prevHwnd := layer.gui.Hwnd
+        }
+        ; Called from FocusMonitorStep on a focus change, which does not always
+        ; register an animation - so commit rather than hoping someone else will.
+        RS_Commit()
     }
-    ; Called from FocusMonitorStep on a focus change, which does not always
-    ; register an animation - so commit rather than hoping someone else will.
-    RS_Commit()
 }
 
 FocusMonitorStep() {
     global FocusModeEnabled, FocusTargetHwnd, SpotlightTarget
     if !FocusModeEnabled
         return
+
+    try {
+        hwnd := WinExist("A")
+        if (hwnd != FocusTargetHwnd) {
+            FocusTargetHwnd := hwnd
+            ZOrderSpotlight()
+        }
         
-    hwnd := WinExist("A")
-    if (hwnd != FocusTargetHwnd) {
-        FocusTargetHwnd := hwnd
-        ZOrderSpotlight()
-    }
-    
-    if (hwnd && IsRestorable(hwnd) && WinGetMinMax(hwnd) == 0) {
-        WinGetPos(&tx, &ty, &tw, &th, hwnd)
-        newTarget := {x: tx, y: ty, w: tw, h: th}
-    } else {
-        MouseGetPos(&mx, &my)
-        newTarget := {x: mx, y: my, w: 0, h: 0}
-    }
-    
-    if (SpotlightTarget.x != newTarget.x || SpotlightTarget.y != newTarget.y || SpotlightTarget.w != newTarget.w || SpotlightTarget.h != newTarget.h) {
-        SpotlightTarget := newTarget
-        RegisterAnimation("FocusAnimator", FocusAnimatorStep)
+        if (hwnd && IsRestorable(hwnd) && WinGetMinMax(hwnd) == 0) {
+            WinGetPos(&tx, &ty, &tw, &th, hwnd)
+            newTarget := {x: tx, y: ty, w: tw, h: th}
+        } else {
+            MouseGetPos(&mx, &my)
+            newTarget := {x: mx, y: my, w: 0, h: 0}
+        }
+        
+        if (SpotlightTarget.x != newTarget.x || SpotlightTarget.y != newTarget.y || SpotlightTarget.w != newTarget.w || SpotlightTarget.h != newTarget.h) {
+            SpotlightTarget := newTarget
+            RegisterAnimation("FocusAnimator", FocusAnimatorStep)
+        }
     }
 }
 

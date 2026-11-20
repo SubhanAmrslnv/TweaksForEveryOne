@@ -253,6 +253,10 @@ BreathingAnimatorStep(dt:=0, now:=0) {
         else
             current := Max(current - step, target)
 
+        if (!DllCall("IsWindow", "ptr", hwnd) || !WinCurrentAlpha.Has(hwnd)) {
+            dead.Push(hwnd)
+            continue
+        }
         WinCurrentAlpha[hwnd] := current
 
         try {

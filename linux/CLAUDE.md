@@ -70,7 +70,7 @@ Two more that would have bitten immediately afterwards: `std::thread` with no
 **CMake does not expand `~`**.
 
 There is no CI and no linter. `./scripts/check-layers.sh` is the closest thing to
-`scripts\Check-Split.ps1` on the Windows side, and `ls linux/src/ui linux/src/platform/kde
+`scripts\Check-Split.bat` on the Windows side, and `ls linux/src/ui linux/src/platform/kde
 linux/config` is still the fastest honest status check - those three are ABSENT, not empty, and
 git does not track empty directories, so `find -type d -empty` returns nothing and reads as a
 pass.
@@ -97,7 +97,7 @@ geometry and physics live. A backend applies state; it never computes it.
 | `src/platform/kde/` | KWin script. **Empty.** |
 | `src/ui/` | Qt6 settings window + SNI tray. **Absent** - the CMake target that named it is deleted until the sources exist. |
 | `tests/` | Headless unit tests for the pure core, plus `FakeAdapter`. No Catch2/FetchContent: the tree must configure with no network. |
-| `scripts/check-layers.sh` | Structural checks - the `Check-Split.ps1` analogue. Wired into `ctest`. |
+| `scripts/check-layers.sh` | Structural checks - the `Check-Split.bat` analogue. Wired into `ctest`. |
 | `config/` | Default configuration. **Empty** — tuning values are hardcoded today. |
 
 Namespaces: `TweakCore` for `core/`, `TweakPlatform` for backends.
@@ -260,5 +260,5 @@ because the fix is easy to undo by accident. Full list with reproduction in
 `docs/INSTALLATION.md` (per-distro dependencies and per-DE steps).
 
 These are **not** shipped by the Windows installer, which has its own hardcoded five-document
-payload list in `Install.ps1` and `build/Build-Installer.ps1`. Adding a doc here does not
+payload list in `Install.bat` and `build/Build-Installer.bat`. Adding a doc here does not
 change that, and should not.

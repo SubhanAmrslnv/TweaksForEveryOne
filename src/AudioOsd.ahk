@@ -131,17 +131,23 @@ ShowVolumeOSD(vol, isMuted) {
 
 UpdateOSD(vol, isMuted) {
     global OsdGui
-    OsdGui["Icon"].Text := GetSpeakerIcon(vol, isMuted)
-    OsdGui["Pct"].Text := (isMuted || vol == 0) ? "Muted" : Round(vol) "%"
-    w := Max(1, Round(150 * (vol / 100)))
-    OsdGui["Bar"].Move(,, w)
+    if (!OsdGui)
+        return
     try {
-        if (isMuted)
-            OsdGui["Bar"].Opt("Background555555")
-        else
-            OsdGui["Bar"].Opt("BackgroundFFFFFF")
+        OsdGui["Icon"].Text := GetSpeakerIcon(vol, isMuted)
+        OsdGui["Pct"].Text := (isMuted || vol == 0) ? "Muted" : Round(vol) "%"
+        w := Max(1, Round(150 * (vol / 100)))
+        OsdGui["Bar"].Move(,, w)
+        try {
+            if (isMuted)
+                OsdGui["Bar"].Opt("Background555555")
+            else
+                OsdGui["Bar"].Opt("BackgroundFFFFFF")
+        }
+        OsdGui["Bar"].Redraw()
+    } catch {
+        ClearVolumeOSD()
     }
-    OsdGui["Bar"].Redraw()
 }
 
 GetSpeakerIcon(vol, isMuted) {
@@ -168,39 +174,86 @@ HideVolumeOSD() {
 
 ClearVolumeOSD() {
     global OsdGui, OsdHiding
+    if (OsdGui) {
+        hwnd := 0
+        try hwnd := OsdGui.Hwnd
+        if hwnd
+            try CancelAnimation("Notch_" hwnd)
+        try OsdGui.Destroy()
+        if hwnd
+            try RS_RemoveHwnd(hwnd)
+    }
     OsdGui := ""
     OsdHiding := false
 }
 
 ; ====== Global Mic Kill-Switch ======
 
-ToggleDefaultMic() {
+; Returns 0 (unmuted), 1 (muted), or -1 on failure.
+GetDefaultMicMute() {
+    pDevice := 0
+    pVol := 0
     try {
-        IMMDeviceEnumerator := ComObject("{BCDE0395-E52F-467C-8E3D-C4579291692E}", "{A95664D2-9614-4F35-A746-DE8DB63617E6}")
-        pDevice := 0
-        ComCall(4, IMMDeviceEnumerator, "UInt", 1, "UInt", 0, "Ptr*", &pDevice)
+        enumerator := ComObject("{BCDE0395-E52F-467C-8E3D-C4579291692E}", "{A95664D2-9614-4F35-A746-DE8DB63617E6}")
+        ComCall(4, enumerator, "UInt", 1, "UInt", 0, "Ptr*", &pDevice)
         if !pDevice
             return -1
-            
-        IID_IAudioEndpointVolume := Buffer(16)
-        DllCall("ole32\CLSIDFromString", "WStr", "{5CDF2C82-841E-4546-9722-0CF74078229A}", "Ptr", IID_IAudioEndpointVolume)
-        
-        pAudioEndpointVolume := 0
-        ComCall(3, pDevice, "Ptr", IID_IAudioEndpointVolume, "UInt", 23, "Ptr", 0, "Ptr*", &pAudioEndpointVolume)
-        ObjRelease(pDevice)
-        if !pAudioEndpointVolume
+
+        iidVol := Buffer(16)
+        DllCall("ole32\CLSIDFromString", "WStr", "{5CDF2C82-841E-4546-9722-0CF74078229A}", "Ptr", iidVol)
+
+        ComCall(3, pDevice, "Ptr", iidVol, "UInt", 23, "Ptr", 0, "Ptr*", &pVol)
+        if !pVol
             return -1
-            
+
         muted := 0
-        ComCall(15, pAudioEndpointVolume, "Int*", &muted)
-        
-        newMuted := !muted
-        ComCall(14, pAudioEndpointVolume, "Int", newMuted, "Ptr", 0)
-        
-        ObjRelease(pAudioEndpointVolume)
-        return newMuted
+        ComCall(15, pVol, "Int*", &muted)
+        return muted ? 1 : 0
+    } catch {
+        return -1
+    } finally {
+        if pVol
+            ObjRelease(pVol)
+        if pDevice
+            ObjRelease(pDevice)
     }
-    return -1
+}
+
+; Sets default capture endpoint mute state. Returns true on success, false on failure.
+SetDefaultMicMute(mute) {
+    pDevice := 0
+    pVol := 0
+    try {
+        enumerator := ComObject("{BCDE0395-E52F-467C-8E3D-C4579291692E}", "{A95664D2-9614-4F35-A746-DE8DB63617E6}")
+        ComCall(4, enumerator, "UInt", 1, "UInt", 0, "Ptr*", &pDevice)
+        if !pDevice
+            return false
+
+        iidVol := Buffer(16)
+        DllCall("ole32\CLSIDFromString", "WStr", "{5CDF2C82-841E-4546-9722-0CF74078229A}", "Ptr", iidVol)
+
+        ComCall(3, pDevice, "Ptr", iidVol, "UInt", 23, "Ptr", 0, "Ptr*", &pVol)
+        if !pVol
+            return false
+
+        ComCall(14, pVol, "Int", mute ? 1 : 0, "Ptr", 0)
+        return true
+    } catch {
+        return false
+    } finally {
+        if pVol
+            ObjRelease(pVol)
+        if pDevice
+            ObjRelease(pDevice)
+    }
+}
+
+ToggleDefaultMic() {
+    cur := GetDefaultMicMute()
+    if (cur < 0)
+        return -1
+    newMuted := cur ? 0 : 1
+    return SetDefaultMicMute(newMuted) ? newMuted : -1
 }
 
 ShowMicOSD(isMuted) {
@@ -208,9 +261,15 @@ ShowMicOSD(isMuted) {
 
     if (MicOsdGui) {
         UpdateMicOSD(isMuted)
+        if (!MicOsdGui)
+            return
         if MicOsdHiding {           ; revive it rather than stacking a second one
             MicOsdHiding := false
-            try FadeGui(MicOsdGui, TuneAlpha("osdAlpha"))
+            try CancelAnimation("Notch_" MicOsdGui.Hwnd)
+            GetMicOSDPos(&x, &visibleY, &hiddenY)
+            cy := hiddenY
+            try WinGetPos(&cx, &cy, &cw, &ch, MicOsdGui.Hwnd)
+            NotchAnim(MicOsdGui.Hwnd, cy, visibleY, true)
         }
     } else {
         try {
@@ -248,12 +307,18 @@ ShowMicOSD(isMuted) {
 
 UpdateMicOSD(isMuted) {
     global MicOsdGui
-    if (isMuted) {
-        MicOsdGui.BackColor := "8B0000"
-        MicOsdGui["Text"].Text := "🎙️ Mic Muted"
-    } else {
-        MicOsdGui.BackColor := "006400"
-        MicOsdGui["Text"].Text := "🎙️ Mic Active"
+    if (!MicOsdGui)
+        return
+    try {
+        if (isMuted) {
+            MicOsdGui.BackColor := "8B0000"
+            MicOsdGui["Text"].Text := "🎙️ Mic Muted"
+        } else {
+            MicOsdGui.BackColor := "006400"
+            MicOsdGui["Text"].Text := "🎙️ Mic Active"
+        }
+    } catch {
+        ClearMicOSD()
     }
 }
 
@@ -285,6 +350,15 @@ GetMicOSDPos(&x, &visibleY, &hiddenY) {
 
 ClearMicOSD() {
     global MicOsdGui, MicOsdHiding
+    if (MicOsdGui) {
+        hwnd := 0
+        try hwnd := MicOsdGui.Hwnd
+        if hwnd
+            try CancelAnimation("Notch_" hwnd)
+        try MicOsdGui.Destroy()
+        if hwnd
+            try RS_RemoveHwnd(hwnd)
+    }
     MicOsdGui := ""
     MicOsdHiding := false
 }

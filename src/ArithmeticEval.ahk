@@ -33,10 +33,21 @@ CalcEvaluate(text) {
     return ""
 }
 
+CalcIsFinite(val) {
+    s := StrLower(Format("{:g}", val))
+    return !(InStr(s, "inf") || InStr(s, "nan") || InStr(s, "#"))
+}
+
 ; Integers print without a decimal point; anything else is rounded to 10 places
 ; and trimmed, so 0.1+0.2 reads 0.3 rather than 0.30000000000000004.
 CalcFormat(val) {
-    if (Abs(val) < 1e15 && val = Floor(val))
+    if !CalcIsFinite(val)
+        return ""
+    if (Abs(val) >= 1e15) {
+        s := Format("{:.10g}", val)
+        return (s = "-0") ? "0" : s
+    }
+    if (val = Floor(val))
         return String(Integer(val))
     s := Format("{:.10f}", val)
     s := RegExReplace(s, "0+$", "")
@@ -76,6 +87,8 @@ CalcTerm(src, &pos, depth) {
         } else {
             val := val * rhs
         }
+        if !CalcIsFinite(val)
+            throw ValueError("overflow")
     }
     return val
 }
@@ -108,5 +121,10 @@ CalcPrimary(src, &pos, depth) {
     if !RegExMatch(src, "\G(\d+\.?\d*|\.\d+)", &m, pos)
         throw ValueError("number expected")
     pos += m.Len
-    return Number(m[0]) + 0.0
+    tok := m[0]
+    if (SubStr(tok, 1, 1) = ".")
+        tok := "0" tok
+    if (SubStr(tok, -1) = ".")
+        tok .= "0"
+    return Number(tok) + 0.0
 }

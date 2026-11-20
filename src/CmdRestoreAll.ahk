@@ -1,12 +1,69 @@
 ; from looking at the screen - rolled up to a title bar, ghosted click-through,
 ; hidden into the tray - is undone here in one press.
 RestoreAllWindows() {
-    global RolledUpWindows, GhostWindows, TrayIcons
+    global RolledUpWindows, RollDownPending, UnrollPending, GhostWindows, TrayIcons
+    global BossKeyActive, BossKeyWindows
+    global StealthPanicActive, StealthHiddenWindows
     n := 0
 
-    ; Iterate clones throughout: ToggleRollUp, UnGhostWindow and RestoreFromTray
+    ; Restore Boss Key and Stealth Panic hidden windows first so subsequent
+    ; unroll / un-ghost operations can act on visible windows.
+    if (BossKeyActive || BossKeyWindows.Length) {
+        for hwnd in BossKeyWindows {
+            if DllCall("IsWindow", "ptr", hwnd) {
+                try WinShow(hwnd)
+                n += 1
+            }
+        }
+        BossKeyWindows := []
+        BossKeyActive := false
+    }
+    PanicSetSpeakerMute("BossKey", false)
+
+    if (IsSet(StealthPanicActive) && StealthPanicActive) {
+        liveStealth := 0
+        for hwnd in StealthHiddenWindows {
+            if DllCall("IsWindow", "ptr", hwnd)
+                liveStealth += 1
+        }
+        try RestoreStealthPanic()
+        if (StealthHiddenWindows.Length) {
+            for hwnd in StealthHiddenWindows {
+                if DllCall("IsWindow", "ptr", hwnd)
+                    try WinShow(hwnd)
+            }
+            StealthHiddenWindows := []
+        }
+        n += liveStealth
+    } else if (IsSet(StealthHiddenWindows) && StealthHiddenWindows.Length) {
+        for hwnd in StealthHiddenWindows {
+            if DllCall("IsWindow", "ptr", hwnd) {
+                try WinShow(hwnd)
+                n += 1
+            }
+        }
+        StealthHiddenWindows := []
+    }
+
+    ; Iterate clones throughout: RestoreFromTray, ToggleRollUp and UnGhostWindow
     ; each delete from the very Map being walked, which shifts the remainder
     ; under the enumerator and silently skips the next entry.
+    ; Restore TrayIcons BEFORE RolledUpWindows so hidden rolled-up windows are
+    ; shown first.
+    for hwnd in TrayIcons.Clone() {
+        if RestoreFromTray(hwnd)
+            n += 1
+    }
+
+    ; A returning window can still be clipped even after its animator stops.
+    for pending in [RollDownPending.Clone(), UnrollPending.Clone()] {
+        for hwnd in pending {
+            ReleaseWindowRollClip(hwnd)
+            if DllCall("IsWindow", "ptr", hwnd)
+                n += 1
+        }
+    }
+
     for hwnd in RolledUpWindows.Clone() {
         if DllCall("IsWindow", "ptr", hwnd) {
             ToggleRollUp(hwnd)
@@ -17,16 +74,13 @@ RestoreAllWindows() {
     }
 
     for hwnd in GhostWindows.Clone() {
+        isLive := DllCall("IsWindow", "ptr", hwnd)
         UnGhostWindow(hwnd)
-        n += 1
+        if isLive
+            n += 1
     }
     if (GhostWindows.Count == 0)
         SetTimer(GhostMonitorStep, 0)
-
-    for hwnd in TrayIcons.Clone() {
-        RestoreFromTray(hwnd)
-        n += 1
-    }
 
     ; Everything else this program can do to a window that the user cannot undo
     ; by hand. Each of these is reachable only through a hotkey that lives behind

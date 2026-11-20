@@ -16,7 +16,7 @@
 ; #HotIf IS POSITIONAL, NOT SCOPED, AND BLEEDS ACROSS #Include BOUNDARIES. This
 ; file opens with a bare #HotIf and ends with one, and every context it opens in
 ; between is closed. A module that leaves one open silently applies that context
-; to the first hotkeys of the next included file. scripts\Check-Split.ps1 check 5
+; to the first hotkeys of the next included file. scripts\Check-Split.bat check 5
 ; enforces the balance; the opening bare directive is on you.
 ;
 ; Not every binding is here. A hotkey whose body IS its feature stays with that
@@ -283,8 +283,7 @@ MButton:: {
 }
 #HotIf !GameModeActive
 
-#HotIf !GameModeActive && (!IsMouseOverTaskbar()
-)
+#HotIf !GameModeActive && (RippleClickEnabled || TextMagnifierEnabled || ElasticDragEnabled) && !IsMouseOverTaskbar()
 ~LButton:: {
     global TextMagnifierEnabled, RippleClickEnabled, ElasticDragEnabled
     
@@ -369,17 +368,25 @@ GetActiveExplorerPath() {
 #HotIf !GameModeActive && (PlainPasteEnabled
 )
 ^!v:: {
+    static busy := false
+    if busy
+        return
     if (A_Clipboard == "")
         return
-    ClipSaved := ClipboardAll()
-    A_Clipboard := A_Clipboard
-    ; ClipWait, not a fixed spin: the round-trip through the clipboard is not
-    ; instant, and a busy-wait would block every timer in the process meanwhile.
-    ClipWait(1, false)
-    Send("^v")
-    Sleep(120)
-    A_Clipboard := ClipSaved
-    ClipSaved := ""
+    busy := true
+    try {
+        ClipSaved := ClipboardAll()
+        A_Clipboard := A_Clipboard
+        ; ClipWait, not a fixed spin: the round-trip through the clipboard is not
+        ; instant, and a busy-wait would block every timer in the process meanwhile.
+        ClipWait(1, false)
+        Send("^v")
+        Sleep(120)
+        A_Clipboard := ClipSaved
+        ClipSaved := ""
+    } finally {
+        busy := false
+    }
 }
 #HotIf !GameModeActive
 
@@ -529,6 +536,7 @@ $^v:: {
             return
         }
 
+        sourceSeq := DllCall("GetClipboardSequenceNumber", "uint")
         MorphOriginalText := A_Clipboard
         ; "" covers both an empty clipboard and an image/binary one, which
         ; A_Clipboard reports as blank. The length cap covers the other end - see
@@ -541,19 +549,32 @@ $^v:: {
             return
         }
 
+        MorphIndex := 0
         MorphMode := true
-        MorphIndex := 1
-        ShowMorphPreview(MorphFormats[MorphIndex], MorphString(MorphOriginalText, MorphFormats[MorphIndex]))
         KeyWait("v")
         MorphMode := false
         HideMorphPreview()
 
-        ClipSaved := ClipboardAll()
-        A_Clipboard := MorphString(MorphOriginalText, MorphFormats[MorphIndex])
-        Send("^{v}")
-        Sleep(100)
-        A_Clipboard := ClipSaved
-        ClipSaved := ""
+        if (!MorphIndex || sourceSeq != DllCall("GetClipboardSequenceNumber", "uint")) {
+            Send("^{v}")
+            TriggerPasteFeedback()
+            return
+        }
+
+        clipSaved := ClipboardAll()
+        morphSeq := 0
+        try {
+            if (sourceSeq == DllCall("GetClipboardSequenceNumber", "uint")) {
+                A_Clipboard := MorphString(MorphOriginalText, MorphFormats[MorphIndex])
+                morphSeq := DllCall("GetClipboardSequenceNumber", "uint")
+            }
+            Send("^{v}")
+            if morphSeq
+                Sleep(100)
+        } finally {
+            if (morphSeq && morphSeq == DllCall("GetClipboardSequenceNumber", "uint"))
+                A_Clipboard := clipSaved
+        }
         TriggerPasteFeedback()
     } finally {
         ; Both of these unconditionally, on every exit path including a throw:
@@ -561,6 +582,7 @@ $^v:: {
         ; left true would kill Ctrl+V for the rest of the session.
         MorphMode := false
         busy := false
+        try HideMorphPreview()
     }
 }
 #HotIf !GameModeActive
@@ -655,14 +677,22 @@ SaveOldClipboard() {
 )
 *CapsLock:: {
     global SmartCapsAction
-    if !KeyWait("CapsLock", "T0.4") {
-        SetCapsLockState(!GetKeyState("CapsLock", "T"))
-        KeyWait("CapsLock")
-    } else {
-        if (SmartCapsAction == "Backspace")
-            Send("{Blind}{Backspace}")
-        else
-            Send("{Blind}{Esc}")
+    static capsBusy := false
+    if capsBusy
+        return
+    capsBusy := true
+    try {
+        if !KeyWait("CapsLock", "T0.4") {
+            SetCapsLockState(!GetKeyState("CapsLock", "T"))
+            KeyWait("CapsLock")
+        } else {
+            if (SmartCapsAction == "Backspace")
+                Send("{Blind}{Backspace}")
+            else
+                Send("{Blind}{Esc}")
+        }
+    } finally {
+        capsBusy := false
     }
 }
 #HotIf !GameModeActive
@@ -686,6 +716,18 @@ SaveOldClipboard() {
     if !hwnd
         return
 
+    ; Do not intercept middle-click on our own process windows (e.g. PiP GUIs,
+    ; settings window, overlays) so WM_NCMBUTTONDOWN / WM_MBUTTONDOWN reach them.
+    ownPid := DllCall("GetCurrentProcessId", "uint")
+    pid := 0
+    try pid := WinGetPID("ahk_id " hwnd)
+    if (pid == ownPid) {
+        Send("{Blind}{MButton Down}")
+        KeyWait("MButton")
+        Send("{Blind}{MButton Up}")
+        return
+    }
+
     ; The title-bar probe costs a cross-process SendMessageTimeout with a 50 ms
     ; ceiling, and it is only ever used to decide between Close and Roll-Up. With
     ; neither of those on - grab & pan alone - it answered a question nobody
@@ -707,8 +749,11 @@ SaveOldClipboard() {
             return true
         }
         if (MiddleClickCloseEnabled && !isRolledUp) {
-            try WinClose("ahk_id " hwnd)
-            return true
+            if (pid != ownPid && IsRestorable(hwnd)) {
+                try WinClose("ahk_id " hwnd)
+                return true
+            }
+            return false
         }
         if (RollUpEnabled && !isRolledUp) {
             ToggleRollUp(hwnd)
@@ -761,18 +806,18 @@ SaveOldClipboard() {
                 if (Abs(dy) >= step) {
                     count := Abs(dy) // step
                     if (dy < 0)
-                        Send("{WheelDown " count "}")
+                        Send("{Blind}{WheelDown " count "}")
                     else
-                        Send("{WheelUp " count "}")
+                        Send("{Blind}{WheelUp " count "}")
                     StartY := StartY + (dy < 0 ? -count * step : count * step)
                 }
 
                 if (Abs(dx) >= step) {
                     count := Abs(dx) // step
                     if (dx < 0)
-                        Send("{WheelRight " count "}")
+                        Send("{Blind}{WheelRight " count "}")
                     else
-                        Send("{WheelLeft " count "}")
+                        Send("{Blind}{WheelLeft " count "}")
                     StartX := StartX + (dx < 0 ? -count * step : count * step)
                 }
             }

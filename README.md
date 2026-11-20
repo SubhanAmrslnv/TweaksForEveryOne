@@ -40,13 +40,13 @@ and starts it.
 
 ```powershell
 # or from a terminal
-.\Install.ps1                    # interactive
-.\Install.ps1 -Silent            # no prompts
-.\Install.ps1 -Tuning            # also apply the Windows tuning
-.\Install.ps1 -NoAutoStart       # don't run at login
+.\Install.bat                    # interactive
+.\Install.bat -Silent            # no prompts
+.\Install.bat -Tuning            # also apply the Windows tuning
+.\Install.bat -NoAutoStart       # don't run at login
 ```
 
-Remove it with `Uninstall.ps1`. No admin rights are needed at any point.
+Remove it with `Uninstall.bat`. No admin rights are needed at any point.
 
 ---
 
@@ -188,7 +188,7 @@ Context Menu Unfold. Turn on whichever you want in the settings window.
 
 ## Windows tuning (optional)
 
-`scripts\Apply-Windows-Tuning.ps1` turns on the animation and Explorer settings
+`scripts\Apply-Windows-Tuning.bat` turns on the animation and Explorer settings
 that make the desktop feel fluid.
 
 The surprising part: on a lot of machines these are **already switched off** by
@@ -196,9 +196,9 @@ well-meaning "optimization" guides, which is exactly why Windows feels abrupt
 rather than fast. Turning them back on is the fix.
 
 ```powershell
-.\scripts\Apply-Windows-Tuning.ps1              # animations + Explorer
-.\scripts\Apply-Windows-Tuning.ps1 -Animations  # just the animations
-.\scripts\Restore-Windows-Tuning.ps1            # undo everything
+.\scripts\Apply-Windows-Tuning.bat              # animations + Explorer
+.\scripts\Apply-Windows-Tuning.bat -Animations  # just the animations
+.\scripts\Restore-Windows-Tuning.bat            # undo everything
 ```
 
 - Writes to `HKCU` only. No admin, no services, no system files, no drivers.

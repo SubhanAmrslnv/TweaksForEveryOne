@@ -86,8 +86,13 @@ FadeGui(guiObj, toAlpha, ms := 0, destroy := false, onDone := "") {
 }
 
 NotchAnim(hwnd, startY, destY, fadeIn := true, onDone := "") {
-    if !DllCall("IsWindow", "ptr", hwnd)
+    if !DllCall("IsWindow", "ptr", hwnd) {
+        if hwnd
+            RS_RemoveHwnd(hwnd)
+        if onDone
+            onDone()
         return
+    }
         
     animKey := "Notch_" hwnd
     CancelAnimation(animKey)
@@ -97,12 +102,20 @@ NotchAnim(hwnd, startY, destY, fadeIn := true, onDone := "") {
     ; Needs a catch: x is read by NotchStep on every frame, and a bare `try` would
     ; leave it unset. Callers reach this from a hotkey and from one-shot timers.
     try WinGetPos(&x, &cy, &w, &h, hwnd)
-    catch
+    catch {
+        RS_RemoveHwnd(hwnd)
+        if onDone
+            onDone()
         return
+    }
 
     NotchStep(dt, now) {
-        if !DllCall("IsWindow", "ptr", hwnd)
+        if !DllCall("IsWindow", "ptr", hwnd) {
+            RS_RemoveHwnd(hwnd)
+            if onDone
+                onDone()
             return false
+        }
         t := (now - start) / ms
         if (t >= 1) {
             RS_SetPos(hwnd, x, destY, -1, -1, RS_PRI_USER)

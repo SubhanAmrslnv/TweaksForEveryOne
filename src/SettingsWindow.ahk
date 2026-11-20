@@ -109,9 +109,13 @@ ShowWin() {
     ; Game Mode and Stealth Panic hold suppressed values in the very globals
     ; BuildWin reads, so the window used to open with every suspended box
     ; unticked. It edits the configuration, so it is built from it.
+    prevCrit := Critical("On")
     swOverlays := OverlaysUnsuspend()
     try BuildWin()
-    finally OverlaysResuspend(swOverlays)
+    finally {
+        OverlaysResuspend(swOverlays)
+        Critical(prevCrit)
+    }
 }
 
 BuildWin() {
@@ -512,7 +516,7 @@ BuildWin() {
     b := pg.AddButton("xm y+24 w150 h30", "Open log")
     b.OnEvent("Click", (*) => OpenLog())
     b3 := pg.AddButton("x+12 yp w150 h30", "Open folder")
-    b3.OnEvent("Click", (*) => Run(A_ScriptDir))
+    b3.OnEvent("Click", (*) => OpenFolder())
     b4 := pg.AddButton("xm y+12 w150 h30", "Hotkeys")
     b4.OnEvent("Click", (*) => ShowHotkeys())
     b5 := pg.AddButton("x+12 yp w150 h30", "Guide")
@@ -940,6 +944,8 @@ ApplyUi(writeBack := false) {
         ; Shape validation - it is not a number, so it is not a TUNE_SPEC row.
         ; Whatever survives goes straight into a URL.
         ClockLocation := CleanClockLocation(C["clockloc"].Value)
+        if (writeBack && C["clockloc"].Value !== ClockLocation)
+            C["clockloc"].Value := ClockLocation
         MonitorThrowEnabled := C["monthrow"].Value
         BlackHoleDeleteEnabled := C["deletehole"].Value
         CursorYawnEnabled := C["cursoryawn"].Value
@@ -971,8 +977,8 @@ ApplyUi(writeBack := false) {
         DEBUG := C["debuglog"].Value
 
         uiAutoStart := C["auto"].Value
-    } catch as e {
-        WriteLog("ApplyUi: could not read a control - " e.Message)
+    } catch as uiErr {
+        WriteLog("ApplyUi: could not read a control - " uiErr.Message)
     }
 
     ; Separate try of its own, for the same reason the block above is separated
@@ -994,14 +1000,14 @@ ApplyUi(writeBack := false) {
     ; Switched off: release whatever the feature is still holding, through the same
     ; functions the hotkeys and Bye() use.
     if (uiOldGhost && !ProximityGhostEnabled) {
-        for hwnd, info in GhostWindows.Clone()
-            try UnGhostWindow(hwnd)
+        for uiHwnd, uiInfo in GhostWindows.Clone()
+            try UnGhostWindow(uiHwnd)
         SetTimer(GhostMonitorStep, 0)
         SyncMediaCore()
     }
     if (uiOldPip && !LivePipEnabled) {
-        for src, pip in PipGuis.Clone()
-            try ClosePiP(src)
+        for uiSrc, uiPip in PipGuis.Clone()
+            try ClosePiP(uiSrc)
     }
     if (uiOldParallax && !ParallaxEnabled && DragHwnd) {
         try RS_ClearAlphaLayer(DragHwnd, "drag", RS_PRI_DRAG)
@@ -1021,8 +1027,6 @@ ApplyUi(writeBack := false) {
     try SyncMediaCore()
     try SaveSettings()
 }
-
-NumOr(text, fallback) => IsNumber(text) ? Number(text) : fallback
 
 ; This listed 13 of the ~45 real bindings and claimed Ctrl+Win+V for plain paste,
 ; which is bound to Ctrl+Alt+V. Every toggle and the whole keyboard-layout set
@@ -1119,19 +1123,23 @@ OpenStealthPanicSettings() {
         Notify("Could not open Stealth Panic settings")
 }
 
+OpenFolder() {
+    try Run(A_ScriptDir)
+}
+
 OpenLog() {
     global LOG_FILE
-    FlushLog()                    ; the tail is in RAM until something flushes it
-    if FileExist(LOG_FILE)
-        Run 'notepad.exe "' LOG_FILE '"'
-    else
+    try FlushLog()                ; the tail is in RAM until something flushes it
+    if FileExist(LOG_FILE) {
+        try Run 'notepad.exe "' LOG_FILE '"'
+    } else
         Notify("No log yet")
 }
 
 OpenDoc(name) {
     p := A_ScriptDir "\" name
-    if FileExist(p)
-        Run 'notepad.exe "' p '"'
-    else
+    if FileExist(p) {
+        try Run 'notepad.exe "' p '"'
+    } else
         Notify(name " not found")
 }

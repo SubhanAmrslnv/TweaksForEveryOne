@@ -189,11 +189,29 @@ ClassifyWindowImpl(hwnd) {
     return "Main"
 }
 
+IsSystemShellClass(cls) {
+    static shellClasses := Map(
+        "Shell_TrayWnd", true,
+        "Shell_SecondaryTrayWnd", true,
+        "Progman", true,
+        "WorkerW", true,
+        "Windows.UI.Core.CoreWindow", true,
+        "XamlExplorerHostIslandWindow", true,
+        "TopLevelWindowForOverflowXamlIsland", true,
+        "ApplicationFrameInputSinkWindow", true,
+        "ForegroundStaging", true,
+        "TaskListThumbnailWnd", true,
+        "MultitaskingViewFrame", true,
+        "NotifyIconOverflowWindow", true
+    )
+    return shellClasses.Has(cls)
+}
+
 IsShellSurface(hwnd, cls := "") {
     if (cls == "")
         try cls := WinGetClass(hwnd)
         catch
             return false
-    return (cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd" || cls == "Progman" || cls == "WorkerW")
+    return IsSystemShellClass(cls)
 }
 

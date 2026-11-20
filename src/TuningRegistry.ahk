@@ -158,7 +158,7 @@ TuneClean(s, v) {
     if !IsNumber(v)
         return s.def
     v := Clamp(Number(v), s.lo, s.hi)
-    return (s.dec > 0) ? Round(v, s.dec) : Integer(Round(v))
+    return (s.dec > 0) ? Number(Round(v, s.dec)) : Integer(Round(v))
 }
 
 ; How a value is written to disk and shown in its control - one function, so the

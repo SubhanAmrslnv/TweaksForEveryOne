@@ -68,15 +68,18 @@ EnterGameMode() {
     GameModeEnteredTick := A_TickCount
     GameModeSuspendedFeatures.Clear()
 
+    gmStealthActive := IsSet(StealthPanicActive) && StealthPanicActive && IsSet(StealthSuspendedFeatures)
     for gmFeat in GAME_MODE_FEATURES {
         if (IsSet(%gmFeat%)) {
-            GameModeSuspendedFeatures[gmFeat] := %gmFeat%
+            GameModeSuspendedFeatures[gmFeat] := (gmStealthActive && StealthSuspendedFeatures.Has(gmFeat))
+                ? StealthSuspendedFeatures[gmFeat] : %gmFeat%
             %gmFeat% := false
         }
     }
 
     if (IsSet(OpenAnim)) {
-        GameModeSuspendedFeatures["OpenAnim"] := OpenAnim
+        GameModeSuspendedFeatures["OpenAnim"] := (gmStealthActive && StealthSuspendedFeatures.Has("OpenAnim"))
+            ? StealthSuspendedFeatures["OpenAnim"] : OpenAnim
         OpenAnim := "None"
     }
 
@@ -147,7 +150,7 @@ GameModeResuspend() {
 ; The settings window wrote the user's edits into the globals (see
 ; OverlaysAdoptEdits). Those are the new real values: keep them as the held
 ; values and put the suppression back.
-GameModeAdoptEdits() {
+GameModeAdoptEdits(resuspend := true) {
     global
     if (!GameModeActive)
         return
@@ -157,7 +160,8 @@ GameModeAdoptEdits() {
     }
     if (GameModeSuspendedFeatures.Has("OpenAnim") && IsSet(OpenAnim))
         GameModeSuspendedFeatures["OpenAnim"] := OpenAnim
-    GameModeResuspend()
+    if (resuspend)
+        GameModeResuspend()
 }
 
 ; Every hotkey is already off during Game Mode (#HotIf !GameModeActive), but the

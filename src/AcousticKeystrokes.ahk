@@ -52,8 +52,11 @@ global AK_BankTone := -1       ; All three are declared HERE: SyncKeySounds() co
                                ; read of an unassigned variable waiting to happen
 global AK_LastVariant := Map() ; voice -> the variant used last, so it is not used twice running
 global AK_KeysDown := Map()    ; vk -> tick of its last key-down, for the auto-repeat gate
-global AK_Pool := []         ; pool of waveOut voices for concurrent playback
+global AK_POOL_SIZE := 6       ; concurrent waveOut streams (lazy-opened, idle-closed)
+global AK_IDLE_CLOSE_MS := 5000 ; close streams after 5 s idle so audio endpoints can sleep
+global AK_Pool := []           ; pool of waveOut voices for concurrent playback
 global AK_NextVoice := 1       ; round-robin index into AK_Pool
+global AK_Queue := []          ; deferred voice queue drained off the keyboard hook
 
 ; f0     plate resonance in Hz - low is a "thock", high is a "clack"
 ; click  amplitude of the noise transient     ctau  its decay time constant, seconds
@@ -189,9 +192,7 @@ PlayHotkeySound(voice) {
 }
 
 AK_Emit(voice) {
-    Critical "On"
-    global AK_BANK, AK_VARIANTS, AK_LastVariant
-    global AK_Pool, AK_NextVoice
+    global AK_BANK, AK_Queue
     ; "" is a deliberate silence, not a missing voice - AK_VoiceForKey returns it
     ; for a key whose sound another path is already making. It must NOT fall
     ; through to the unknown-voice fallback below.
@@ -199,7 +200,28 @@ AK_Emit(voice) {
         return
     ; Not rendered yet. SyncKeySounds() has armed that, and a keystroke is not
     ; worth a stall to do it here.
-    if (!AK_BANK.Count || !AK_Pool.Length)
+    if !AK_BANK.Count
+        return
+    ; Never call blocking winmm APIs synchronously on the keyboard hook thread:
+    ; enqueue and drain via a -1 timer so the hook returns immediately.
+    if (AK_Queue.Length >= 8)
+        AK_Queue.RemoveAt(1)
+    AK_Queue.Push(voice)
+    SetTimer(AK_DrainQueue, -1)
+}
+
+AK_DrainQueue() {
+    global AK_Queue
+    while AK_Queue.Length {
+        voice := AK_Queue.RemoveAt(1)
+        AK_PlayVoice(voice)
+    }
+}
+
+AK_PlayVoice(voice) {
+    global AK_BANK, AK_VARIANTS, AK_LastVariant
+    global AK_Pool, AK_NextVoice, AK_IDLE_CLOSE_MS
+    if !AK_BANK.Count
         return
 
     n := Random(1, AK_VARIANTS)
@@ -213,32 +235,104 @@ AK_Emit(voice) {
     if !AK_BANK.Has(key)
         return
 
-    buf := AK_BANK[key]
-    v := AK_Pool[AK_NextVoice]
-    AK_NextVoice := Mod(AK_NextVoice, AK_Pool.Length) + 1
-
-    try DllCall("winmm\waveOutReset", "ptr", v.hwo)
-
-    if v.prepared {
-        try DllCall("winmm\waveOutUnprepareHeader", "ptr", v.hwo, "ptr", v.hdr.Ptr, "uint", v.hdr.Size)
-        v.prepared := false
-    }
-
-    NumPut("ptr", buf.Ptr + 44, v.hdr, 0)
-    NumPut("uint", buf.Size - 44, v.hdr, A_PtrSize)
-    NumPut("uint", 0, v.hdr, A_PtrSize + 4)
-    NumPut("ptr", 0, v.hdr, A_PtrSize + 8)
-    NumPut("uint", 0, v.hdr, A_PtrSize * 2 + 8)
-    NumPut("uint", 0, v.hdr, A_PtrSize * 2 + 12)
-    NumPut("ptr", 0, v.hdr, A_PtrSize * 2 + 16)
-    NumPut("ptr", 0, v.hdr, A_PtrSize * 3 + 16)
-
+    prevCrit := Critical("On")
     try {
-        if (DllCall("winmm\waveOutPrepareHeader", "ptr", v.hwo, "ptr", v.hdr.Ptr, "uint", v.hdr.Size) == 0) {
-            v.prepared := true
-            DllCall("winmm\waveOutWrite", "ptr", v.hwo, "ptr", v.hdr.Ptr, "uint", v.hdr.Size)
+        if !AK_Pool.Length
+            AK_InitPool()
+        if !AK_Pool.Length
+            return
+
+        ; Keep the idle auto-close timer pushed out while typing.
+        SetTimer(AK_IdleClose, -AK_IDLE_CLOSE_MS)
+
+        buf := AK_BANK[key]
+        count := AK_Pool.Length
+        chosenIdx := 0
+        badHandle := false
+
+        ; Find an idle slot. Never overwrite a WAVEHDR if waveOutUnprepareHeader
+        ; returns WAVERR_STILLPLAYING (33) or any non-zero MMRESULT.
+        Loop count {
+            idx := Mod(AK_NextVoice - 1 + A_Index - 1, count) + 1
+            v := AK_Pool[idx]
+            if v.prepared {
+                res := 33
+                try res := DllCall("winmm\waveOutUnprepareHeader", "ptr", v.hwo, "ptr", v.hdr.Ptr, "uint", v.hdr.Size, "uint")
+                if (res == 0) {
+                    v.prepared := false
+                    v.buf := ""
+                    chosenIdx := idx
+                    break
+                } else if (res != 33) {
+                    badHandle := true
+                }
+            } else {
+                chosenIdx := idx
+                break
+            }
         }
+
+        if (!chosenIdx) {
+            if badHandle {
+                AK_ShutdownPool()
+                AK_InitPool()
+                return
+            }
+            ; All slots are actively playing: reset the oldest slot and reuse it
+            ; ONLY if unprepare succeeds cleanly afterwards.
+            idx := AK_NextVoice
+            v := AK_Pool[idx]
+            try DllCall("winmm\waveOutReset", "ptr", v.hwo, "uint")
+            res := 33
+            try res := DllCall("winmm\waveOutUnprepareHeader", "ptr", v.hwo, "ptr", v.hdr.Ptr, "uint", v.hdr.Size, "uint")
+            if (res != 0) {
+                if (res != 33) {
+                    AK_ShutdownPool()
+                    AK_InitPool()
+                }
+                return
+            }
+            v.prepared := false
+            v.buf := ""
+            chosenIdx := idx
+        }
+
+        v := AK_Pool[chosenIdx]
+        AK_NextVoice := Mod(chosenIdx, count) + 1
+
+        NumPut("ptr", buf.Ptr + 44, v.hdr, 0)
+        NumPut("uint", buf.Size - 44, v.hdr, A_PtrSize)
+        NumPut("uint", 0, v.hdr, A_PtrSize + 4)
+        NumPut("ptr", 0, v.hdr, A_PtrSize + 8)
+        NumPut("uint", 0, v.hdr, A_PtrSize * 2 + 8)
+        NumPut("uint", 0, v.hdr, A_PtrSize * 2 + 12)
+        NumPut("ptr", 0, v.hdr, A_PtrSize * 2 + 16)
+        NumPut("ptr", 0, v.hdr, A_PtrSize * 3 + 16)
+
+        v.buf := buf
+        prepRes := -1
+        try prepRes := DllCall("winmm\waveOutPrepareHeader", "ptr", v.hwo, "ptr", v.hdr.Ptr, "uint", v.hdr.Size, "uint")
+        if (prepRes != 0) {
+            v.buf := ""
+            AK_ShutdownPool()
+            AK_InitPool()
+            return
+        }
+        v.prepared := true
+        writeRes := -1
+        try writeRes := DllCall("winmm\waveOutWrite", "ptr", v.hwo, "ptr", v.hdr.Ptr, "uint", v.hdr.Size, "uint")
+        if (writeRes != 0) {
+            ; Audio device likely disconnected or switched: rebuild the pool cleanly.
+            AK_ShutdownPool()
+            AK_InitPool()
+        }
+    } finally {
+        Critical(prevCrit)
     }
+}
+
+AK_IdleClose() {
+    AK_ShutdownPool()
 }
 
 ; ====== The bank ======
@@ -296,7 +390,6 @@ AK_BuildBank() {
     oldBank := AK_BANK
     AK_BANK := bank
     AK_ShutdownPool()
-    AK_InitPool()
     oldBank := ""
 
     prevVol := AK_BankVol, prevHot := AK_BankHotVol, prevTone := AK_BankTone
@@ -412,7 +505,10 @@ AK_Tag(buf, off, tag) {
 ; asynchronously, and freeing memory out from under winmm is a crash rather than
 ; a wrong note. Called by Bye() and whenever the feature is switched off.
 AK_Shutdown() {
-    global AK_BANK, AK_BankVol, AK_BankHotVol, AK_BankTone, AK_KeysDown
+    global AK_BANK, AK_BankVol, AK_BankHotVol, AK_BankTone, AK_KeysDown, AK_Queue
+    SetTimer(AK_DrainQueue, 0)
+    SetTimer(AK_IdleClose, 0)
+    AK_Queue := []
     AK_ShutdownPool()
     AK_BANK := Map()
     AK_KeysDown := Map()
@@ -422,7 +518,7 @@ AK_Shutdown() {
 }
 
 AK_InitPool() {
-    global AK_Pool, AK_NextVoice, AK_SR
+    global AK_Pool, AK_NextVoice, AK_SR, AK_POOL_SIZE
     if AK_Pool.Length
         return
 
@@ -437,25 +533,32 @@ AK_InitPool() {
     NumPut("ushort", 16, wfx, 14) ; wBitsPerSample
     NumPut("ushort", 0, wfx, 16) ; cbSize
 
-    Loop 16 {
+    Loop AK_POOL_SIZE {
         hwo := 0
-        if DllCall("winmm\waveOutOpen", "ptr*", &hwo, "uint", 0xFFFFFFFF, "ptr", wfx.Ptr, "ptr", 0, "ptr", 0, "uint", 0) == 0 {
+        if DllCall("winmm\waveOutOpen", "ptr*", &hwo, "uint", 0xFFFFFFFF, "ptr", wfx.Ptr, "ptr", 0, "ptr", 0, "uint", 0, "uint") == 0 {
             hdr := Buffer(A_PtrSize == 8 ? 48 : 32, 0)
-            AK_Pool.Push({hwo: hwo, hdr: hdr, prepared: false})
+            AK_Pool.Push({hwo: hwo, hdr: hdr, prepared: false, buf: ""})
         }
     }
 }
 
 AK_ShutdownPool() {
-    Critical "On"
-    global AK_Pool
-    for v in AK_Pool {
-        try DllCall("winmm\waveOutReset", "ptr", v.hwo)
-        if v.prepared {
-            try DllCall("winmm\waveOutUnprepareHeader", "ptr", v.hwo, "ptr", v.hdr.Ptr, "uint", v.hdr.Size)
-            v.prepared := false
+    global AK_Pool, AK_NextVoice
+    prevCrit := Critical("On")
+    try {
+        SetTimer(AK_IdleClose, 0)
+        for v in AK_Pool {
+            try DllCall("winmm\waveOutReset", "ptr", v.hwo, "uint")
+            if v.prepared {
+                try DllCall("winmm\waveOutUnprepareHeader", "ptr", v.hwo, "ptr", v.hdr.Ptr, "uint", v.hdr.Size, "uint")
+                v.prepared := false
+            }
+            try DllCall("winmm\waveOutClose", "ptr", v.hwo, "uint")
+            v.buf := ""
         }
-        try DllCall("winmm\waveOutClose", "ptr", v.hwo)
+        AK_Pool := []
+        AK_NextVoice := 1
+    } finally {
+        Critical(prevCrit)
     }
-    AK_Pool := []
 }

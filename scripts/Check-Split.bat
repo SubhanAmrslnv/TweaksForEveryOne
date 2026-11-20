@@ -1,3 +1,28 @@
+@echo off
+setlocal DisableDelayedExpansion
+rem Run the embedded script through -File so PowerShell binds native arguments.
+set "WINDOW_TWEAKS_BATCH=%~f0"
+set "WINDOW_TWEAKS_RUN=%TEMP%\WindowTweaks-%RANDOM%-%RANDOM%"
+set "WINDOW_TWEAKS_PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
+md "%WINDOW_TWEAKS_RUN%" 2>nul
+if errorlevel 1 (
+    >&2 echo Could not create a temporary script directory.
+    exit /b 1
+)
+
+"%WINDOW_TWEAKS_PS%" -NoProfile -Command "$ErrorActionPreference = 'Stop'; $text = [IO.File]::ReadAllText($env:WINDOW_TWEAKS_BATCH); $marker = [regex]::Match($text, '(?m)^# POWERSHELL SCRIPT\r?\n'); if (-not $marker.Success) { throw 'Missing embedded script.' }; $code = $text.Substring($marker.Index + $marker.Length); [IO.File]::WriteAllText((Join-Path $env:WINDOW_TWEAKS_RUN 'entry.ps1'), $code, [Text.Encoding]::Unicode)"
+set "WINDOW_TWEAKS_STATUS=%errorlevel%"
+if not "%WINDOW_TWEAKS_STATUS%"=="0" goto cleanup
+
+"%WINDOW_TWEAKS_PS%" -NoProfile -ExecutionPolicy Bypass -File "%WINDOW_TWEAKS_RUN%\entry.ps1" %*
+set "WINDOW_TWEAKS_STATUS=%errorlevel%"
+
+:cleanup
+del /q "%WINDOW_TWEAKS_RUN%\entry.ps1" 2>nul
+rd "%WINDOW_TWEAKS_RUN%" 2>nul
+exit /b %WINDOW_TWEAKS_STATUS%
+
+# POWERSHELL SCRIPT
 <#
 .SYNOPSIS
     Structural checks for the WindowTweaks module split.
@@ -9,11 +34,11 @@
 
     Run after every phase:
 
-        powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Check-Split.ps1
+        .\scripts\Check-Split.bat
 
     Capture the reference artifacts ONCE, before the first .ahk moves:
 
-        .\scripts\Check-Split.ps1 -Baseline
+        .\scripts\Check-Split.bat -Baseline
 
     Checks:
       1  Parse         AHK parses the whole program (no hooks/timers installed)
@@ -43,7 +68,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$repo    = Split-Path $PSScriptRoot -Parent
+$repo    = Split-Path ([IO.Path]::GetDirectoryName($env:WINDOW_TWEAKS_BATCH)) -Parent
 $srcDir  = Join-Path $repo 'src'
 $entry   = Join-Path $srcDir 'WindowTweaks.ahk'
 $refDir  = Join-Path $repo 'build\refs'

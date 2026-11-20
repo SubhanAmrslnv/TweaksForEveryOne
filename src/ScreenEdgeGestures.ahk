@@ -84,115 +84,121 @@ CursorWrapMonitorStep() {
     static contactAt := 0                          ; when the current contact began
     static contactSide := 0                        ; -1 left, +1 right, 0 none
     static approachOk := false                     ; speed gate passed on contact
-    static cooldownUntil := 0
+    static lastWrapAt := 0
 
     if (!InfiniteWrapEnabled)
         return
 
-    now := A_TickCount
-    MouseGetPos(&mx, &my)
+    try {
+        now := A_TickCount
+        MouseGetPos(&mx, &my)
 
-    prevX := lastX, prevY := lastY, prevAt := lastAt
-    lastX := mx, lastY := my, lastAt := now
+        prevX := lastX, prevY := lastY, prevAt := lastAt
+        lastX := mx, lastY := my, lastAt := now
 
-    ; A drag is in progress: no wrapping, and no state either - releasing the
-    ; button at the edge must not count as a completed dwell.
-    if (DragHwnd || GetKeyState("LButton", "P") || GetKeyState("RButton", "P")
-        || GetKeyState("MButton", "P")) {
-        contactSide := 0
-        return
-    }
-
-    ; Interior dead edges first. A bridge moves the pointer, so the outer-wrap
-    ; sample taken above is stale and this tick is over.
-    if (CursorBridgeStep(now)) {
-        contactSide := 0
-        MouseGetPos(&lastX, &lastY)
-        return
-    }
-
-    g := ScreenMetrics()
-    tol := Tune("wrapTol")
-
-    ; The rightmost addressable column is right-1, so the right band is measured
-    ; from there. Getting this wrong by one is the difference between a band of
-    ; `tol` pixels and one that can never be entered at all.
-    side := 0
-    if (mx <= g.left + tol)
-        side := -1
-    else if (mx >= g.right - 1 - tol)
-        side := 1
-
-    if (!side) {
-        contactSide := 0
-        return
-    }
-    if (now < cooldownUntil)
-        return
-
-    if (side != contactSide) {
-        ; First tick of this contact. Judge the approach from the movement that
-        ; brought us here.
-        contactSide := side
-        contactAt := now
-        minSpeed := Tune("wrapSpeed")
-        approachOk := (minSpeed <= 0)
-        if (!approachOk && prevAt && now > prevAt) {
-            dist := Sqrt((mx - prevX) ** 2 + (my - prevY) ** 2)
-            approachOk := (dist * 1000 / (now - prevAt)) >= minSpeed
-        }
-        return
-    }
-
-    if (!approachOk)
-        return
-    if (now - contactAt < Tune("wrapDelay"))
-        return
-
-    ; Land clear of the band we just left, or the destination would satisfy the
-    ; contact test immediately and the pointer would sit armed on the far edge.
-    inset := tol + 8
-    tx := (side < 0) ? (g.right - 1 - inset) : (g.left + inset)
-    ty := my
-
-    ; The virtual desktop is a bounding box, not a surface: with monitors of
-    ; different heights or vertical offsets, (tx, ty) can land in a hole. Project
-    ; onto the nearest monitor that spans tx. Bounds are exclusive on the right
-    ; and bottom, matching MonitorIndexAt and MC_MonitorIndexForRect.
-    inside := false
-    for m in g.mons {
-        if (tx >= m.l && tx < m.r && ty >= m.t && ty < m.b) {
-            inside := true
-            break
-        }
-    }
-    if (!inside) {
-        bestDy := 0, bestY := "", edgePad := 5
-        for m in g.mons {
-            if (tx < m.l || tx >= m.r)
-                continue
-            if (ty < m.t)
-                dy := m.t - ty, projY := m.t + edgePad
-            else if (ty >= m.b)
-                dy := ty - m.b + 1, projY := m.b - 1 - edgePad
-            else
-                dy := 0, projY := ty
-            if (bestY == "" || dy < bestDy)
-                bestDy := dy, bestY := projY
-        }
-        ; No monitor spans tx at all - the arrangement has no surface on that
-        ; side at this height. Refuse rather than teleport into nothing.
-        if (bestY == "") {
+        ; A drag is in progress: no wrapping, and no state either - releasing the
+        ; button at the edge must not count as a completed dwell.
+        if (DragHwnd || GetKeyState("LButton", "P") || GetKeyState("RButton", "P")
+            || GetKeyState("MButton", "P")) {
             contactSide := 0
             return
         }
-        ty := bestY
-    }
 
-    MouseMove(tx, ty, 0)
-    cooldownUntil := now + Tune("wrapCool")
-    contactSide := 0
-    lastX := tx, lastY := ty
+        ; Interior dead edges first. A bridge moves the pointer, so the outer-wrap
+        ; sample taken above is stale and this tick is over.
+        if (CursorBridgeStep(now)) {
+            contactSide := 0
+            MouseGetPos(&lastX, &lastY)
+            return
+        }
+
+        g := ScreenMetrics()
+        tol := Tune("wrapTol")
+
+        ; The rightmost addressable column is right-1, so the right band is measured
+        ; from there. Getting this wrong by one is the difference between a band of
+        ; `tol` pixels and one that can never be entered at all.
+        side := 0
+        if (mx <= g.left + tol)
+            side := -1
+        else if (mx >= g.right - 1 - tol)
+            side := 1
+
+        if (!side) {
+            contactSide := 0
+            return
+        }
+        if (lastWrapAt) {
+            if (((now - lastWrapAt) & 0xFFFFFFFF) < Tune("wrapCool"))
+                return
+            lastWrapAt := 0
+        }
+
+        if (side != contactSide) {
+            ; First tick of this contact. Judge the approach from the movement that
+            ; brought us here.
+            contactSide := side
+            contactAt := now
+            minSpeed := Tune("wrapSpeed")
+            approachOk := (minSpeed <= 0)
+            dt := (now - prevAt) & 0xFFFFFFFF
+            if (!approachOk && prevAt && dt > 0 && dt < 0x80000000) {
+                dist := Sqrt((mx - prevX) ** 2 + (my - prevY) ** 2)
+                approachOk := (dist * 1000 / dt) >= minSpeed
+            }
+            return
+        }
+
+        if (!approachOk)
+            return
+        if (((now - contactAt) & 0xFFFFFFFF) < Tune("wrapDelay"))
+            return
+
+        ; Land clear of the band we just left, or the destination would satisfy the
+        ; contact test immediately and the pointer would sit armed on the far edge.
+        inset := tol + 8
+        tx := (side < 0) ? (g.right - 1 - inset) : (g.left + inset)
+        ty := my
+
+        ; The virtual desktop is a bounding box, not a surface: with monitors of
+        ; different heights or vertical offsets, (tx, ty) can land in a hole. Project
+        ; onto the nearest monitor that spans tx. Bounds are exclusive on the right
+        ; and bottom, matching MonitorIndexAt and MC_MonitorIndexForRect.
+        inside := false
+        for m in g.mons {
+            if (tx >= m.l && tx < m.r && ty >= m.t && ty < m.b) {
+                inside := true
+                break
+            }
+        }
+        if (!inside) {
+            bestDy := 0, bestY := "", edgePad := 5
+            for m in g.mons {
+                if (tx < m.l || tx >= m.r)
+                    continue
+                if (ty < m.t)
+                    dy := m.t - ty, projY := m.t + edgePad
+                else if (ty >= m.b)
+                    dy := ty - m.b + 1, projY := m.b - 1 - edgePad
+                else
+                    dy := 0, projY := ty
+                if (bestY == "" || dy < bestDy)
+                    bestDy := dy, bestY := projY
+            }
+            ; No monitor spans tx at all - the arrangement has no surface on that
+            ; side at this height. Refuse rather than teleport into nothing.
+            if (bestY == "") {
+                contactSide := 0
+                return
+            }
+            ty := bestY
+        }
+
+        DllCall("SetCursorPos", "int", tx, "int", ty)
+        lastWrapAt := now
+        contactSide := 0
+        lastX := tx, lastY := ty
+    }
 }
 
 ; ====== Dead-edge bridge ======
@@ -226,7 +232,7 @@ CursorWrapMonitorStep() {
 ;
 ; Returns true when it moved the pointer.
 CursorBridgeStep(now) {
-    static lastX := 0, lastY := 0, lastAt := 0, cooldownUntil := 0
+    static lastX := 0, lastY := 0, lastAt := 0, lastBridgeAt := 0
     moved := false
     prevCtx := PerMonitorDpiBegin()
     try {
@@ -239,8 +245,14 @@ CursorBridgeStep(now) {
 
         ; A sample older than a few ticks (the timer was paused by a drag, a
         ; button, Game Mode) describes some earlier gesture, not this one.
-        if (!pAt || now <= pAt || now - pAt > 100 || now < cooldownUntil)
+        dt := (now - pAt) & 0xFFFFFFFF
+        if (!pAt || dt == 0 || dt > 100)
             return false
+        if (lastBridgeAt) {
+            if (((now - lastBridgeAt) & 0xFFFFFFFF) < 150)
+                return false
+            lastBridgeAt := 0
+        }
 
         mons := PhysicalMonitorRects()
         if (mons.Length < 2)
@@ -257,7 +269,6 @@ CursorBridgeStep(now) {
 
         tol := Tune("wrapTol")
         minSpeed := Tune("wrapBridge")
-        dt := now - pAt
         vx := (mx - px) * 1000 / dt, vy := (my - py) * 1000 / dt
 
         ; One table, four mirrored rows: which band, which way is "toward", and
@@ -313,7 +324,7 @@ CursorBridgeStep(now) {
             }
             if DllCall("SetCursorPos", "int", tx, "int", ty) {
                 lastX := tx, lastY := ty
-                cooldownUntil := now + 150
+                lastBridgeAt := now
                 moved := true
             }
             break
@@ -388,7 +399,7 @@ HotCornersMonitorStep() {
         }
         if (currentCorner == "None" || Fired)
             return
-        if (A_TickCount - EnteredAt < Tune("cornerDelay"))
+        if (((A_TickCount - EnteredAt) & 0xFFFFFFFF) < Tune("cornerDelay"))
             return
 
         action := "None"

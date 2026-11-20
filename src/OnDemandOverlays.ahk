@@ -70,10 +70,25 @@ ToggleQuickLook() {
     g.MarginY := 20
 
     try {
-        if (ext ~= "^(png|jpg|jpeg|gif|bmp)$")
-            g.AddPicture("w-1 h-1", path)
-        else
+        if (ext ~= "^(png|jpg|jpeg|gif|bmp)$") {
+            pic := g.AddPicture("w-1 h-1", path)
+            pic.GetPos(, , &pw, &ph)
+            MouseGetPos(&mx, &my)
+            mon := MonitorIndexAt(mx, my)
+            wl := 0, wt := 0, wr := A_ScreenWidth, wb := A_ScreenHeight
+            try WorkAreaOf(mon, &wl, &wt, &wr, &wb)
+            maxW := Max(200, Round((wr - wl) * 0.8) - 40)
+            maxH := Max(200, Round((wb - wt) * 0.8) - 40)
+            if (pw > 0 && ph > 0 && (pw > maxW || ph > maxH)) {
+                scale := Min(maxW / pw, maxH / ph)
+                newW := Max(1, Round(pw * scale))
+                newH := Max(1, Round(ph * scale))
+                pic.Value := "*w" newW " *h" newH " " path
+                pic.Move(, , newW, newH)
+            }
+        } else {
             g.AddEdit("w600 h400 ReadOnly Background111111 cWhite -E0x200", FileRead(path, "m4096"))
+        }
     } catch {
         try g.Destroy()
         return false
@@ -188,6 +203,8 @@ SpotlightOnChange(ctrl, *) {
 
 SpotlightExecute() {
     global SpotlightGui, SpotlightInput, SpotlightResult
+    if (!IsSet(SpotlightGui) || !SpotlightGui || !IsSet(SpotlightInput) || !SpotlightInput)
+        return
     text := Trim(SpotlightInput.Value)
     if (text = "")
         return
@@ -220,24 +237,31 @@ SpotlightExecute() {
 ; MagFailed latches, so a machine without a working Magnification.dll pays the
 ; failed init exactly once instead of on every text drag.
 InitMag() {
-    global MagHostGui, MagFrameGui, MagChildHwnd, MagFailed
+    global MagHostGui, MagFrameGui, MagChildHwnd, MagFailed, MagDll, MagInitialized, MagExitRegistered
 
     if MagFailed
         return false
     try {
-        if !DllCall("LoadLibrary", "str", "Magnification.dll", "ptr")
-            throw Error("Magnification.dll")
-        if !DllCall("Magnification\MagInitialize")
-            throw Error("MagInitialize")
+        if !MagDll {
+            MagDll := DllCall("LoadLibrary", "str", "Magnification.dll", "ptr")
+            if !MagDll
+                throw Error("Magnification.dll")
+        }
+        if !MagInitialized {
+            if !DllCall("Magnification\MagInitialize")
+                throw Error("MagInitialize")
+            MagInitialized := true
+        }
 
         MagFrameGui := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
         MagFrameGui.BackColor := "2A2A2A"
         WinSetRegion("0-0 w144 h144 E", MagFrameGui.Hwnd)
 
-        ; WS_EX_LAYERED (0x80000) is REQUIRED on the host of a magnifier control -
-        ; the API documents it, and without it the control has no surface to
-        ; present into, which is why this effect had never actually shown a loupe.
+        ; WS_EX_LAYERED (0x80000) + SetLayeredWindowAttributes is REQUIRED on the
+        ; host of a magnifier control - without both, the control has no surface
+        ; to present into.
         MagHostGui := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20 +E0x80000")
+        WinSetTransparent(255, MagHostGui.Hwnd)
         WinSetRegion("0-0 w140 h140 E", MagHostGui.Hwnd)
 
         MagChildHwnd := DllCall("CreateWindowEx", "uint", 0
@@ -254,15 +278,45 @@ InitMag() {
         NumPut("float", 2.0, Transform, 16)
         NumPut("float", 1.0, Transform, 32)
         DllCall("Magnification\MagSetWindowTransform", "ptr", MagChildHwnd, "ptr", Transform)
+        if !MagExitRegistered {
+            OnExit(ShutdownMag)
+            MagExitRegistered := true
+        }
         return true
     } catch as e {
         MagFailed := true
-        MagChildHwnd := 0
-        try MagFrameGui.Destroy()
-        try MagHostGui.Destroy()
-        MagFrameGui := "", MagHostGui := ""
+        ShutdownMag()
         WriteLog("magnifier unavailable - " e.Message)
         return false
+    }
+}
+
+ShutdownMag(*) {
+    global MagHostGui, MagFrameGui, MagChildHwnd, MagDll, MagInitialized
+    MagChildHwnd := 0
+    if MagFrameGui {
+        fh := 0
+        try fh := MagFrameGui.Hwnd
+        try MagFrameGui.Destroy()
+        if fh
+            RS_RemoveHwnd(fh)
+        MagFrameGui := ""
+    }
+    if MagHostGui {
+        hh := 0
+        try hh := MagHostGui.Hwnd
+        try MagHostGui.Destroy()
+        if hh
+            RS_RemoveHwnd(hh)
+        MagHostGui := ""
+    }
+    if MagInitialized {
+        try DllCall("Magnification\MagUninitialize")
+        MagInitialized := false
+    }
+    if MagDll {
+        try DllCall("FreeLibrary", "ptr", MagDll)
+        MagDll := 0
     }
 }
 
@@ -277,8 +331,9 @@ ShowMag(mx, my) {
     if (!MagFrameGui || !MagHostGui)
         return false
     try {
-        MagFrameGui.Show("x-1000 y-1000 w144 h144 NoActivate")
-        MagHostGui.Show("x-1000 y-1000 w140 h140 NoActivate")
+        offX := SysGet(76) - 4000, offY := SysGet(77) - 4000
+        MagFrameGui.Show("x" offX " y" offY " w144 h144 NoActivate")
+        MagHostGui.Show("x" offX " y" offY " w140 h140 NoActivate")
         return true
     }
     return false
@@ -323,12 +378,17 @@ MagCallback(dt, now) {
 
     try {
         MouseGetPos(&mx, &my)
-        SourceRect := Buffer(16, 0)
-        NumPut("int", mx - 35, SourceRect, 0)
-        NumPut("int", my - 35, SourceRect, 4)
-        NumPut("int", mx + 35, SourceRect, 8)
-        NumPut("int", my + 35, SourceRect, 12)
-        DllCall("Magnification\MagSetWindowSource", "ptr", MagChildHwnd, "ptr", SourceRect)
+        if (A_PtrSize == 8) {
+            SourceRect := Buffer(16, 0)
+            NumPut("int", mx - 35, SourceRect, 0)
+            NumPut("int", my - 35, SourceRect, 4)
+            NumPut("int", mx + 35, SourceRect, 8)
+            NumPut("int", my + 35, SourceRect, 12)
+            DllCall("Magnification\MagSetWindowSource", "ptr", MagChildHwnd, "ptr", SourceRect)
+        } else {
+            DllCall("Magnification\MagSetWindowSource", "ptr", MagChildHwnd
+                , "int", mx - 35, "int", my - 35, "int", mx + 35, "int", my + 35)
+        }
         
         RS_SetPos(MagFrameGui.Hwnd, mx - 72, my - 162, -1, -1, RS_PRI_ANIM)
         RS_SetPos(MagHostGui.Hwnd, mx - 70, my - 160, -1, -1, RS_PRI_ANIM)
@@ -345,5 +405,11 @@ global MagFrameGui := ""
 global MagChildHwnd := 0
 
 global MagFailed := false
+
+global MagDll := 0
+
+global MagInitialized := false
+
+global MagExitRegistered := false
 
 global MagStartX := 0, MagStartY := 0

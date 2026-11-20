@@ -315,6 +315,10 @@ JelloBounce(hwnd, destX, destY, vx, vy) {
         return
         
     try WinGetPos(,, &w, &h, hwnd)
+    catch
+        return
+    if (!IsSet(w) || !IsSet(h))
+        return
     
     animKey := "Jello_" hwnd
     CancelAnimation(animKey)
@@ -557,7 +561,8 @@ ShowSmartGrid() {
         }
         g := SmartGridGuis[A_Index]
         g.BackColor := "111111"
-        WinSetTransparent(100, g.Hwnd)
+        try RS_SetAlpha(g.Hwnd, 100, RS_PRI_ANIM)
+        RS_Commit()
         
         gx := z.L + gap, gy := z.T + gap, gw := (z.R - z.L) - gap * 2, gh := (z.B - z.T) - gap * 2
         g.Show("x" gx " y" gy " w" gw " h" gh " NoActivate")
@@ -584,14 +589,15 @@ UpdateSmartGrid() {
         if (GridHoverZone > 0) {
             g := SmartGridGuis[GridHoverZone]
             g.BackColor := "111111"
-            WinSetTransparent(100, g.Hwnd)
+            try RS_SetAlpha(g.Hwnd, 100, RS_PRI_ANIM)
         }
         GridHoverZone := hovered
         if (hovered > 0) {
             g := SmartGridGuis[hovered]
             g.BackColor := "0078D7"
-            WinSetTransparent(180, g.Hwnd)
+            try RS_SetAlpha(g.Hwnd, 180, RS_PRI_ANIM)
         }
+        RS_Commit()
     }
 }
 
@@ -645,8 +651,11 @@ ApplyGridZone(hwnd, zoneIndex) {
 
     global MomentumTiltEnabled
     if (MomentumTiltEnabled) {
-        cpx := (z.L == 0) ? -15 : ((z.R >= A_ScreenWidth) ? 15 : 0)
-        cpy := (z.T == 0) ? -15 : ((z.B >= A_ScreenHeight) ? 15 : 0)
+        wl := 0, wt := 0, wr := A_ScreenWidth, wb := A_ScreenHeight
+        mon := MonitorIndexAt((z.L + z.R) // 2, (z.T + z.B) // 2)
+        try WorkAreaOf(mon, &wl, &wt, &wr, &wb)
+        cpx := (z.L <= wl) ? -15 : ((z.R >= wr) ? 15 : 0)
+        cpy := (z.T <= wt) ? -15 : ((z.B >= wb) ? 15 : 0)
         if (cpx != 0 || cpy != 0)
             BounceSqueeze(hwnd, destX, destY, destW, destH, cpx, cpy)
     }

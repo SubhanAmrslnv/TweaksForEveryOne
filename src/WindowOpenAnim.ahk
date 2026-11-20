@@ -33,9 +33,7 @@
 ; window rather than after - get that backwards and brand-new windows sit at
 ; alpha 0, invisible but focused and clickable.
 ;
-; The per-HWND state Maps are pruned in the HSHELL_WINDOWDESTROYED branch of the
-; shell hook. Anything keyed on hwnd anywhere in the program has to be pruned
-; there too, or it leaks for the session.
+; ShellHook prunes the per-HWND state maps when a window has been destroyed.
 
 ; MOST MODERN WINDOWS ARE CLOAKED WHEN THEY ARE CREATED. Chromium and Electron
 ; (Edge, Chrome, VS Code, Teams), UWP/WinUI frames and Windows 11 Explorer are
@@ -54,6 +52,7 @@
 global GhostHiddenWindows := Map()
 global PendingOpen := Map()          ; hwnd -> tick it was created cloaked
 global OpenAnimated := Map()         ; hwnd -> true once its open animation began
+global UnrollPending := Map()        ; hwnd -> true while an unroll clip may still be active
 global UncloakCb := 0, UncloakHook := 0
 global OPEN_PENDING_MS := 3000
 
@@ -82,7 +81,7 @@ UncloakEvent(hook, event, hwnd, idObject, idChild, thread, time) {
         return
     born := PendingOpen[hwnd]
     PendingOpen.Delete(hwnd)
-    if (A_TickCount - born > OPEN_PENDING_MS)
+    if (((A_TickCount - born) & 0xFFFFFFFF) > OPEN_PENDING_MS)
         return
     ; Not from inside the hook: hiding and registering an animation is timer work.
     SetTimer(OpenAnimAfterUncloak.Bind(hwnd), -1)
@@ -113,7 +112,7 @@ OpenAnimPend(hwnd) {
     if (PendingOpen.Count > 64) {
         stale := []
         for h, t in PendingOpen
-            if (A_TickCount - t > OPEN_PENDING_MS)
+            if (((A_TickCount - t) & 0xFFFFFFFF) > OPEN_PENDING_MS)
                 stale.Push(h)
         for h in stale
             PendingOpen.Delete(h)
@@ -198,22 +197,35 @@ WillAnimateOpen(hwnd, logWhy := false) {
 }
 
 RevealWindow(hwnd) {
-    if !DllCall("IsWindow", "ptr", hwnd)
+    global UnrollPending
+    if !DllCall("IsWindow", "ptr", hwnd) {
+        if UnrollPending.Has(hwnd)
+            UnrollPending.Delete(hwnd)
         return
+    }
     ; Clearing the "open" layer cannot stomp an opacity anyone else asked for:
     ; the user's base and the ghost layer are separate factors. The old ghost
     ; guard returned early here and so left a window that became a ghost during
     ; its open animation stuck with the open layer at 0 as well.
     try RS_ClearAlphaLayer(hwnd, "open", RS_PRI_ANIM)
-    ; An unroll that never finished would leave the window clipped.
-    if (Anim_Owner(hwnd, "region") == "Unroll_" hwnd) {
-        CancelAnimation("Unroll_" hwnd)
-        try RS_SetRegion(hwnd, "", RS_PRI_ANIM)
-    }
+    ReleaseOpenUnrollClip(hwnd, RS_PRI_ANIM)
     RS_Commit()
 }
 
+ReleaseOpenUnrollClip(hwnd, priority) {
+    global UnrollPending
+    ; The pending map also covers a callback that the scheduler retired early.
+    if (Anim_Owner(hwnd, "region") != "Unroll_" hwnd && !UnrollPending.Has(hwnd))
+        return false
+    CancelAnimation("Unroll_" hwnd)
+    if UnrollPending.Has(hwnd)
+        UnrollPending.Delete(hwnd)
+    RS_SetRegion(hwnd, "", priority)
+    return true
+}
+
 UnrollWindow(hwnd, restoredRect := "") {
+    global UnrollPending
     if (IsObject(restoredRect) && restoredRect.HasOwnProp("w")) {
         x := restoredRect.x, y := restoredRect.y, w := restoredRect.w, h := restoredRect.h
     } else {
@@ -232,6 +244,7 @@ UnrollWindow(hwnd, restoredRect := "") {
     ; frame. Clearing the layer before the first region was applied used to put
     ; one full-height frame on screen before the blind started rolling - alpha
     ; and region are applied in that order within one flush.
+    UnrollPending[hwnd] := true
     try RS_SetRegion(hwnd, "0-0 W" w " H1", RS_PRI_ANIM)
     RS_Commit()
 
@@ -240,10 +253,21 @@ UnrollWindow(hwnd, restoredRect := "") {
     start := QPC()
     ms := Tune("animOpenMs")
     revealed := false
+    clearQueued := false
     
     UnrollStep(dt, now) {
-        if !DllCall("IsWindow", "ptr", hwnd)
+        if !DllCall("IsWindow", "ptr", hwnd) {
+            if UnrollPending.Has(hwnd)
+                UnrollPending.Delete(hwnd)
             return false
+        }
+        if !UnrollPending.Has(hwnd)
+            return false
+        if clearQueued {
+            if (RS_LastRegion.Get(hwnd, "") = "")
+                UnrollPending.Delete(hwnd)
+            return false
+        }
         if !revealed {
             try RS_ClearAlphaLayer(hwnd, "open", RS_PRI_ANIM)
             revealed := true
@@ -252,8 +276,9 @@ UnrollWindow(hwnd, restoredRect := "") {
         t := (now - start) / ms
         if (t >= 1) {
             try RS_SetRegion(hwnd, "", RS_PRI_ANIM)
+            clearQueued := true
             OpenAnimLog(hwnd, "finish unroll")
-            return false
+            return true
         }
         
         ease := 1 - (1 - t) * (1 - t)

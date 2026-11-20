@@ -74,6 +74,7 @@ global WeatherReqAt := 0
 global CustomClockBuiltFor := ""  ; theme, font and column widths the Gui was built for
 
 global CustomClockRect := ""      ; last rect actually queued, so unchanged ticks cost nothing
+global CustomClockLastFg := 0     ; last foreground hwnd when z-order was asserted
 
 ; Padding around and between the two columns.
 global CLOCK_GAP := 6
@@ -102,7 +103,7 @@ SyncCustomClockTimer() {
 
 HideCustomClock() {
     global CustomClockGui, CustomClockTimeText, CustomClockTempText
-    global CustomClockBuiltFor, CustomClockRect
+    global CustomClockBuiltFor, CustomClockRect, CustomClockLastFg
     if (CustomClockGui) {
         ; Mandatory, not tidiness: a -Caption +ToolWindow overlay raises no shell
         ; destroy notification, so nothing else would ever prune its RS_* entries.
@@ -116,6 +117,7 @@ HideCustomClock() {
     CustomClockTempText := 0
     CustomClockBuiltFor := ""
     CustomClockRect := ""
+    CustomClockLastFg := 0
 }
 
 ; Where the block's right edge goes, resolved from LIVE window geometry by class
@@ -262,13 +264,13 @@ PaintCustomClock() {
 
 UpdateCustomClockImpl() {
     global CustomClockGui, CustomClockTimeText, CustomClockTempText
-    global CustomClockBuiltFor, CustomClockRect, CLOCK_GAP
+    global CustomClockBuiltFor, CustomClockRect, CustomClockLastFg, CLOCK_GAP
     global CustomClockWeather, LastWeatherFetch, WeatherNextMs, ClockWeatherEnabled, ClockAnchor
 
     ; Read the network first, so the fetch keeps its own schedule regardless of
     ; whether anything gets drawn this tick.
     PollWeather()
-    if (LastWeatherFetch == 0 || (A_TickCount - LastWeatherFetch > WeatherNextMs))
+    if (LastWeatherFetch == 0 || (((A_TickCount - LastWeatherFetch) & 0xFFFFFFFF) > WeatherNextMs))
         FetchWeather()
 
     tbHwnd := WinExist("ahk_class Shell_TrayWnd")
@@ -286,17 +288,45 @@ UpdateCustomClockImpl() {
     }
 
     ; Auto-hidden: Windows parks the bar two pixels inside its own monitor rather
-    ; than moving it off-screen. This used to compare against A_ScreenHeight, which
-    ; is the PRIMARY monitor - wrong the moment the taskbar is on a different one.
-    monB := A_ScreenHeight, monR := A_ScreenWidth
+    ; than moving it off-screen. Check all four edges (bottom, right, top, left)
+    ; against the monitor the taskbar actually lives on.
+    monL := 0, monT := 0, monB := A_ScreenHeight, monR := A_ScreenWidth
     try {
         sm := ScreenMetrics()
         m := sm.mons[MonitorIndexAt(tx + tw // 2, ty + th // 2)]
-        monB := m.b, monR := m.r
+        monL := m.l, monT := m.t, monB := m.b, monR := m.r
     }
-    if (ty >= monB - 2 || tx >= monR - 2) {
+    if (ty >= monB - 2 || tx >= monR - 2 || ty + th <= monT + 2 || tx + tw <= monL + 2) {
         HideCustomClock()
         return
+    }
+
+    ; Yield when Start Menu, Search, Quick Settings, tray popups, context menus,
+    ; or a fullscreen / overlapping topmost foreground window is active.
+    fg := WinExist("A")
+    if (fg && fg != tbHwnd && (!CustomClockGui || fg != CustomClockGui.Hwnd)) {
+        fgCls := ""
+        try fgCls := WinGetClass(fg)
+        static yieldCls := "^(Windows\.UI\.Core\.CoreWindow|XamlExplorerHostIslandWindow"
+                         . "|TopLevelWindowForOverflowXamlIsland|NotifyIconOverflowWindow"
+                         . "|TaskListThumbnailWnd|ControlCenterWindow|Shell_InputSwitchTopLevelWindow|#32768)$"
+        if (fgCls ~= yieldCls) {
+            HideCustomClock()
+            return
+        }
+        fgEx := 0
+        try fgEx := WinGetExStyle(fg)
+        try {
+            WinGetPos(&fx, &fy, &fw, &fh, fg)
+            ; Fullscreen window covering this monitor, or topmost popup overlapping the taskbar
+            coversMon := (fx <= monL && fy <= monT && fx + fw >= monR && fy + fh >= monB)
+            overlapsTb := (fgEx & 0x8) && (fgCls != "Shell_SecondaryTrayWnd")
+                && (fx < tx + tw && fx + fw > tx && fy < ty + th && fy + fh > ty)
+            if (coversMon || overlapsTb) {
+                HideCustomClock()
+                return
+            }
+        }
     }
 
     fpt := Integer(Tune("clockFont"))
@@ -352,7 +382,9 @@ UpdateCustomClockImpl() {
     if (CustomClockGui && CustomClockBuiltFor != stamp)
         HideCustomClock()
 
+    created := false
     if (!CustomClockGui) {
+        created := true
         dark := IsTaskbarDark()
         CustomClockGui := Gui("-Caption +AlwaysOnTop +ToolWindow +E0x20 -DPIScale")
         CustomClockGui.MarginX := 0
@@ -365,10 +397,12 @@ UpdateCustomClockImpl() {
         if (sampled != "")
             bgColor := sampled
         CustomClockGui.BackColor := bgColor
-        CustomClockGui.SetFont("s" fpt " c" (dark ? "FFFFFF" : "1A1A1A") " q5", "Segoe UI")
+        ; q3 (non-antialiased) avoids ClearType subpixel blending against the
+        ; WinSetTransColor key colour, which otherwise leaves coloured halos.
+        CustomClockGui.SetFont("s" fpt " c" (dark ? "FFFFFF" : "1A1A1A") " q3", "Segoe UI")
         ; A WM_CLOSE arriving at a caption-less, click-through overlay is never a
         ; user closing a window. It is a process-wide close request - taskkill,
-        ; Install.ps1's StopRunning, a Windows shutdown - that walked the process's
+        ; Install.bat's StopRunning, a Windows shutdown - that walked the process's
         ; top-level windows, found this one before the script's own hidden main
         ; window, and stopped there. Measured: with the block on screen the app
         ; NEVER exited and Bye() never ran, so a graceful close silently lost every
@@ -403,17 +437,25 @@ UpdateCustomClockImpl() {
     ; nothing. It has to be that fast because the anchor MOVES: one new tray icon
     ; shifted TrayNotifyWnd 24 px and left the block overlapping the tray until the
     ; next tick.
+    dirty := false
+    moved := false
     rect := x "," ty "," boxW "," th
     if (rect != CustomClockRect) {
         RS_SetPos(CustomClockGui.Hwnd, x, ty, boxW, th, RS_PRI_AMBIENT)
         CustomClockRect := rect
+        moved := true
+        dirty := true
     }
-    ; Z-order is re-asserted every tick regardless: the taskbar is topmost too and
-    ; comes to the front whenever it is clicked. On our own window that is one
-    ; SetWindowPos with NOMOVE | NOSIZE, nothing like the 260 us a real move costs
-    ; on a foreign window.
-    RS_SetZOrder(CustomClockGui.Hwnd, -1, 0x0013, RS_PRI_AMBIENT)
-    RS_Commit()
+    ; Only re-assert topmost when newly created, moved, or foreground changed
+    ; (e.g. clicking the taskbar raises Shell_TrayWnd), instead of hammering
+    ; SetWindowPos 4x/sec unconditionally.
+    if (created || moved || fg != CustomClockLastFg) {
+        CustomClockLastFg := fg
+        RS_SetZOrder(CustomClockGui.Hwnd, -1, 0x0013, RS_PRI_AMBIENT)
+        dirty := true
+    }
+    if (dirty)
+        RS_Commit()
 
     PaintCustomClock()
 }
@@ -534,7 +576,7 @@ PollWeather() {
         return
     }
     if (!ready) {
-        if (A_TickCount - WeatherReqAt > 20000) {
+        if (((A_TickCount - WeatherReqAt) & 0xFFFFFFFF) > 20000) {
             CustomClockReq := 0, WeatherStage := ""
             WeatherFailed("the request timed out")
         }

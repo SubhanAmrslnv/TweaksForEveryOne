@@ -369,12 +369,11 @@ MC_Expire(now) {
 ; enumeration is skipped entirely the rest of the time.
 MC_RefreshMonitors() {
     global MC_TrackMonitors, MC_MediaMonitor
-    global MC_LivePid, MC_LiveExe, MC_FallbackExe
 
     MC_MediaMonitor.Clear()
     if !MC_TrackMonitors
         return
-    if (!MC_LivePid.Count && !MC_LiveExe.Count && !MC_FallbackExe.Count)
+    if !MC_AnyMedia()
         return
 
     rects := []
@@ -435,13 +434,14 @@ MC_Iid(guid) {
 }
 
 MC_BuildEndpoints(now) {
-    global MC_EnumObj, MC_Endpoints, MC_BuiltAt, MC_NextEndpoint
+    global MC_EnumObj, MC_Endpoints, MC_BuiltAt, MC_NextEndpoint, MC_MeterOk
     global MC_CLSID_MMDeviceEnumerator, MC_IID_IMMDeviceEnumerator
     global MC_IID_IAudioSessionManager2
 
     MC_ReleaseEndpoints()
     MC_BuiltAt := now
     MC_NextEndpoint := 1
+    MC_MeterOk := true
 
     try MC_EnumObj := ComObject(MC_CLSID_MMDeviceEnumerator, MC_IID_IMMDeviceEnumerator)
     catch {
@@ -522,6 +522,7 @@ MC_ReadSession(pSE, i, now) {
 
     pCtl := 0, pCtl2 := 0, pMeter := 0, pVol := 0
     state := -1, pid := 0, peak := 0.0, muted := 0
+    sessionMeterOk := true
 
     try {
         if (ComCall(4, pSE, "Int", i, "Ptr*", &pCtl, "Int") != 0 || !pCtl)
@@ -549,11 +550,11 @@ MC_ReadSession(pSE, i, now) {
             if (ComCall(0, pCtl, "Ptr", MC_Iid(MC_IID_IAudioMeterInformation), "Ptr*", &pMeter, "Int") = 0 && pMeter) {
                 if (ComCall(3, pMeter, "Float*", &peak, "Int") != 0)
                     peak := 0.0
-            } else if (MC_MeterOk) {
-                ; Without a meter we cannot tell playback from an idle open
-                ; stream.  Degrade to state alone: over-protects apps that hold
-                ; a silent stream, but never flickers.
-                MC_MeterOk := false
+            } else {
+                ; Without a meter for this session we cannot tell playback from
+                ; an idle open stream. Degrade to state alone for this session
+                ; only so a single transient QI failure does not poison metering.
+                sessionMeterOk := false
                 if !MC_MeterWarned {
                     MC_MeterWarned := true
                     OutputDebug("MediaCore: IAudioMeterInformation unavailable, "
@@ -579,7 +580,7 @@ MC_ReadSession(pSE, i, now) {
     if !MC_PidExe.Has(pid)
         MC_PidExe[pid] := MC_ExeForPid(pid)
 
-    qualifies := MC_MeterOk
+    qualifies := sessionMeterOk
         ? MC_Qualifies(state, peak, muted, MC_PEAK_EPS)
         : (state = 1)
     if qualifies
@@ -637,8 +638,9 @@ MC_RemoveHwnd(hwnd) {
 
 MC_ReleaseAll() {
     global MC_PidSeenAt, MC_PidQualifiedAt, MC_PidExe
-    global MC_LivePid, MC_LiveExe, MC_LiveSessionExe, MC_MediaMonitor, MC_HwndInfo
+    global MC_LivePid, MC_LiveExe, MC_LiveSessionExe, MC_MediaMonitor, MC_HwndInfo, MC_MeterOk
     MC_ReleaseEndpoints()
+    MC_MeterOk := true
     for m in [MC_PidSeenAt, MC_PidQualifiedAt, MC_PidExe,
               MC_LivePid, MC_LiveExe, MC_LiveSessionExe, MC_MediaMonitor, MC_HwndInfo] {
         m.Clear()

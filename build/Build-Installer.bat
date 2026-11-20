@@ -1,3 +1,28 @@
+@echo off
+setlocal DisableDelayedExpansion
+rem Run the embedded script through -File so PowerShell binds native arguments.
+set "WINDOW_TWEAKS_BATCH=%~f0"
+set "WINDOW_TWEAKS_RUN=%TEMP%\WindowTweaks-%RANDOM%-%RANDOM%"
+set "WINDOW_TWEAKS_PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
+md "%WINDOW_TWEAKS_RUN%" 2>nul
+if errorlevel 1 (
+    >&2 echo Could not create a temporary script directory.
+    exit /b 1
+)
+
+"%WINDOW_TWEAKS_PS%" -NoProfile -Command "$ErrorActionPreference = 'Stop'; $text = [IO.File]::ReadAllText($env:WINDOW_TWEAKS_BATCH); $marker = [regex]::Match($text, '(?m)^# POWERSHELL SCRIPT\r?\n'); if (-not $marker.Success) { throw 'Missing embedded script.' }; $code = $text.Substring($marker.Index + $marker.Length); [IO.File]::WriteAllText((Join-Path $env:WINDOW_TWEAKS_RUN 'entry.ps1'), $code, [Text.Encoding]::Unicode)"
+set "WINDOW_TWEAKS_STATUS=%errorlevel%"
+if not "%WINDOW_TWEAKS_STATUS%"=="0" goto cleanup
+
+"%WINDOW_TWEAKS_PS%" -NoProfile -ExecutionPolicy Bypass -File "%WINDOW_TWEAKS_RUN%\entry.ps1" %*
+set "WINDOW_TWEAKS_STATUS=%errorlevel%"
+
+:cleanup
+del /q "%WINDOW_TWEAKS_RUN%\entry.ps1" 2>nul
+rd "%WINDOW_TWEAKS_RUN%" 2>nul
+exit /b %WINDOW_TWEAKS_STATUS%
+
+# POWERSHELL SCRIPT
 <#
 .SYNOPSIS
     Builds WindowTweaksSetup.exe - the whole project as one file.
@@ -22,9 +47,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$repo    = Split-Path $PSScriptRoot -Parent
-$outDir  = Join-Path $PSScriptRoot 'out'
-$stage   = Join-Path $PSScriptRoot 'obj'
+$repo    = Split-Path ([IO.Path]::GetDirectoryName($env:WINDOW_TWEAKS_BATCH)) -Parent
+$outDir  = Join-Path ([IO.Path]::GetDirectoryName($env:WINDOW_TWEAKS_BATCH)) 'out'
+$stage   = Join-Path ([IO.Path]::GetDirectoryName($env:WINDOW_TWEAKS_BATCH)) 'obj'
 $exePath = Join-Path $outDir $OutputName
 
 Write-Host "`nBuilding Window Tweaks installer" -ForegroundColor Cyan
@@ -62,7 +87,7 @@ if (-not ($ahkFiles.Name -contains 'WindowTweaks.ahk')) {
 # Setup.cs reverses the resource-name flattening with Replace("_", "\\"), so an
 # underscore in a payload filename extracts into a phantom subdirectory and the
 # app fails to load on end-user machines and nowhere else. Catch it at build
-# time rather than shipping it. (scripts_*.ps1 below are the deliberate use of
+# time rather than shipping it. (scripts_*.bat below are the deliberate use of
 # that encoding and are handled separately.)
 $badName = $ahkFiles | Where-Object { $_.Name -like '*_*' }
 if ($badName) {
@@ -95,9 +120,9 @@ $payload += @(
     @{ From = 'docs\WINDOWS-TUNING.md';              Res = 'WINDOWS-TUNING.md' }
     @{ From = 'docs\TASKBAR-AND-INTERNALS.md';       Res = 'TASKBAR-AND-INTERNALS.md' }
     @{ From = 'docs\SECURITY.md';                    Res = 'SECURITY.md' }
-    @{ From = 'Uninstall.ps1';                       Res = 'Uninstall.ps1' }
-    @{ From = 'scripts\Apply-Windows-Tuning.ps1';    Res = 'scripts_Apply-Windows-Tuning.ps1' }
-    @{ From = 'scripts\Restore-Windows-Tuning.ps1';  Res = 'scripts_Restore-Windows-Tuning.ps1' }
+    @{ From = 'Uninstall.bat';                       Res = 'Uninstall.bat' }
+    @{ From = 'scripts\Apply-Windows-Tuning.bat';    Res = 'scripts_Apply-Windows-Tuning.bat' }
+    @{ From = 'scripts\Restore-Windows-Tuning.bat';  Res = 'scripts_Restore-Windows-Tuning.bat' }
     @{ From = 'assets\WindowTweaks.ico';             Res = 'WindowTweaks.ico' }
 )
 
@@ -134,12 +159,15 @@ $cscArgs = @(
 $icoPath = Join-Path $repo 'assets\WindowTweaks.ico'
 if (Test-Path $icoPath) { $cscArgs += "/win32icon:`"$icoPath`"" }
 $cscArgs += $resArgs
-$cscArgs += "`"$(Join-Path $PSScriptRoot 'Setup.cs')`""
+$cscArgs += "`"$(Join-Path ([IO.Path]::GetDirectoryName($env:WINDOW_TWEAKS_BATCH)) 'Setup.cs')`""
 
 $argFile = Join-Path $stage 'csc.rsp'
-[System.IO.File]::WriteAllText($argFile, ($cscArgs -join "`r`n"))
+[System.IO.File]::WriteAllText($argFile, ($cscArgs -join "`r`n"), (New-Object System.Text.UTF8Encoding($true)))
 
-$log = & cmd.exe /c "`"$($csc.FullName)`" `"@$argFile`" 2>&1" | Out-String
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$log = (& $csc.FullName "@$argFile" 2>&1 | Out-String)
+$ErrorActionPreference = $prevEap
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $exePath)) {
     Write-Host "`nCompile failed:" -ForegroundColor Red
     Write-Host $log -ForegroundColor Red

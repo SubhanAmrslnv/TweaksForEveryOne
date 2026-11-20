@@ -78,7 +78,6 @@ UnmaximizeFirst(hwnd) {
 ;   - a rolled-up window is clipped by a region measured against its old width,
 ;     so resizing it without clearing that region leaves a torn-looking window.
 ApplyLayout(hwnd, tx, ty, tw := -1, th := -1) {
-    global RolledUpWindows
     if !hwnd || !DllCall("IsWindow", "ptr", hwnd)
         return false
     if !GetRects(hwnd, &fL, &fT, &fR, &fB, &winX, &winY)
@@ -91,15 +90,9 @@ ApplyLayout(hwnd, tx, ty, tw := -1, th := -1) {
 
     ; Whatever is driving this window, whether or not this function has heard
     ; of it. The hand-written list this replaces named three animations by name;
-    ; ten write RS_Pos. Region as well, because the list named RollUp_ - and
-    ; this function clears the roll-up region a few lines below.
+    ; ten write RS_Pos. Clear roll clipping before changing size as well.
     Anim_Release(hwnd, "geom")
-    Anim_Release(hwnd, "region")
-
-    if RolledUpWindows.Has(hwnd) {
-        RolledUpWindows.Delete(hwnd)
-        RS_SetRegion(hwnd, "", RS_PRI_USER)
-    }
+    ReleaseWindowRollClip(hwnd)
 
     RememberLayout(hwnd, winX, winY, winW, winH)
 
@@ -138,7 +131,9 @@ UndoLayout() {
     if !DllCall("IsWindow", "ptr", hwnd)
         return
 
+    UnmaximizeFirst(hwnd)
     Anim_Release(hwnd, "geom")
+    ReleaseWindowRollClip(hwnd)
     ; Already in WinMove space - this is what WinGetPos reported before the move,
     ; so it must NOT go through the frame conversion a second time.
     RS_SetPos(hwnd, r.x, r.y, r.w, r.h, RS_PRI_USER)

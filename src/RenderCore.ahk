@@ -228,7 +228,7 @@ RS_CurrentAlpha(hwnd, defaultVal := 255) {
 ;   "open"     pre-hide of a new window  ShellEvent / RevealWindow /
 ;                                        UnrollWindow / GhostSlideIn /
 ;                                        PortalScaleIn
-;   "gravity"  Alt+F4 drop stand-in      GravityClose / CheckGravityClose
+;   "gravity"  Alt+F4 drop stand-in      GravityClose
 ;
 ; Two owners of one name reproduce the original oscillation bug inside a single
 ; layer, which is strictly harder to see than the one this replaced.
@@ -608,16 +608,19 @@ RS_Apply() {
                 RS_LastRegion[hwnd] := ""      ; clearing a region nobody set
                 continue
             }
-            try WinSetRegion(entry.value, hwnd)
-            RS_LastRegion[hwnd] := entry.value
+            try {
+                WinSetRegion(entry.value, hwnd)
+                RS_LastRegion[hwnd] := entry.value
+            }
         }
     }
 }
 
 ; Immediate mode - DWM thumbnails do not go through the flush cycle because they
 ; write to a DWM handle, not an HWND property.
+; DWM_THUMBNAIL_PROPERTIES is 1-byte packed (pshpack1.h): 45 bytes total.
 RS_UpdateDwmThumbnail(thumbId, destRect := "", srcRect := "", alpha := "", visible := "", clientOnly := "") {
-    props := Buffer(48, 0)
+    props := Buffer(45, 0)
     flags := 0
     if (destRect != "") {
         flags |= 0x01 ; DWM_TNP_RECTDESTINATION
@@ -635,18 +638,19 @@ RS_UpdateDwmThumbnail(thumbId, destRect := "", srcRect := "", alpha := "", visib
     }
     if (alpha != "") {
         flags |= 0x04 ; DWM_TNP_OPACITY
-        NumPut("char", alpha, props, 36)
+        NumPut("uchar", alpha, props, 36)
     }
     if (visible != "") {
         flags |= 0x08 ; DWM_TNP_VISIBLE
-        NumPut("int", visible ? 1 : 0, props, 40)
+        NumPut("int", visible ? 1 : 0, props, 37)
     }
     if (clientOnly != "") {
         flags |= 0x10 ; DWM_TNP_SOURCECLIENTAREAONLY
-        NumPut("int", clientOnly ? 1 : 0, props, 44)
+        NumPut("int", clientOnly ? 1 : 0, props, 41)
     }
     if (flags) {
         NumPut("uint", flags, props, 0)
-        DllCall("Dwmapi\DwmUpdateThumbnailProperties", "ptr", thumbId, "ptr", props)
+        return DllCall("Dwmapi\DwmUpdateThumbnailProperties", "ptr", thumbId, "ptr", props, "int")
     }
+    return 0
 }

@@ -15,7 +15,7 @@
 ; switcher. CLAUDE.md lists Win+D and Alt+Tab as deliberately not touched, and
 ; this is what keeps that true.
 ;
-; WHEN SWAPPING A REAL WINDOW FOR A BITMAP COPY, SHOW THE COPY BEFORE HIDING THE
+; WHEN SWAPPING A REAL WINDOW FOR A THUMBNAIL, SHOW THE THUMBNAIL BEFORE HIDING THE
 ; ORIGINAL, or there is a frame with neither on screen.
 ;
 ; Bye() calls RestoreCurtain() and RestoreShatters(). CurtainWindows is the ONLY
@@ -35,6 +35,7 @@ $!F4::GravityClose()
 #HotIf
 
 GravityClose() {
+    global ActiveAnimations
     hwnd := WinExist("A")
     if !hwnd {
         Send("!{F4}")
@@ -48,9 +49,11 @@ GravityClose() {
         return
     }
 
-    ; Maximized and full-screen windows are where PrintWindow costs the most (a
-    ; whole-screen bitmap) and where the effect reads as a glitch rather than an
-    ; animation, so they close the normal way.
+    animKey := "Gravity_" hwnd
+    if ActiveAnimations.Has(animKey)
+        return
+
+    ; Maximized and full-screen windows close normally.
     try {
         if (WinGetMinMax(hwnd) != 0) {
             Send("!{F4}")
@@ -66,40 +69,33 @@ GravityClose() {
         return
     }
 
-    ; Capture window visual
-    hbm := 0
-    success := false
-    hdcDest := DllCall("GetDC", "ptr", 0, "ptr")
-    if hdcDest {
-        hbm := DllCall("CreateCompatibleBitmap", "ptr", hdcDest, "int", w, "int", h, "ptr")
-        hdcMem := DllCall("CreateCompatibleDC", "ptr", hdcDest, "ptr")
-        if (hbm && hdcMem) {
-            oldObj := DllCall("SelectObject", "ptr", hdcMem, "ptr", hbm, "ptr")
-            ; PW_RENDERFULLCONTENT = 2
-            success := DllCall("PrintWindow", "ptr", hwnd, "ptr", hdcMem, "uint", 2)
-            DllCall("SelectObject", "ptr", hdcMem, "ptr", oldObj)
-        }
-        if hdcMem
-            DllCall("DeleteDC", "ptr", hdcMem)
-        DllCall("ReleaseDC", "ptr", 0, "ptr", hdcDest)
-    }
-
-    if !success {
-        if hbm
-            DllCall("DeleteObject", "ptr", hbm)
+    if DllCall("IsHungAppWindow", "ptr", hwnd, "int") {
         Send("!{F4}")
         return
     }
 
-    ; Order matters: put the bitmap copy on screen FIRST, then hide the real
-    ; window underneath it. Hiding first left a frame with neither visible - a
-    ; black flash of whatever is behind the window, right at the start of the
-    ; animation. The copy is pixel-identical and always-on-top, so covering the
-    ; original before it disappears is seamless.
-    animGui := Gui("-Caption +ToolWindow +AlwaysOnTop -DPIScale +E0x20", "GravityCloseAnim")
-    animGui.MarginX := 0, animGui.MarginY := 0
-    pic := animGui.Add("Picture", "x0 y0 w" w " h" h, "HBITMAP:" hbm)
-    animGui.Show("x" x " y" y " w" w " h" h " NoActivate")
+    ; The compositor supplies the thumbnail without asking the target to paint
+    ; synchronously. If it cannot supply one, let Windows handle Alt+F4.
+    animGui := 0
+    thumb := 0
+    try {
+        animGui := Gui("-Caption +ToolWindow +AlwaysOnTop -DPIScale +E0x20", "GravityCloseAnim")
+        animGui.BackColor := "EEFFFF"
+        WinSetTransColor("EEFFFF", animGui.Hwnd)
+        hr := DllCall("Dwmapi\DwmRegisterThumbnail", "ptr", animGui.Hwnd, "ptr", hwnd, "ptr*", &thumb, "int")
+        if (hr != 0 || !thumb)
+            throw Error("Could not register a gravity close thumbnail")
+        if (RS_UpdateDwmThumbnail(thumb, [0, 0, w, h], , 255, true) != 0)
+            throw Error("Could not show a gravity close thumbnail")
+        animGui.Show("x" x " y" y " w" w " h" h " NoActivate")
+    } catch {
+        if thumb
+            try DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", thumb)
+        if animGui
+            try animGui.Destroy()
+        Send("!{F4}")
+        return
+    }
 
     try RS_SetAlphaLayer(hwnd, "gravity", 0.0, RS_PRI_ANIM)
     RS_Commit()
@@ -107,28 +103,18 @@ GravityClose() {
     startW := w, startH := h
     startX := x, startY := y
 
-    animKey := "Gravity_" animGui.Hwnd
     start := QPC()
     ms := Tune("animGravityMs")
-    ; Owns the bitmap and the GUI: whichever way this animation ends, both are
-    ; released exactly once. The bitmap used to leak on every path except a clean
-    ; finish - one 8 MB screen-compatible bitmap per Alt+F4.
-    finished := false
     Cleanup() {
-        if finished
-            return
-        finished := true
-        gh := 0
-        try gh := animGui.Hwnd
+        try DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", thumb)
         try animGui.Destroy()
-        if gh
-            RS_RemoveHwnd(gh)      ; our own GUIs raise no shell destroy event
-        if hbm
-            DllCall("DeleteObject", "ptr", hbm)
+        if DllCall("IsWindow", "ptr", hwnd)
+            try RS_ClearAlphaLayer(hwnd, "gravity", RS_PRI_ANIM)
+        RS_Commit()
     }
 
     GravityStep(dt, now) {
-        if !DllCall("IsWindow", "ptr", animGui.Hwnd) {
+        if !DllCall("IsWindow", "ptr", hwnd) {
             Cleanup()
             return false
         }
@@ -136,8 +122,7 @@ GravityClose() {
         t := (now - start) / ms
         if (t >= 1) {
             Cleanup()
-            try PostMessage(0x0010, 0, 0, , hwnd) ; WM_CLOSE
-            SetTimer(CheckGravityClose.Bind(hwnd), -400)
+            try PostMessage(0x0112, 0xF060, 0, , hwnd) ; WM_SYSCOMMAND / SC_CLOSE
             return false
         }
 
@@ -146,20 +131,21 @@ GravityClose() {
         ; a stutter rather than a drop. Quadratic is both correct and smoother.
         ease := t * t
 
-        curW := Round(startW * (1 - ease * 0.95))
-        curH := Round(startH * (1 - ease * 0.95))
+        curW := Max(1, Round(startW * (1 - ease * 0.95)))
+        curH := Max(1, Round(startH * (1 - ease * 0.95)))
 
         curX := Round(startX + (startW - curW) / 2)
         curY := Round(startY + ease * (startH * 0.8) + (startH - curH) / 2)
 
         try {
             animGui.Move(curX, curY, curW, curH)
-            pic.Move(0, 0, curW, curH)
-
-            if (t > 0.4) {
-                alpha := Clamp(Round(255 * (1 - ((t - 0.4) / 0.6))), 0, 255)
-                RS_SetAlpha(animGui.Hwnd, alpha, RS_PRI_ANIM)
-            }
+            alpha := Clamp(Round(255 * (1 - ((t - 0.4) / 0.6))), 0, 255)
+            if (RS_UpdateDwmThumbnail(thumb, [0, 0, curW, curH], , alpha) != 0)
+                throw Error("Could not move a gravity close thumbnail")
+        } catch {
+            Cleanup()
+            try PostMessage(0x0112, 0xF060, 0, , hwnd)
+            return false
         }
         return true
     }
@@ -167,56 +153,9 @@ GravityClose() {
     RegisterAnimation(animKey, GravityStep)
 }
 
-; The window refused (or has not yet processed) WM_CLOSE - a "Save changes?"
-; prompt, typically. Give it its opacity back, and actually commit: without the
-; commit the window stayed at alpha 0, alive and focused but invisible.
-CheckGravityClose(hwnd) {
-    if !DllCall("IsWindow", "ptr", hwnd)
-        return
-    try RS_ClearAlphaLayer(hwnd, "gravity", RS_PRI_ANIM)
-    RS_Commit()
-}
-
-
 ; Gated in the hotkey criteria rather than re-sending #d from the body. With the
 ; feature off the key is simply not claimed, so Windows' own show-desktop runs -
 ; CLAUDE.md lists Win+D as deliberately not touched.
-#HotIf CurtainDropEnabled
-#!d:: {
-    global CurtainDropped, CurtainWindows
-
-    if (CurtainDropped) {
-        CurtainDropped := false
-        for hwnd, rect in CurtainWindows {
-            if DllCall("IsWindow", "ptr", hwnd) {
-                CurtainBounceUp(hwnd, rect.x, rect.y, rect.w, rect.h)
-            }
-        }
-        CurtainWindows := Map()
-    } else {
-        CurtainDropped := true
-        CurtainWindows := Map()
-        
-        for hwnd in WinGetList() {
-            if !IsSnappable(hwnd)
-                continue
-            if !DllCall("IsWindowVisible", "ptr", hwnd)
-                continue
-                
-            try WinGetPos(&x, &y, &w, &h, hwnd)
-            catch
-                continue
-                
-            if (w == 0 || h == 0)
-                continue
-                
-            CurtainWindows[hwnd] := {x: x, y: y, w: w, h: h}
-            CurtainDropDown(hwnd, x, y, w, h)
-        }
-    }
-}
+#HotIf CurtainDropEnabled || CurtainDropped
+#!d::ToggleCurtain()
 #HotIf
-
-; Bye() calls this. CurtainWindows is the ONLY record of where these windows came
-; from, and dropping them parks every one of them below the screen - so exiting
-; while the curtain is down used to leave the whole desktop off-screen with

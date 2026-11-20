@@ -11,24 +11,33 @@ global ActiveDeleteGuis := Map()
 TriggerBlackHoleDelete(hwnd) {
     global ActiveDeleteGuis
     MouseGetPos(&mx, &my)
-    
-    guiObj := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
-    guiObj.BackColor := "EEFFFF"
-    
-    thumb := 0
-    DllCall("Dwmapi\DwmRegisterThumbnail", "ptr", guiObj.Hwnd, "ptr", hwnd, "ptr*", &thumb)
-    
-    size := 140
-    
+
     try WinGetPos(&wx, &wy, &ww, &wh, hwnd)
     catch
         return
-        
+
+    guiObj := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x20")
+    guiObj.BackColor := "EEFFFF"
+
+    thumb := 0
+    hr := DllCall("Dwmapi\DwmRegisterThumbnail", "ptr", guiObj.Hwnd, "ptr", hwnd, "ptr*", &thumb, "int")
+    if (hr != 0 || !thumb) {
+        try guiObj.Destroy()
+        return
+    }
+
+    size := 140
     srcX := mx - wx - (size/2)
     srcY := my - wy - (size/2)
-    
-    guiObj.Show("NA x" (mx - size/2) " y" (my - size/2) " w" size " h" size)
-    WinSetTransColor("EEFFFF", guiObj.Hwnd)
+
+    try {
+        guiObj.Show("NA x" (mx - size/2) " y" (my - size/2) " w" size " h" size)
+        WinSetTransColor("EEFFFF", guiObj.Hwnd)
+    } catch {
+        try DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", thumb)
+        try guiObj.Destroy()
+        return
+    }
     
     animKey := "DeleteHole_" . guiObj.Hwnd
     start := QPC()
@@ -93,8 +102,9 @@ CleanDeleteGui(animKey) {
     global ActiveDeleteGuis
     if (ActiveDeleteGuis.Has(animKey)) {
         obj := ActiveDeleteGuis[animKey]
-        DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", obj.thumb)
-        obj.gui.Destroy()
+        if (obj.thumb)
+            try DllCall("Dwmapi\DwmUnregisterThumbnail", "ptr", obj.thumb)
+        try obj.gui.Destroy()
         ActiveDeleteGuis.Delete(animKey)
     }
 }
@@ -117,25 +127,29 @@ TriggerBlackHoleMinimize(hwnd) {
         return
         
     hbm := 0
+    success := false
     hdcDest := DllCall("GetDC", "ptr", 0, "ptr")
     if hdcDest {
         hbm := DllCall("CreateCompatibleBitmap", "ptr", hdcDest, "int", w, "int", h, "ptr")
         hdcMem := DllCall("CreateCompatibleDC", "ptr", hdcDest, "ptr")
         if (hbm && hdcMem) {
             oldObj := DllCall("SelectObject", "ptr", hdcMem, "ptr", hbm, "ptr")
-            DllCall("PrintWindow", "ptr", hwnd, "ptr", hdcMem, "uint", 2)
+            success := DllCall("PrintWindow", "ptr", hwnd, "ptr", hdcMem, "uint", 2)
             DllCall("SelectObject", "ptr", hdcMem, "ptr", oldObj)
         }
         if hdcMem
             DllCall("DeleteDC", "ptr", hdcMem)
         DllCall("ReleaseDC", "ptr", 0, "ptr", hdcDest)
     }
-    if !hbm
+    if (!hbm || !success) {
+        if hbm
+            DllCall("DeleteObject", "ptr", hbm)
         return
+    }
         
     animGui := Gui("-Caption +ToolWindow +AlwaysOnTop -DPIScale +E0x20")
     animGui.MarginX := 0, animGui.MarginY := 0
-    animGui.Add("Picture", "x0 y0 w" w " h" h, "HBITMAP:" hbm)
+    animGui.Add("Picture", "x0 y0 w" w " h" h, "HBITMAP:*" hbm)
     animGui.Show("NA x" x " y" y " w" w " h" h)
     
     animKey := "MinHole_" . animGui.Hwnd
@@ -146,12 +160,41 @@ TriggerBlackHoleMinimize(hwnd) {
     startY := y
     destX := Round(A_ScreenWidth / 2)
     destY := Round(A_ScreenHeight)
+    hmon := DllCall("MonitorFromWindow", "ptr", hwnd, "uint", 2, "ptr")
+    if hmon {
+        monInfo := Buffer(40, 0)
+        NumPut("uint", 40, monInfo)
+        if DllCall("GetMonitorInfo", "ptr", hmon, "ptr", monInfo) {
+            wl := NumGet(monInfo, 20, "int")
+            wr := NumGet(monInfo, 28, "int")
+            wb := NumGet(monInfo, 32, "int")
+            destX := Round((wl + wr) / 2)
+            destY := wb
+        }
+    }
+
+    finished := false
+    Cleanup() {
+        if finished
+            return
+        finished := true
+        gh := 0
+        try gh := animGui.Hwnd
+        try animGui.Destroy()
+        if gh
+            RS_RemoveHwnd(gh)
+        if hbm
+            DllCall("DeleteObject", "ptr", hbm)
+    }
     
     Step(dt, now) {
+        if !DllCall("IsWindow", "ptr", animGui.Hwnd) {
+            Cleanup()
+            return false
+        }
         t := (now - start) / ms
         if (t >= 1) {
-            animGui.Destroy()
-            DllCall("DeleteObject", "ptr", hbm)
+            Cleanup()
             return false
         }
         
